@@ -30,8 +30,8 @@ public abstract class AbstractIntegrationTest {
                     .withUsername("testuser")
                     .withPassword("testpass")
                     .waitingFor(Wait.forListeningPort()
-                            .withStartupTimeout(Duration.ofMinutes(1)))
-                    .withReuse(false);
+                            .withStartupTimeout(Duration.ofSeconds(30)))
+                    .withReuse(true);
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {

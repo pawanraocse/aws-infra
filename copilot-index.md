@@ -47,11 +47,21 @@ Production-ready AWS-based Spring Boot microservice with Angular frontend. All i
 - Frontend: Jest/Karma+Jasmine, Cypress/Playwright
 - Integration: API, DB, E2E
 
-## Auth/Security Approach
-- JWT for API auth
-- IAM roles for AWS resources
-- Secrets via AWS Secrets Manager
+## API Filtering & Specification Pattern
+- GET /api/entries supports query params: type, minAmount, createdAfter
+- Dynamic filtering implemented via JPA Specification pattern (EntrySpecification)
+- Controller parses query params, service applies Specification for DB-level filtering
+- Integration tests validate all filter combinations
+
+## DB Schema & Versioning
+- Schema managed via Flyway migrations (see src/main/resources/db/migration)
+- Initial migration creates entries and entry_metadata tables
+- All schema changes are versioned, repeatable, and CI/CD compatible
+
+## Security & Logging
+- Structured logging at every layer (userId, requestId, operation)
+- API endpoints require userId/requestId for traceability
+- Error responses standardized via ErrorResponse DTO
 
 ## Update Policy
 - Update this file after any significant architectural, module, or integration change.
-

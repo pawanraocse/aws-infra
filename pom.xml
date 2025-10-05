@@ -44,6 +44,7 @@
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
+            <version>9.22.3</version>
         </dependency>
 
         <dependency>
@@ -193,6 +194,20 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.1.2</version>
+                <configuration>
+                    <forkCount>1</forkCount>
+                    <reuseForks>false</reuseForks>
+                    <parallel>none</parallel>
+                    <includes>
+                        <include>**/*IntegrationTest.java</include>
+                    </includes>
+                </configuration>
             </plugin>
 
         </plugins>

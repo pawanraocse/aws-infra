@@ -108,3 +108,22 @@ Production-ready AWS-based Spring Boot microservice with Angular frontend. All i
 - All related unit and integration tests refactored and passing for key-value flow.
 
 **Status:** Fully implemented and validated as of 2025-10-05
+
+## Code Quality Enforcement (as of 2025-10-05)
+- **JaCoCo**: Generates code coverage reports for all backend modules. Run `mvn clean verify` to produce coverage reports (see `target/site/jacoco/index.html`).
+- **SpotBugs**: Static analysis for bug detection. Run `mvn spotbugs:check` to enforce.
+- **Checkstyle**: Enforces code style using `checkstyle.xml`. Run `mvn checkstyle:check` to validate.
+- All plugins are managed in the root pom.xml and inherited by all microservices.
+
+### How to Use
+- For coverage: `mvn clean verify`
+- For static analysis: `mvn spotbugs:check`
+- For style: `mvn checkstyle:check`
+- All builds will fail if code quality thresholds are not met.
+
+## Maven Structure & Dependency Management
+- All shared dependency versions and build plugins are managed in the root pom.xml.
+- Microservice pom.xml files (auth-service, backend-service) only declare service-specific dependencies.
+- Test dependencies and plugin management are inherited from the root.
+- Profiles (`dev`, `test`, `prod`) are defined in the root for environment-specific builds.
+- Code quality plugins (JaCoCo, SpotBugs, Checkstyle) are enforced for all modules.

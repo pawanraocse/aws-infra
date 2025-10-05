@@ -26,8 +26,8 @@ public class EntryServiceImpl implements EntryService {
                 .key(request.key())
                 .value(request.value())
                 .build();
-        entryRepository.save(entry);
-        return toDto(entry);
+        Entry savedEntry = entryRepository.save(entry);
+        return toDto(savedEntry);
     }
 
     @Override

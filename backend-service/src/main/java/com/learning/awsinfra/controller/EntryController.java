@@ -29,8 +29,10 @@ public class EntryController {
     private final EntryService entryService;
 
     @Operation(summary = "Create Entry", description = "Creates a new key-value Entry.")
-    @ApiResponse(responseCode = "201", description = "Entry created successfully", content = @Content(schema = @Schema(implementation = EntryResponseDto.class)))
-    @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "201", description = "Entry created successfully",
+            content = @Content(schema = @Schema(implementation = EntryResponseDto.class)))
+    @ApiResponse(responseCode = "400", description = "Invalid input",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @PostMapping
     public ResponseEntity<EntryResponseDto> createEntry(@Valid @RequestBody EntryRequestDto request) {
         EntryResponseDto response = entryService.createEntry(request);
@@ -38,7 +40,8 @@ public class EntryController {
     }
 
     @Operation(summary = "Get Entries", description = "Retrieves paginated list of key-value Entries.")
-    @ApiResponse(responseCode = "200", description = "Entries retrieved", content = @Content(schema = @Schema(implementation = EntryResponseDto.class)))
+    @ApiResponse(responseCode = "200", description = "Entries retrieved",
+            content = @Content(schema = @Schema(implementation = EntryResponseDto.class)))
     @GetMapping
     public ResponseEntity<Page<EntryResponseDto>> getEntries(@PageableDefault(size = 20) Pageable pageable) {
         Page<EntryResponseDto> page = entryService.getEntries(pageable);
@@ -46,8 +49,10 @@ public class EntryController {
     }
 
     @Operation(summary = "Get Entry by ID", description = "Retrieves an Entry by its ID.")
-    @ApiResponse(responseCode = "200", description = "Entry found", content = @Content(schema = @Schema(implementation = EntryResponseDto.class)))
-    @ApiResponse(responseCode = "404", description = "Entry not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "200", description = "Entry found",
+            content = @Content(schema = @Schema(implementation = EntryResponseDto.class)))
+    @ApiResponse(responseCode = "404", description = "Entry not found",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @GetMapping("/{id}")
     public ResponseEntity<EntryResponseDto> getEntryById(@Parameter(description = "Entry ID") @PathVariable Long id) {
         return entryService.getEntryById(id)
@@ -56,12 +61,15 @@ public class EntryController {
     }
 
     @Operation(summary = "Update Entry", description = "Updates an existing key-value Entry.")
-    @ApiResponse(responseCode = "200", description = "Entry updated", content = @Content(schema = @Schema(implementation = EntryResponseDto.class)))
-    @ApiResponse(responseCode = "400", description = "Invalid input", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "404", description = "Entry not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "200", description = "Entry updated",
+            content = @Content(schema = @Schema(implementation = EntryResponseDto.class)))
+    @ApiResponse(responseCode = "400", description = "Invalid input",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "Entry not found",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @PutMapping("/{id}")
     public ResponseEntity<EntryResponseDto> updateEntry(@Parameter(description = "Entry ID") @PathVariable Long id,
-                                         @Valid @RequestBody EntryRequestDto request) {
+                                                        @Valid @RequestBody EntryRequestDto request) {
         return entryService.updateEntry(id, request)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(null));
@@ -69,7 +77,8 @@ public class EntryController {
 
     @Operation(summary = "Delete Entry", description = "Deletes an Entry by its ID.")
     @ApiResponse(responseCode = "204", description = "Entry deleted")
-    @ApiResponse(responseCode = "404", description = "Entry not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "Entry not found",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteEntry(@Parameter(description = "Entry ID") @PathVariable Long id) {
         boolean deleted = entryService.deleteEntry(id);

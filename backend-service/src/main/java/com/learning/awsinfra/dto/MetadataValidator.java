@@ -12,14 +12,22 @@ public class MetadataValidator implements ConstraintValidator<ValidMetadata, Map
 
     @Override
     public boolean isValid(Map<String, Object> metadata, ConstraintValidatorContext context) {
-        if (metadata == null || metadata.isEmpty()) return false;
+        if (metadata == null || metadata.isEmpty()) {
+            return false;
+        }
         for (String key : REQUIRED_KEYS) {
-            if (!metadata.containsKey(key)) return false;
+            if (!metadata.containsKey(key)) {
+                return false;
+            }
         }
         Object typeObj = metadata.get("type");
-        if (!(typeObj instanceof String type) || type.isBlank() || !ALLOWED_TYPES.contains(type)) return false;
+        if (!(typeObj instanceof String type) || type.isBlank() || !ALLOWED_TYPES.contains(type)) {
+            return false;
+        }
         Object amountObj = metadata.get("amount");
-        if (!(amountObj instanceof Integer amount) || amount <= 0) return false;
+        if (!(amountObj instanceof Integer amount) || amount <= 0) {
+            return false;
+        }
         return true;
     }
 }

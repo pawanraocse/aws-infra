@@ -1,5 +1,0 @@
-<FindBugsFilter>
-    <Match>
-        <Bug pattern="NP_NULL_ON_SOME_PATH" />
-    </Match>
-</FindBugsFilter>

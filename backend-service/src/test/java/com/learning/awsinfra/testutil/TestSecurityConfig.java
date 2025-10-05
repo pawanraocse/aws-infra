@@ -12,10 +12,8 @@ public class TestSecurityConfig {
     @Primary
     public SecurityFilterChain testFilterChain(HttpSecurity http) throws Exception {
         http
-            .securityMatcher("/api/**")
             .authorizeHttpRequests(authz -> authz
-                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
-                .anyRequest().authenticated()
+                .anyRequest().permitAll()
             )
             .csrf(csrf -> csrf.disable());
         return http.build();

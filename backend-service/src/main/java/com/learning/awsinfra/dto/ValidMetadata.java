@@ -21,4 +21,3 @@ public @interface ValidMetadata {
 
     Class<? extends Payload>[] payload() default {};
 }
-

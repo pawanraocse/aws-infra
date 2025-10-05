@@ -18,4 +18,3 @@ public class HelloController {
         return ResponseEntity.ok("Hello, world!");
     }
 }
-

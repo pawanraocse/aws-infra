@@ -23,4 +23,3 @@ public class MetadataValidator implements ConstraintValidator<ValidMetadata, Map
         return true;
     }
 }
-

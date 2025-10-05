@@ -23,7 +23,7 @@ services:
 
   app:
     build:
-      context: .
+      context: ./backend-service
       dockerfile: Dockerfile
     image: awsinfra-app:1.0.0
     container_name: awsinfra-app

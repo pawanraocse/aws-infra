@@ -10,14 +10,15 @@ Production-ready AWS-based Spring Boot microservice with Angular frontend. All i
 - CI/CD: GitHub Actions
 
 ## Entry Points
-- Backend: /src/main/java/com/learning/awsinfra/AwsInfraApplication.java
+- Backend: backend-service/src/main/java/com/learning/awsinfra/AwsInfraApplication.java
 - Frontend: /frontend (to be created)
 - Infra: /infra, /helm, /terraform
 
 ## Modules/Folders
-- src/main/java: Backend source
-- src/main/resources: Backend config
-- src/test/java: Backend tests
+- backend-service/src/main/java: Backend source
+- backend-service/src/main/resources: Backend config
+- backend-service/src/test/java: Backend tests
+- backend-service/src/test/resources: Test configs
 - infra/: Infra as Code (Terraform)
 - helm/: K8s manifests
 - terraform/: AWS resources

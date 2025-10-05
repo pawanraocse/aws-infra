@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.learning.awsinfra.dto.EntryRequestDto;
 import com.learning.awsinfra.entity.Entry;
 import com.learning.awsinfra.repository.EntryRepository;
+import com.learning.awsinfra.testutil.AbstractIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,7 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-class EntryControllerIntegrationTest {
+class EntryControllerIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
     @Autowired
@@ -109,4 +110,3 @@ class EntryControllerIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 }
-

@@ -54,5 +54,9 @@ Production-ready AWS-based Spring Boot microservice with Angular frontend. All i
 - The OpenAPI spec can be used for client code generation (e.g., OpenAPI Generator, Postman).
 - **Security Note:** In production, restrict access to Swagger UI and OpenAPI spec endpoints to authorized users only.
 
+ ## Authentication (Development Mode)
+
+**Note:** Authentication is currently disabled for all API endpoints to facilitate development and testing. This is a temporary configuration. **TODO: Re-enable authentication and full security before production deployment.**
+
 ## License
 MIT

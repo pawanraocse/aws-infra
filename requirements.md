@@ -6,12 +6,21 @@
 
 ## 1. Scope
 
-Build one Spring Boot service named `entry-service` that supports two APIs:
-- `POST /api/v1/entries` — create an entry.
-- `GET  /api/v1/entries/{id}` — retrieve an entry by id.
+Build two Spring Boot microservices:
+- `entry-service`: supports two APIs:
+    - `POST /api/v1/entries` — create an entry.
+    - `GET  /api/v1/entries/{id}` — retrieve an entry by id.
+- `auth-service`: centralized authentication and authorization for multi-tenant environments using AWS Cognito. Provides:
+    - Multi-tenant user authentication (username/password, federated SSO)
+    - JWT token management and validation
+    - Tenant context enforcement
+    - Role-based access control (RBAC)
+    - Security event auditing
+    - Token refresh and revocation
+    - Integration with API Gateway
 
 Deliver a production-ready pipeline and infra in AWS:
-- Amazon Cognito for authn/authz.
+- Amazon Cognito for authn/authz (used by auth-service and entry-service).
 - Amazon RDS (SQL) for persistence.
 - Docker images pushed to Amazon ECR.
 - Kubernetes on Amazon EKS for runtime.
@@ -44,10 +53,11 @@ This file must be detailed enough for Copilot to generate project skeletons, inf
 
 ## 3. High-level architecture
 
-1. Clients (web/mobile) -> ALB (HTTPS) -> Kubernetes Ingress Controller (AWS LB Controller) -> `entry-service` pods.
-2. `entry-service` validates Cognito JWTs and enforces roles.
-3. `entry-service` persists to RDS (Postgres preferred). DB is in private subnets.
-4. CI pipeline builds container, pushes to ECR, and deploys via Helm to EKS.
+1. Clients (web/mobile) -> ALB (HTTPS) -> Kubernetes Ingress Controller (AWS LB Controller) -> `auth-service` and `entry-service` pods.
+2. `auth-service` manages authentication, JWT validation, tenant context, and RBAC using AWS Cognito.
+3. `entry-service` validates Cognito JWTs and enforces roles.
+4. `entry-service` persists to RDS (Postgres preferred). DB is in private subnets.
+5. CI pipeline builds containers, pushes to ECR, and deploys via Helm to EKS.
 
 ---
 
@@ -96,13 +106,18 @@ Base path: `/api/v1`
 - Response: `200 OK` + JSON body same as POST response.
 - `404` if not found.
 
-### 4.3 Authentication and Authorization
+### 4.3 Authentication, Authorization & Multi-Tenancy
 
-- Use Cognito User Pool as OIDC provider.
-- Services must validate JWTs using the OIDC issuer: `https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}`.
-- Map Cognito groups or custom claims to application roles.
-- Implement a `JwtAuthenticationConverter` that extracts roles from `cognito:groups` or a specific claim named `roles`.
-- Enforce role-based access using `@PreAuthorize` or method security in controllers.
+- Use Amazon Cognito for authentication and authorization.
+- Multi-tenancy must be supported:
+  - Each tenant is isolated via Cognito user pools, or via tenantId claim in a shared pool (preferred for scalability).
+  - All JWTs must include a tenantId claim. The entry-service extracts tenantId from the JWT and enforces tenant boundaries at every layer (API, service, repository).
+  - APIs must validate that all operations are performed within the authenticated user's tenant context. Cross-tenant access is strictly forbidden.
+  - Tenant context must be propagated through all service and repository calls.
+  - Audit logs must include tenantId, userId, requestId, and operation for every request.
+  - Role-based access control (RBAC) is enforced via Cognito groups/roles mapped to JWT claims (e.g., entry:create, entry:read).
+  - Tenant onboarding and lifecycle management (creation, update, deletion) must be supported via admin APIs or automation scripts (future scope).
+  - All secrets and configuration per tenant must be managed securely via AWS Secrets Manager.
 
 ---
 
@@ -416,4 +431,3 @@ Answer the questions or provide defaults. Copilot can generate most artifacts wi
 - Choose first artifact for generation: (a) Spring Boot skeleton, (b) Helm chart, (c) Terraform skeleton, (d) GitHub Actions workflows.
 
 End of requirements.md
-

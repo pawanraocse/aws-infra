@@ -37,6 +37,10 @@
             <version>0.11.5</version>
             <scope>runtime</scope>
         </dependency>
-        <!-- Test dependencies are inherited from root dependencyManagement -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

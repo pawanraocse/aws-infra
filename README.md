@@ -58,5 +58,15 @@ Production-ready AWS-based Spring Boot microservice with Angular frontend. All i
 
 **Note:** Authentication is currently disabled for all API endpoints to facilitate development and testing. This is a temporary configuration. **TODO: Re-enable authentication and full security before production deployment.**
 
+## Secret Management
+
+All secrets (OAuth client secrets, DB passwords, etc.) must be managed via AWS SSM Parameter Store. Never commit secrets to version control. See copilot-index.md for usage instructions.
+
+## AWS SSM Parameter Store Usage
+- Store secrets with aws ssm put-parameter (see copilot-index.md for details).
+- Retrieve secrets for local dev or CI/CD as needed.
+- Use scripts/export-ssm-secrets.sh to export secrets as environment variables.
+- Integrate with Terraform using aws_ssm_parameter data sources.
+
 ## License
 MIT

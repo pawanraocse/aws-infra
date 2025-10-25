@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -34,6 +32,33 @@ services:
       SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
       MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
+      server.port: 8081
+    networks:
+      - awsinfra-net
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    image: awsinfra-auth-service:1.0.0
+    container_name: awsinfra-auth-service
+    environment:
+      server.port: 8080
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
+      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
+    volumes:
+      - ~/.aws:/root/.aws:ro
     networks:
       - awsinfra-net
     ports:

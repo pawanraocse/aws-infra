@@ -36,6 +36,10 @@ public class StartupLoggingConfig extends OncePerRequestFilter {
         log.info("[Startup] server.port: {}", serverPort);
         log.info("[Startup] redirect-uri: {}", redirectUri);
         log.info("[Startup] Active profiles: {}", Arrays.toString(env.getActiveProfiles()));
+        log.info("[Startup] ENV COGNITO_CLIENT_ID: {}", System.getenv("COGNITO_CLIENT_ID"));
+        log.info("[Startup] ENV COGNITO_CLIENT_SECRET: {}", System.getenv("COGNITO_CLIENT_SECRET"));
+        log.info("[Startup] ENV COGNITO_ISSUER_URI: {}", System.getenv("COGNITO_ISSUER_URI"));
+        log.info("[Startup] ENV COGNITO_REDIRECT_URI: {}", System.getenv("COGNITO_REDIRECT_URI"));
         log.info("[Startup] All properties containing 'redirect':");
         for (var prop : env.getPropertySources()) {
             if (prop.getName().contains("applicationConfig")) {

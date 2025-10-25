@@ -1,7 +1,8 @@
 #!/bin/zsh
+set -a
+[ -f ../.env ] && . ../.env
+set +a
 # Script to deploy AWS Cognito resources using Terraform with the 'personal' AWS profile
-
-export AWS_PROFILE=personal
 
 echo "[INFO] Using AWS_PROFILE=$AWS_PROFILE"
 
@@ -33,14 +34,46 @@ if [[ -z "$AWS_REGION" ]]; then
   exit 1
 fi
 
-aws ssm put-parameter --name "/auth-service/user_pool_id" --value "$USER_POOL_ID" --type "String" --overwrite
-aws ssm put-parameter --name "/auth-service/native_client_id" --value "$NATIVE_CLIENT_ID" --type "String" --overwrite
-# aws ssm put-parameter --name "/auth-service/federated_client_id" --value "$FEDERATED_CLIENT_ID" --type "String" --overwrite
-aws ssm put-parameter --name "/auth-service/aws_region" --value "$AWS_REGION" --type "String" --overwrite
-# Uncomment if you have client secret output
-# CLIENT_SECRET=$(terraform output -raw client_secret)
-# if [[ -n "$CLIENT_SECRET" ]]; then
-#   aws ssm put-parameter --name "/auth-service/client_secret" --value "$CLIENT_SECRET" --type "SecureString" --overwrite
-# fi
+echo "[INFO] Using AWS_REGION=$AWS_REGION"
+
+# Store parameters in SSM Parameter Store (region explicitly defined)
+aws ssm put-parameter \
+  --name "/auth-service/user_pool_id" \
+  --value "$USER_POOL_ID" \
+  --type "String" \
+  --region "$AWS_REGION" \
+  --overwrite
+
+aws ssm put-parameter \
+  --name "/auth-service/native_client_id" \
+  --value "$NATIVE_CLIENT_ID" \
+  --type "String" \
+  --region "$AWS_REGION" \
+  --overwrite
+
+# aws ssm put-parameter \
+#   --name "/auth-service/federated_client_id" \
+#   --value "$FEDERATED_CLIENT_ID" \
+#   --type "String" \
+#   --region "$AWS_REGION" \
+#   --overwrite
+
+aws ssm put-parameter \
+  --name "/auth-service/aws_region" \
+  --value "$AWS_REGION" \
+  --type "String" \
+  --region "$PARAM_REGION" \
+  --overwrite
+
+# Optional client secret
+CLIENT_SECRET=$(terraform output -raw client_secret 2>/dev/null)
+if [[ -n "$CLIENT_SECRET" ]]; then
+  aws ssm put-parameter \
+    --name "/auth-service/client_secret" \
+    --value "$CLIENT_SECRET" \
+    --type "SecureString" \
+    --region "$AWS_REGION" \
+    --overwrite
+fi
 
 echo "[INFO] Cognito outputs stored in AWS SSM Parameter Store."

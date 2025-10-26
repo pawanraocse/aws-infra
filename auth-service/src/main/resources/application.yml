@@ -5,15 +5,38 @@ spring:
         registration:
           cognito:
             client-id: ${COGNITO_CLIENT_ID}
-            client-secret: ${COGNITO_CLIENT_SECRET:}
+            client-secret: ${COGNITO_CLIENT_SECRET}
             scope:
-              - email
               - openid
+              - email
+              - profile
               - phone
+              - aws.cognito.signin.user.admin
             redirect-uri: ${COGNITO_REDIRECT_URI:http://localhost:8080/login/oauth2/code/cognito}
+            authorization-grant-type: authorization_code
+            client-name: Cognito
         provider:
           cognito:
-            issuerUri: ${COGNITO_ISSUER_URI}
+            issuer-uri: ${COGNITO_ISSUER_URI}
             user-name-attribute: username
+
+# Cognito configuration
+cognito:
+  user-pool-id: ${COGNITO_USER_POOL_ID}
+  client-id: ${COGNITO_CLIENT_ID}
+  domain: ${COGNITO_DOMAIN}
+  region: ${AWS_REGION:us-east-1}
+  logout-redirect-url: ${COGNITO_LOGOUT_REDIRECT_URL:http://localhost:8080/logged-out}
+
 server:
   port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized

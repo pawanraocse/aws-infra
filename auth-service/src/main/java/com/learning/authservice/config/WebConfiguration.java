@@ -12,6 +12,7 @@ public class WebConfiguration implements WebMvcConfigurer {
 
     @Override
     public void addViewControllers(ViewControllerRegistry registry) {
-        registry.addViewController("/").setViewName("home");
+        // Removed "/" mapping - handled by HomeController
+        // registry.addViewController("/").setViewName("home");
     }
 }

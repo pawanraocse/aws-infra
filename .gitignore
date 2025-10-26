@@ -31,3 +31,39 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Terraform ###
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+tfplan
+tfplan.json
+
+### Terraform Sensitive Files ###
+terraform/cognito-config.env
+terraform/*.env
+terraform/.terraform.lock.hcl
+
+### Environment Variables ###
+.env
+.env.local
+.env.*.local
+
+### AWS ###
+.aws/
+*.pem
+*.key
+
+### Secrets ###
+*secret*
+*password*
+*credentials*

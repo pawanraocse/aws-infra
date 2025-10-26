@@ -33,21 +33,41 @@ public class StartupLoggingConfig extends OncePerRequestFilter {
 
     @PostConstruct
     public void logStartupConfig() {
+        log.info("=".repeat(80));
+        log.info("[Startup] Application Configuration");
+        log.info("=".repeat(80));
         log.info("[Startup] server.port: {}", serverPort);
         log.info("[Startup] redirect-uri: {}", redirectUri);
         log.info("[Startup] Active profiles: {}", Arrays.toString(env.getActiveProfiles()));
-        log.info("[Startup] ENV COGNITO_CLIENT_ID: {}", System.getenv("COGNITO_CLIENT_ID"));
-        log.info("[Startup] ENV COGNITO_CLIENT_SECRET: {}", System.getenv("COGNITO_CLIENT_SECRET"));
-        log.info("[Startup] ENV COGNITO_ISSUER_URI: {}", System.getenv("COGNITO_ISSUER_URI"));
-        log.info("[Startup] ENV COGNITO_REDIRECT_URI: {}", System.getenv("COGNITO_REDIRECT_URI"));
-        log.info("[Startup] All properties containing 'redirect':");
-        for (var prop : env.getPropertySources()) {
-            if (prop.getName().contains("applicationConfig")) {
-                if (prop.containsProperty("spring.security.oauth2.client.registration.cognito.redirect-uri")) {
-                    log.info("  {} = {}", "spring.security.oauth2.client.registration.cognito.redirect-uri", prop.getProperty("spring.security.oauth2.client.registration.cognito.redirect-uri"));
-                }
-            }
+
+        log.info("-".repeat(80));
+        log.info("[Startup] Cognito Configuration (from Environment)");
+        log.info("-".repeat(80));
+        log.info("[Startup] COGNITO_USER_POOL_ID: {}", maskValue(System.getenv("COGNITO_USER_POOL_ID")));
+        log.info("[Startup] COGNITO_CLIENT_ID: {}", maskValue(System.getenv("COGNITO_CLIENT_ID")));
+        log.info("[Startup] COGNITO_CLIENT_SECRET: {}", maskSecret(System.getenv("COGNITO_CLIENT_SECRET")));
+        log.info("[Startup] COGNITO_ISSUER_URI: {}", System.getenv("COGNITO_ISSUER_URI"));
+        log.info("[Startup] COGNITO_DOMAIN: {}", System.getenv("COGNITO_DOMAIN"));
+        log.info("[Startup] COGNITO_REDIRECT_URI: {}", System.getenv("COGNITO_REDIRECT_URI"));
+        log.info("[Startup] AWS_REGION: {}", System.getenv("AWS_REGION"));
+        log.info("=".repeat(80));
+    }
+
+    private String maskValue(String value) {
+        if (value == null || value.isEmpty()) {
+            return "NOT_SET";
         }
+        if (value.length() <= 8) {
+            return "***";
+        }
+        return value.substring(0, 4) + "***" + value.substring(value.length() - 4);
+    }
+
+    private String maskSecret(String secret) {
+        if (secret == null || secret.isEmpty()) {
+            return "NOT_SET";
+        }
+        return "***" + secret.substring(Math.max(0, secret.length() - 4));
     }
 
     @Override

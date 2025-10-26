@@ -6,44 +6,81 @@ set -a
 [ -f /app/../.env ] && . /app/../.env
 set +a
 
-# Region where SSM parameters are stored (config region)
-export PARAM_REGION=${PARAM_REGION:-us-east-1}
-
-# Region where Cognito resources exist
+# AWS Region
 export AWS_REGION=${AWS_REGION:-us-east-1}
 
-echo "[INFO] Fetching SSM parameters from region: $PARAM_REGION"
+# SSM Parameter Path Prefix
+SSM_PREFIX="/clone-app/dev/cognito"
 
-# Fetch SSM parameters
-export COGNITO_USER_POOL_ID=$(aws ssm get-parameter \
-  --name "/auth-service/user_pool_id" \
-  --region "$AWS_REGION" \
-  --query "Parameter.Value" \
-  --output text)
+echo "[INFO] Fetching SSM parameters from: $SSM_PREFIX (region: $AWS_REGION)"
 
-export COGNITO_CLIENT_ID=$(aws ssm get-parameter \
-  --name "/auth-service/native_client_id" \
-  --region "$AWS_REGION" \
-  --query "Parameter.Value" \
-  --output text)
+# Function to fetch SSM parameter with error handling
+fetch_ssm_param() {
+  local param_name=$1
+  local param_path="$SSM_PREFIX/$param_name"
+  local decrypt_flag=$2
 
-# Optional client secret
-# Optional client secret
-if aws ssm get-parameter --name "/auth-service/client_secret" --region "$AWS_REGION" --with-decryption --query "Parameter.Value" --output text 2>/dev/null; then
-  export COGNITO_CLIENT_SECRET=$(aws ssm get-parameter \
-    --name "/auth-service/client_secret" \
-    --region "$AWS_REGION" \
-    --with-decryption \
-    --query "Parameter.Value" \
-    --output text)
+  local result
+  if [ "$decrypt_flag" = "decrypt" ]; then
+    result=$(aws ssm get-parameter \
+      --name "$param_path" \
+      --region "$AWS_REGION" \
+      --with-decryption \
+      --query "Parameter.Value" \
+      --output text 2>&1)
+  else
+    result=$(aws ssm get-parameter \
+      --name "$param_path" \
+      --region "$AWS_REGION" \
+      --query "Parameter.Value" \
+      --output text 2>&1)
+  fi
+
+  if [ $? -ne 0 ]; then
+    echo "[ERROR] Failed to fetch SSM parameter: $param_path"
+    echo "[ERROR] $result"
+    exit 1
+  fi
+
+  echo "$result"
+}
+
+# Fetch SSM parameters with error handling
+echo "[INFO] Fetching user_pool_id..."
+export COGNITO_USER_POOL_ID=$(fetch_ssm_param "user_pool_id")
+
+echo "[INFO] Fetching client_id..."
+export COGNITO_CLIENT_ID=$(fetch_ssm_param "client_id")
+
+echo "[INFO] Fetching client_secret..."
+export COGNITO_CLIENT_SECRET=$(fetch_ssm_param "client_secret" "decrypt")
+
+echo "[INFO] Fetching issuer_uri..."
+export COGNITO_ISSUER_URI=$(fetch_ssm_param "issuer_uri")
+
+echo "[INFO] Fetching domain..."
+export COGNITO_DOMAIN=$(fetch_ssm_param "domain")
+
+echo "[INFO] Fetching callback_url..."
+export COGNITO_REDIRECT_URI=$(fetch_ssm_param "callback_url")
+
+echo "[INFO] Fetching logout_redirect_url..."
+export COGNITO_LOGOUT_REDIRECT_URL=$(fetch_ssm_param "logout_redirect_url")
+
+# Validate required parameters
+if [ -z "$COGNITO_USER_POOL_ID" ] || [ -z "$COGNITO_CLIENT_ID" ] || [ -z "$COGNITO_ISSUER_URI" ] || [ -z "$COGNITO_REDIRECT_URI" ] || [ -z "$COGNITO_LOGOUT_REDIRECT_URL" ]; then
+  echo "[ERROR] Missing required Cognito configuration"
+  exit 1
 fi
 
+echo "[INFO] ✓ Cognito Configuration Loaded:"
+echo "  User Pool ID: $COGNITO_USER_POOL_ID"
+echo "  Client ID: $COGNITO_CLIENT_ID"
+echo "  Issuer URI: $COGNITO_ISSUER_URI"
+echo "  Domain: $COGNITO_DOMAIN"
+echo "  Redirect URI: $COGNITO_REDIRECT_URI"
+echo "  Logout Redirect URL: $COGNITO_LOGOUT_REDIRECT_URL"
+echo "  Region: $AWS_REGION"
 
-# Cognito issuer URI depends on actual AWS region of Cognito resources
-export COGNITO_ISSUER_URI="https://cognito-idp.${AWS_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}"
-
-# Redirect URI
-export COGNITO_REDIRECT_URI=${COGNITO_REDIRECT_URI:-"http://localhost:8080/login/oauth2/code/cognito"}
-
-echo "[INFO] Starting Spring Boot app..."
+echo "[INFO] Starting Spring Boot application..."
 exec java -jar /app/app.jar

@@ -5,13 +5,10 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
-        # Explicitly disable any multi-tenant settings
-        default_schema: public
 
   datasource:
     hikari:
@@ -22,10 +19,18 @@ eureka:
   client:
     enabled: false
 
+# Enable OpenAPI in tests
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+
 logging:
   level:
     root: WARN
     com.learning.backendservice: INFO
-    org.springframework.orm.jpa: DEBUG
-    org.hibernate: INFO
-    org.hibernate.SQL: DEBUG
+    org.testcontainers: INFO
+    org.springdoc: DEBUG  # Debug OpenAPI issues

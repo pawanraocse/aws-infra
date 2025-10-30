@@ -1,7 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <FindBugsFilter>
-  <Match>
-    <Class name="com.learning.awsinfra.controller.EntryController"/>
-    <Bug pattern="EI_EXPOSE_REP2"/>
-  </Match>
-</FindBugsFilter>
+    <!-- Exclude generated code -->
+    <Match>
+        <Class name="~.*\.Q.*"/>
+    </Match>
 
+    <!-- Exclude DTOs -->
+    <Match>
+        <Package name="~com\.learning\.backendservice\.dto.*"/>
+    </Match>
+
+    <!-- Exclude entities -->
+    <Match>
+        <Class name="~com\.learning\.backendservice\.entity.*"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+</FindBugsFilter>

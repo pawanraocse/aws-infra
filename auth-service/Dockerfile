@@ -12,5 +12,5 @@ WORKDIR /app
 COPY target/auth-service-*.jar app.jar
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-EXPOSE 8080
+EXPOSE 8081
 ENTRYPOINT ["/entrypoint.sh"]

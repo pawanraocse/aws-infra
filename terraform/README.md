@@ -34,12 +34,12 @@ project_name = "myapp"
 environment  = "dev"
 
 callback_urls = [
-  "http://localhost:8080/login/oauth2/code/cognito",
+  "http://localhost:8081/login/oauth2/code/cognito",
   "https://myapp.example.com/callback"
 ]
 
 logout_urls = [
-  "http://localhost:8080/logged-out",
+  "http://localhost:8081/logged-out",
   "https://myapp.example.com"
 ]
 
@@ -97,8 +97,8 @@ terraform/
 | `aws_region` | string | `us-east-1` | AWS region for resources |
 | `project_name` | string | `awsinfra` | Project identifier (3-20 chars) |
 | `environment` | string | `dev` | Environment (dev/staging/prod) |
-| `callback_urls` | list(string) | `[localhost:8080/...]` | OAuth callback URLs |
-| `logout_urls` | list(string) | `[localhost:8080/logout]` | Logout redirect URLs |
+| `callback_urls` | list(string) | `[localhost:8081/...]` | OAuth callback URLs |
+| `logout_urls` | list(string) | `[localhost:8081/logout]` | Logout redirect URLs |
 | `access_token_validity` | number | `60` | Access token validity (minutes) |
 | `id_token_validity` | number | `60` | ID token validity (minutes) |
 | `refresh_token_validity` | number | `30` | Refresh token validity (days) |
@@ -279,7 +279,7 @@ spring:
             client-id: ${COGNITO_CLIENT_ID}
             client-secret: ${COGNITO_CLIENT_SECRET}
             scope: openid,email,profile,phone
-            redirect-uri: http://localhost:8080/login/oauth2/code/cognito
+            redirect-uri: http://localhost:8081/login/oauth2/code/cognito
             authorization-grant-type: authorization_code
         provider:
           cognito:

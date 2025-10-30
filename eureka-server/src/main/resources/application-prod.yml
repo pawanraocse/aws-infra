@@ -1,0 +1,45 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+server:
+  port: 8761
+
+  # SSL configuration (uncomment when certificates are ready)
+  # ssl:
+  #   enabled: true
+  #   key-store: classpath:keystore.p12
+  #   key-store-password: ${SSL_KEYSTORE_PASSWORD}
+  #   key-store-type: PKCS12
+  #   key-alias: eureka-server
+
+eureka:
+  instance:
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:eureka-server}
+    non-secure-port-enabled: true
+    # secure-port-enabled: true
+    # secure-port: 8761
+
+  server:
+    # Enable self-preservation in production
+    enable-self-preservation: true
+    eviction-interval-timer-in-ms: 60000
+
+    # Stricter rate limiting
+    rate-limiter-burst-size: 5
+    rate-limiter-registry-fetch-average-rate: 200
+
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+
+logging:
+  level:
+    root: INFO
+    com.learning.eureka: INFO
+    com.netflix.eureka: WARN
+    com.netflix.discovery: WARN
+
+  file:
+    name: /var/log/eureka-server/eureka-server.log

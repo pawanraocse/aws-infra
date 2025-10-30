@@ -18,10 +18,10 @@ This document outlines the step-by-step actions required to design, implement, a
     - Native username/password login
     - Federated SSO (SAML, OIDC, social IdPs)
     - **Allowed callback URLs:**
-        - `http://localhost:8080/api/v1/auth/callback` (local dev)
+        - `http://localhost:8081/api/v1/auth/callback` (local dev)
         - `https://your-frontend-domain.com/auth/callback` (production)
     - **Allowed sign-out URLs:**
-        - `http://localhost:8080/logout` (local dev)
+        - `http://localhost:8081/logout` (local dev)
         - `https://your-frontend-domain.com/logout` (production)
 - [x] Ensure the `cognito:groups` claim is present in JWTs and used for tenant context enforcement in the backend.
 - [x] Document onboarding flows for both SSO and native login tenants, including group assignment.

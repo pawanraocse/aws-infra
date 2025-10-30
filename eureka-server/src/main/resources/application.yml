@@ -1,0 +1,94 @@
+spring:
+  application:
+    name: eureka-server
+
+  # Banner configuration
+  banner:
+    location: classpath:banner.txt
+
+server:
+  port: ${SERVER_PORT:8761}
+
+  # Tomcat configuration for production
+  tomcat:
+    connection-timeout: 20000
+    max-connections: 10000
+    threads:
+      max: 200
+      min-spare: 10
+
+eureka:
+  instance:
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
+    prefer-ip-address: false
+    lease-renewal-interval-in-seconds: 30
+    lease-expiration-duration-in-seconds: 90
+
+  client:
+    # Standalone mode - don't register with itself
+    register-with-eureka: ${EUREKA_CLIENT_REGISTER_WITH_EUREKA:false}
+    fetch-registry: ${EUREKA_CLIENT_FETCH_REGISTRY:false}
+    service-url:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+
+  server:
+    # Disable self-preservation mode in development
+    enable-self-preservation: ${EUREKA_SERVER_ENABLE_SELF_PRESERVATION:true}
+    eviction-interval-timer-in-ms: 60000
+
+    # Response cache settings
+    response-cache-update-interval-ms: 30000
+    response-cache-auto-expiration-in-seconds: 180
+
+    # Peer sync settings
+    max-threads-for-peer-replication: 20
+
+    # Rate limiter
+    rate-limiter-enabled: true
+    rate-limiter-burst-size: 10
+    rate-limiter-registry-fetch-average-rate: 500
+    rate-limiter-full-fetch-average-rate: 100
+
+# Management and monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env
+      base-path: /actuator
+
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    export:
+      prometheus:
+        enabled: true
+
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    com.learning.eureka: DEBUG
+    com.netflix.eureka: INFO
+    com.netflix.discovery: INFO
+
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+  file:
+    name: logs/eureka-server.log
+    max-size: 10MB
+    max-history: 30

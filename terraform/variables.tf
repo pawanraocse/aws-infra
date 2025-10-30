@@ -35,7 +35,7 @@ variable "callback_urls" {
   description = "List of allowed callback URLs for OAuth"
   type        = list(string)
   default = [
-    "http://localhost:8080/login/oauth2/code/cognito",
+    "http://localhost:8081/login/oauth2/code/cognito",
     "http://localhost:3000/callback"
   ]
 }
@@ -44,7 +44,7 @@ variable "logout_urls" {
   description = "List of allowed logout URLs"
   type        = list(string)
   default = [
-    "http://localhost:8080/logged-out",
+    "http://localhost:8081/logged-out",
     "http://localhost:3000"
   ]
 }

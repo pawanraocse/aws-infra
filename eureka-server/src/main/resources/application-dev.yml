@@ -1,0 +1,27 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+server:
+  port: 8761
+
+eureka:
+  instance:
+    hostname: localhost
+
+  server:
+    # Disable self-preservation in dev for faster deregistration
+    enable-self-preservation: false
+    eviction-interval-timer-in-ms: 5000
+
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+
+logging:
+  level:
+    root: INFO
+    com.learning.eureka: DEBUG
+    com.netflix.eureka: DEBUG
+    com.netflix.discovery: DEBUG

@@ -1,0 +1,37 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+server:
+  port: 8080
+
+eureka:
+  instance:
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:gateway-service}
+    prefer-ip-address: false
+
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URI:http://eureka-server:8761/eureka}
+
+management:
+  tracing:
+    sampling:
+      probability: 0.1
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        wait-duration-in-open-state: 60s
+        failure-rate-threshold: 30
+
+logging:
+  level:
+    root: INFO
+    com.learning.gateway: INFO
+    org.springframework.cloud.gateway: WARN
+
+  file:
+    name: /var/log/gateway-service/gateway-service.log

@@ -48,8 +48,8 @@ Production-ready AWS-based Spring Boot microservice with Angular frontend. All i
 
 ## API Documentation (Swagger/OpenAPI)
 
-- Interactive API docs are available at [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html) when running locally.
-- The OpenAPI v3 specification is available at [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs).
+- Interactive API docs are available at [http://localhost:8081/swagger-ui.html](http://localhost:8081/swagger-ui.html) when running locally.
+- The OpenAPI v3 specification is available at [http://localhost:8081/v3/api-docs](http://localhost:8081/v3/api-docs).
 - Use the Swagger UI to explore, test, and understand all available endpoints, request/response schemas, and error models.
 - The OpenAPI spec can be used for client code generation (e.g., OpenAPI Generator, Postman).
 - **Security Note:** In production, restrict access to Swagger UI and OpenAPI spec endpoints to authorized users only.

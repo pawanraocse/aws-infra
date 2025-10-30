@@ -1,0 +1,38 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    hikari:
+      maximum-pool-size: 50
+
+  jpa:
+    show-sql: false
+
+server:
+  port: 8082
+
+eureka:
+  instance:
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:backend-service}
+    prefer-ip-address: false
+
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URI:http://eureka-server:8761/eureka}
+
+management:
+  tracing:
+    sampling:
+      probability: 0.1
+
+logging:
+  level:
+    root: INFO
+    com.learning.backendservice: INFO
+    org.hibernate.SQL: WARN
+
+  file:
+    name: /var/log/backend-service/backend-service.log

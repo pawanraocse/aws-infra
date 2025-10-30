@@ -181,7 +181,7 @@ Follow SOLID. Keep controller thin. Business logic in service classes.
 
 - Multi-stage build. Build stage uses JDK. Final stage uses JRE or distroless.
 - Use non-root user in final image.
-- Expose port `8080`.
+- Expose port `8081`.
 - Build args allowed for Java version.
 
 Minimal sample (generator-friendly):
@@ -196,7 +196,7 @@ FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /workspace/build/libs/*.jar app.jar
 ENTRYPOINT ["java","-jar","/app/app.jar"]
-EXPOSE 8080
+EXPOSE 8081
 ```
 
 ---

@@ -7,12 +7,12 @@ environment  = "dev"
 
 # OAuth Configuration
 callback_urls = [
-  "http://localhost:8080/login/oauth2/code/cognito",
+  "http://localhost:8081/login/oauth2/code/cognito",
   "http://localhost:3000/callback"
 ]
 
 logout_urls = [
-  "http://localhost:8080/logged-out",
+  "http://localhost:8081/logged-out",
   "http://localhost:3000"
 ]
 

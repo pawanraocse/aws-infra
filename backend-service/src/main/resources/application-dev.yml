@@ -1,0 +1,26 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/awsinfra
+
+  jpa:
+    show-sql: true
+
+server:
+  port: 8082
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+
+logging:
+  level:
+    root: INFO
+    com.learning.backendservice: DEBUG
+    org.hibernate.SQL: DEBUG

@@ -190,7 +190,7 @@ This file breaks the PRD into independent, detailed tasks for robust, scalable, 
 ## 9. Dockerization
 - Create multi-stage Dockerfile:
   - Stage 1: Build app with JDK, run tests, package jar.
-  - Stage 2: Use JRE/distroless image, copy jar, set non-root user, expose port 8080.
+  - Stage 2: Use JRE/distroless image, copy jar, set non-root user, expose port 8081.
   - Parameterize Java version via build args.
 - Optimize image size and security:
   - Remove build artifacts, minimize layers, scan for vulnerabilities.

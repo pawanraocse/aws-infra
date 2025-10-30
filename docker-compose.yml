@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -19,46 +19,46 @@ services:
     ports:
       - "5432:5432" # remove in production
 
-  app:
+  eureka-server:
     build:
-      context: ./backend-service
+      context: ./eureka-server
       dockerfile: Dockerfile
-    image: awsinfra-app:1.0.0
-    container_name: awsinfra-app
+    image: awsinfra-eureka-server:1.0.0
+    container_name: eureka-server
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/awsinfra
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
-      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
-      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
-      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
-      server.port: 8081
+      SPRING_APPLICATION_NAME: eureka-server
+      SERVER_PORT: 8761
+      EUREKA_INSTANCE_HOSTNAME: eureka-server
+      EUREKA_CLIENT_REGISTER_WITH_EUREKA: "false"
+      EUREKA_CLIENT_FETCH_REGISTRY: "false"
     networks:
       - awsinfra-net
     ports:
-      - "8081:8081"
-    depends_on:
-      postgres:
-        condition: service_healthy
+      - "8761:8761"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/actuator/health || exit 1"]
-      interval: 10s
+      test: [ "CMD-SHELL", "wget -q --spider http://localhost:8761/actuator/health || exit 1" ]
+      interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
     restart: unless-stopped
 
-  auth-service:
+  gateway-service:
     build:
-      context: ./auth-service
+      context: ./gateway-service
       dockerfile: Dockerfile
-    image: awsinfra-auth-service:1.0.0
-    container_name: awsinfra-auth-service
+    image: awsinfra-gateway-service:1.0.0
+    container_name: gateway-service
     env_file:
       - .env
     environment:
-      server.port: 8080
-      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
-      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
+      SPRING_APPLICATION_NAME: gateway-service
+      SERVER_PORT: 8080
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: gateway-service
+      ZIPKIN_ENABLED: "false"
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,gateway
     volumes:
       - ~/.aws:/root/.aws:ro
     networks:
@@ -66,13 +66,84 @@ services:
     ports:
       - "8080:8080"
     depends_on:
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q --spider http://localhost:8080/actuator/health || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+
+  backend-service:
+    build:
+      context: ./backend-service
+      dockerfile: Dockerfile
+    image: awsinfra-backend-service:1.0.0
+    container_name: backend-service
+    environment:
+      SPRING_APPLICATION_NAME: backend-service
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/awsinfra
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: backend-service
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
+      server.port: 8082
+    networks:
+      - awsinfra-net
+    ports:
+      - "8082:8082"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/actuator/health || exit 1"]
-      interval: 10s
+      test: [ "CMD-SHELL", "wget -q --spider http://localhost:8082/actuator/health || exit 1" ]
+      interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    image: awsinfra-auth-service:1.0.0
+    container_name: auth-service
+    env_file:
+      - .env
+    environment:
+      SPRING_APPLICATION_NAME: auth-service
+      server.port: 8081
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: auth-service
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
+      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
+    volumes:
+      - ~/.aws:/root/.aws:ro
+    networks:
+      - awsinfra-net
+    ports:
+      - "8081:8081"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q --spider http://localhost:8081/actuator/health || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
     restart: unless-stopped
 
 volumes:

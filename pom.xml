@@ -3,12 +3,14 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>3.5.6</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <relativePath/>
     </parent>
+
     <groupId>com.learning</groupId>
     <artifactId>AWS-Infra</artifactId>
     <version>0.0.1-SNAPSHOT</version>
@@ -17,10 +19,13 @@
     <modules>
         <module>auth-service</module>
         <module>backend-service</module>
+        <module>eureka-server</module>
+        <module>gateway-service</module>
     </modules>
 
     <properties>
         <java.version>21</java.version>
+        <spring-cloud.version>2025.0.0</spring-cloud.version>
         <springdoc.version>2.5.0</springdoc.version>
         <testcontainers.version>1.19.7</testcontainers.version>
         <mockito.version>5.12.0</mockito.version>
@@ -32,11 +37,26 @@
 
     <dependencyManagement>
         <dependencies>
+
+            <!-- Spring Cloud BOM -->
             <dependency>
-                <groupId>io.awspring.cloud</groupId>
-                <artifactId>spring-cloud-aws-starter-parameter-store</artifactId>
-                <version>3.4.0</version>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
+
+            <!-- AWS SDK v2 BOM -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>2.26.15</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Spring Boot managed dependencies -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -44,6 +64,14 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
+            <!-- AWS Spring Cloud Parameter Store -->
+            <dependency>
+                <groupId>io.awspring.cloud</groupId>
+                <artifactId>spring-cloud-aws-starter-parameter-store</artifactId>
+                <version>3.4.0</version>
+            </dependency>
+
             <!-- Common test dependencies -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -51,30 +79,35 @@
                 <version>3.5.6</version>
                 <scope>test</scope>
             </dependency>
+
             <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>junit-jupiter</artifactId>
                 <version>${testcontainers.version}</version>
                 <scope>test</scope>
             </dependency>
+
             <dependency>
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-core</artifactId>
                 <version>${mockito.version}</version>
                 <scope>test</scope>
             </dependency>
+
             <dependency>
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj.version}</version>
                 <scope>test</scope>
             </dependency>
+
         </dependencies>
     </dependencyManagement>
 
     <build>
         <pluginManagement>
             <plugins>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
@@ -85,10 +118,12 @@
                         <encoding>UTF-8</encoding>
                     </configuration>
                 </plugin>
+
                 <plugin>
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
                 </plugin>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-enforcer-plugin</artifactId>
@@ -109,6 +144,7 @@
                         </execution>
                     </executions>
                 </plugin>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
@@ -123,6 +159,7 @@
                         </includes>
                     </configuration>
                 </plugin>
+
                 <plugin>
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>
@@ -142,6 +179,7 @@
                         </execution>
                     </executions>
                 </plugin>
+
                 <plugin>
                     <groupId>com.github.spotbugs</groupId>
                     <artifactId>spotbugs-maven-plugin</artifactId>
@@ -151,6 +189,7 @@
                         <threshold>Low</threshold>
                     </configuration>
                 </plugin>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-checkstyle-plugin</artifactId>
@@ -162,6 +201,7 @@
                         <failsOnError>true</failsOnError>
                     </configuration>
                 </plugin>
+
             </plugins>
         </pluginManagement>
     </build>
@@ -173,12 +213,14 @@
                 <spring.profiles.active>dev</spring.profiles.active>
             </properties>
         </profile>
+
         <profile>
             <id>test</id>
             <properties>
                 <spring.profiles.active>test</spring.profiles.active>
             </properties>
         </profile>
+
         <profile>
             <id>prod</id>
             <properties>
@@ -186,4 +228,5 @@
             </properties>
         </profile>
     </profiles>
+
 </project>

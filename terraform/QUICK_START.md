@@ -25,11 +25,11 @@ project_name = "myapp"
 environment  = "dev"
 
 callback_urls = [
-  "http://localhost:8080/login/oauth2/code/cognito"
+  "http://localhost:8081/login/oauth2/code/cognito"
 ]
 
 logout_urls = [
-  "http://localhost:8080/logged-out"
+  "http://localhost:8081/logged-out"
 ]
 ```
 
@@ -88,7 +88,7 @@ spring:
             client-id: ${COGNITO_CLIENT_ID}
             client-secret: ${COGNITO_CLIENT_SECRET}
             scope: openid,email,profile
-            redirect-uri: http://localhost:8080/login/oauth2/code/cognito
+            redirect-uri: http://localhost:8081/login/oauth2/code/cognito
         provider:
           cognito:
             issuer-uri: ${COGNITO_ISSUER_URI}
@@ -210,7 +210,7 @@ terraform output -json | jq '.cognito_config_summary.value.callback_urls'
 
 # Update in terraform.tfvars
 callback_urls = [
-  "http://localhost:8080/login/oauth2/code/cognito"  # Must match exactly
+  "http://localhost:8081/login/oauth2/code/cognito"  # Must match exactly
 ]
 
 terraform apply

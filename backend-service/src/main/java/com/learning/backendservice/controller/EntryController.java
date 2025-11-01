@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.*;
 @Slf4j
 @RequiredArgsConstructor
 @RestController
-@RequestMapping("/api/entries")
+@RequestMapping("/api/v1/entries")
 @Validated
 @Tag(name = "Entries", description = "Entry management APIs")
 public class EntryController {

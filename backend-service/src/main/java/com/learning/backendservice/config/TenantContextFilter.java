@@ -48,8 +48,9 @@ public class TenantContextFilter extends OncePerRequestFilter {
                 log.debug("Tenant context set: tenantId={}, userId={}, username={}",
                         tenantId, userId, username);
 
-                List<SimpleGrantedAuthority> authorities = authoritiesStr != null
+                List<SimpleGrantedAuthority> authorities = (authoritiesStr != null && !authoritiesStr.isEmpty())
                         ? Arrays.stream(authoritiesStr.split(","))
+                        .filter(auth -> !auth.trim().isEmpty())
                         .map(SimpleGrantedAuthority::new)
                         .collect(Collectors.toList())
                         : List.of();

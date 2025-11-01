@@ -40,6 +40,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().authenticated()
                 )
+                .anonymous(anonymous -> anonymous.disable())
                 .addFilterBefore(tenantContextFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

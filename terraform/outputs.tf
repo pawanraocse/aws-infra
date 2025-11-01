@@ -116,6 +116,26 @@ output "ssm_logout_redirect_url_path" {
   value       = aws_ssm_parameter.logout_redirect_url.name
 }
 
+output "ssm_jwks_uri_path" {
+  description = "SSM Parameter path for JWKS URI"
+  value       = aws_ssm_parameter.jwks_uri.name
+}
+
+output "ssm_hosted_ui_url_path" {
+  description = "SSM Parameter path for Hosted UI URL"
+  value       = aws_ssm_parameter.hosted_ui_url.name
+}
+
+output "ssm_branding_id_path" {
+  description = "SSM Parameter path for Branding ID"
+  value       = aws_ssm_parameter.branding_id.name
+}
+
+output "ssm_aws_region_path" {
+  description = "SSM Parameter path for AWS Region"
+  value       = aws_ssm_parameter.aws_region.name
+}
+
 # ============================================================================
 # User Groups
 # ============================================================================
@@ -179,4 +199,3 @@ output "spring_boot_config" {
   EOT
   sensitive   = true
 }
-

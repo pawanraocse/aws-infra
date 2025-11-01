@@ -33,6 +33,8 @@ public class RouteConfig {
                 .route("backend-service", r -> r
                         .path("/api/**")
                         .filters(f -> f
+                                .filter(new com.learning.gateway.filter.JwtAuthenticationGatewayFilterFactory().apply(
+                                        new com.learning.gateway.filter.JwtAuthenticationGatewayFilterFactory.Config()))
                                 .circuitBreaker(config -> config
                                         .setName("backendServiceCircuitBreaker")
                                         .setFallbackUri("forward:/fallback"))

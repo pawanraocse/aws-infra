@@ -86,6 +86,9 @@ DOMAIN=$(terraform output -raw cognito_domain 2>/dev/null)
 HOSTED_UI_URL=$(terraform output -raw hosted_ui_url 2>/dev/null)
 JWKS_URI=$(terraform output -raw jwks_uri 2>/dev/null)
 BRANDING_ID=$(terraform output -raw managed_login_branding_id 2>/dev/null)
+CALLBACK_URL=$(terraform output -raw callback_url 2>/dev/null)
+LOGOUT_REDIRECT_URL=$(terraform output -raw logout_redirect_url 2>/dev/null)
+
 
 # Validate outputs
 if [ -z "$USER_POOL_ID" ] || [ -z "$CLIENT_ID" ] || [ -z "$ISSUER_URI" ]; then
@@ -121,6 +124,8 @@ COGNITO_JWKS_URI=$JWKS_URI
 COGNITO_DOMAIN=$DOMAIN
 COGNITO_HOSTED_UI_URL=$HOSTED_UI_URL
 COGNITO_MANAGED_LOGIN_BRANDING_ID=$BRANDING_ID
+CALLBACK_URL=$CALLBACK_URL
+LOGOUT_REDIRECT_URL=$LOGOUT_REDIRECT_URL
 AWS_REGION=$AWS_REGION
 
 # SSM Parameter Paths (created by Terraform)

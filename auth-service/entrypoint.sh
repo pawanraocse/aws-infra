@@ -10,7 +10,7 @@ set +a
 export AWS_REGION=${AWS_REGION:-us-east-1}
 
 # SSM Parameter Path Prefix
-SSM_PREFIX="/clone-app/dev/cognito"
+SSM_PREFIX="/cloud-infra/dev/cognito"
 
 echo "[INFO] Fetching SSM parameters from: $SSM_PREFIX (region: $AWS_REGION)"
 

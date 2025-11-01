@@ -11,6 +11,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.bind.annotation.*;
 
 @Slf4j
@@ -24,6 +26,35 @@ public class AuthController {
     public ResponseEntity<UserInfoDto> getCurrentUser(@RequestHeader(name = "Authorization", required = false) String authorizationHeader) {
         // Accept JWT in Authorization header for stateless auth
         return ResponseEntity.ok(authService.getCurrentUser());
+    }
+
+    /**
+     * Get JWT tokens from the current OAuth2 session.
+     * This endpoint extracts the ID token and access token from the authenticated OIDC user.
+     * Use this after successful OAuth2 login to get tokens for API calls.
+     */
+    @GetMapping("/tokens")
+    public ResponseEntity<AuthResponseDto> getTokens(@AuthenticationPrincipal OidcUser oidcUser) {
+        if (oidcUser == null) {
+            log.warn("operation=getTokens, status=unauthorized, message=No authenticated user");
+            return ResponseEntity.status(401).build();
+        }
+
+        log.info("operation=getTokens, userId={}, status=success", oidcUser.getSubject());
+
+        // Extract tokens from OIDC user
+        String idToken = oidcUser.getIdToken().getTokenValue();
+        String accessToken = oidcUser.getIdToken().getTokenValue(); // In OIDC, ID token is used for authentication
+
+        AuthResponseDto response = new AuthResponseDto();
+        response.setAccessToken(idToken); // Use ID token as access token for API calls
+        response.setTokenType("Bearer");
+        response.setExpiresIn(oidcUser.getIdToken().getExpiresAt() != null ?
+            oidcUser.getIdToken().getExpiresAt().getEpochSecond() - System.currentTimeMillis() / 1000 : 3600L);
+        response.setUserId(oidcUser.getSubject());
+        response.setEmail(oidcUser.getEmail());
+
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/login")

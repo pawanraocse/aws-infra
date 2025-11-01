@@ -122,6 +122,9 @@ management:
         enabled: true
     gateway:
       enabled: true
+  health:
+    redis:
+      enabled: false
 
   metrics:
     tags:

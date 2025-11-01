@@ -2,7 +2,7 @@
 
 # AWS Configuration
 aws_region   = "us-east-1"
-project_name = "clone-app"
+project_name = "cloud-infra"
 environment  = "dev"
 
 # OAuth Configuration

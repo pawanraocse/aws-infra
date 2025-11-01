@@ -306,6 +306,10 @@ resource "aws_ssm_parameter" "user_pool_id" {
     Environment = var.environment
     ManagedBy   = "Terraform"
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_ssm_parameter" "client_id" {
@@ -319,6 +323,9 @@ resource "aws_ssm_parameter" "client_id" {
     Project     = var.project_name
     Environment = var.environment
     ManagedBy   = "Terraform"
+  }
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -335,6 +342,9 @@ resource "aws_ssm_parameter" "client_secret" {
     Project     = var.project_name
     Environment = var.environment
     ManagedBy   = "Terraform"
+  }
+  lifecycle {
+    prevent_destroy = true
   }
 
   # Optional: specify key_id to use customer-managed CMK (PAID - may incur KMS costs)
@@ -353,6 +363,9 @@ resource "aws_ssm_parameter" "issuer_uri" {
     Environment = var.environment
     ManagedBy   = "Terraform"
   }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_ssm_parameter" "domain" {
@@ -366,6 +379,9 @@ resource "aws_ssm_parameter" "domain" {
     Project     = var.project_name
     Environment = var.environment
     ManagedBy   = "Terraform"
+  }
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -381,6 +397,9 @@ resource "aws_ssm_parameter" "callback_url" {
     Environment = var.environment
     ManagedBy   = "Terraform"
   }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_ssm_parameter" "logout_redirect_url" {
@@ -394,5 +413,72 @@ resource "aws_ssm_parameter" "logout_redirect_url" {
     Project     = var.project_name
     Environment = var.environment
     ManagedBy   = "Terraform"
+  }
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_ssm_parameter" "jwks_uri" {
+  name        = "/${var.project_name}/${var.environment}/cognito/jwks_uri"
+  description = "Cognito JWKS URI"
+  type        = "String"
+  value       = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.main.id}/.well-known/jwks.json"
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-jwks-uri"
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_ssm_parameter" "hosted_ui_url" {
+  name        = "/${var.project_name}/${var.environment}/cognito/hosted_ui_url"
+  description = "Cognito Hosted UI URL (Modern Managed Login v2)"
+  type        = "String"
+  value       = "https://${aws_cognito_user_pool_domain.main.domain}.auth.${var.aws_region}.amazoncognito.com/oauth2/authorize?client_id=${aws_cognito_user_pool_client.native.id}&response_type=code&scope=openid+email+profile+phone&redirect_uri=${urlencode(var.callback_urls[0])}"
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-hosted-ui-url"
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_ssm_parameter" "branding_id" {
+  name        = "/${var.project_name}/${var.environment}/cognito/branding_id"
+  description = "Cognito Managed Login Branding ID"
+  type        = "String"
+  value       = aws_cognito_managed_login_branding.main.managed_login_branding_id
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-branding-id"
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_ssm_parameter" "aws_region" {
+  name        = "/${var.project_name}/${var.environment}/aws/region"
+  description = "AWS Region for this deployment"
+  type        = "String"
+  value       = var.aws_region
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-aws-region"
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+  lifecycle {
+    prevent_destroy = true
   }
 }

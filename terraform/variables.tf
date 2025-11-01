@@ -10,13 +10,13 @@ variable "aws_region" {
 }
 
 variable "project_name" {
-  description = "Project identifier used in resource naming"
+  description = "Project name used in resource naming"
   type        = string
-  default     = "awsinfra"
+  default     = "cloud-infra"
 
   validation {
-    condition     = can(regex("^[a-z0-9-]{3,20}$", var.project_name))
-    error_message = "Project name must be 3-20 characters, lowercase letters, numbers, and hyphens only"
+    condition     = can(regex("^[a-z0-9-]{3,20}$", var.project_name)) && !can(regex("^aws", var.project_name))
+    error_message = "3-20 chars, lowercase letters, numbers, hyphens. Cannot start with 'aws'."
   }
 }
 

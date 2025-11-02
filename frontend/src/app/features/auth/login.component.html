@@ -1,0 +1,30 @@
+<div class="login-container">
+  <div class="login-card">
+    <div class="login-header">
+      <h1>Welcome to AWS Microservices</h1>
+      <p>Sign in to continue</p>
+    </div>
+    <div class="login-body">
+      <button
+        class="btn-cognito"
+        (click)="loginWithCognito()"
+        type="button">
+        <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+          <polyline points="10 17 15 12 10 7"></polyline>
+          <line x1="15" y1="12" x2="3" y2="12"></line>
+        </svg>
+        Login with AWS Cognito
+      </button>
+      <div class="info-text">
+        <p>You will be redirected to AWS Cognito Hosted UI for secure authentication.</p>
+      </div>
+    </div>
+    <div class="login-footer">
+      <p class="text-muted">
+        Powered by AWS Cognito • Spring Boot • Angular
+      </p>
+    </div>
+  </div>
+</div>
+

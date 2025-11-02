@@ -1,0 +1,22 @@
+<div class="callback-container">
+  <div class="callback-card">
+    @if (loading) {
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <h2>Completing authentication...</h2>
+        <p>Please wait while we securely log you in.</p>
+      </div>
+    }
+    @if (error) {
+      <div class="error-state">
+        <div class="error-icon">⚠️</div>
+        <h2>Authentication Failed</h2>
+        <p>{{ errorMessage }}</p>
+        <button class="btn-retry" (click)="retry()">
+          Try Again
+        </button>
+      </div>
+    }
+  </div>
+</div>
+

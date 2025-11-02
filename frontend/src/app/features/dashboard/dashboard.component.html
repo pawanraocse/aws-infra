@@ -1,0 +1,192 @@
+<div class="dashboard-container">
+  <div class="dashboard-header">
+    <div class="header-content">
+      <h1>Dashboard</h1>
+      <button class="btn-logout" (click)="logout()">
+        <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+          <polyline points="16 17 21 12 16 7"></polyline>
+          <line x1="21" y1="12" x2="9" y2="12"></line>
+        </svg>
+        Logout
+      </button>
+    </div>
+  </div>
+  <div class="dashboard-content">
+    <!-- User Info Card -->
+    <div class="card user-card">
+      <div class="card-header">
+        <h2>User Information</h2>
+      </div>
+      <div class="card-body">
+        @if (userInfo()) {
+          <div class="user-info">
+            <div class="info-row">
+              <span class="label">User ID:</span>
+              <span class="value">{{ userInfo()?.userId }}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Email:</span>
+              <span class="value">{{ userInfo()?.email }}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Tenant:</span>
+              <span class="value">{{ userInfo()?.tenantId || 'default' }}</span>
+            </div>
+            @if (userInfo()?.authorities && userInfo()!.authorities!.length > 0) {
+              <div class="info-row">
+                <span class="label">Roles:</span>
+                <span class="value">{{ userInfo()?.authorities?.join(', ') }}</span>
+              </div>
+            }
+          </div>
+        } @else {
+          <p class="text-muted">Loading user information...</p>
+        }
+      </div>
+    </div>
+    <!-- Entry Management -->
+    <div class="card entries-card">
+      <div class="card-header">
+        <h2>Entry Management</h2>
+        <button class="btn-primary" (click)="toggleCreateForm()">
+          {{ showCreateForm() ? 'Cancel' : '+ New Entry' }}
+        </button>
+      </div>
+      <div class="card-body">
+        <!-- Error Message -->
+        @if (error()) {
+          <div class="alert alert-error">
+            {{ error() }}
+          </div>
+        }
+
+        <!-- Create/Edit Form -->
+        @if (showCreateForm() || editingEntry()) {
+          <div class="entry-form">
+            <h3>{{ editingEntry() ? 'Edit Entry' : 'Create New Entry' }}</h3>
+            <div class="form-group">
+              <label for="entryKey">Key</label>
+              <input
+                type="text"
+                id="entryKey"
+                [(ngModel)]="entryForm().key"
+                placeholder="e.g., api_key"
+                class="form-control"
+                [disabled]="loading()"
+              />
+            </div>
+            <div class="form-group">
+              <label for="entryValue">Value</label>
+              <input
+                type="text"
+                id="entryValue"
+                [(ngModel)]="entryForm().value"
+                placeholder="e.g., sk-123456789"
+                class="form-control"
+                [disabled]="loading()"
+              />
+            </div>
+            <div class="form-actions">
+              @if (editingEntry()) {
+                <button class="btn-primary" (click)="updateEntry()" [disabled]="loading()">
+                  {{ loading() ? 'Updating...' : 'Update Entry' }}
+                </button>
+                <button class="btn-secondary" (click)="cancelEdit()" [disabled]="loading()">
+                  Cancel
+                </button>
+              } @else {
+                <button class="btn-primary" (click)="createEntry()" [disabled]="loading()">
+                  {{ loading() ? 'Creating...' : 'Create Entry' }}
+                </button>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- Entries List -->
+        @if (loading() && entries().length === 0) {
+          <div class="loading">Loading entries...</div>
+        } @else if (entries().length === 0) {
+          <div class="empty-state">
+            <p>No entries found. Create your first entry!</p>
+          </div>
+        } @else {
+          <div class="entries-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Key</th>
+                  <th>Value</th>
+                  <th>Created At</th>
+                  <th>Created By</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (entry of entries(); track entry.id) {
+                  <tr>
+                    <td>{{ entry.id }}</td>
+                    <td><code>{{ entry.key }}</code></td>
+                    <td><code>{{ entry.value }}</code></td>
+                    <td>{{ entry.createdAt | date:'short' }}</td>
+                    <td>{{ entry.createdBy }}</td>
+                    <td class="actions">
+                      <button class="btn-icon" (click)="startEdit(entry)" title="Edit">
+                        ✏️
+                      </button>
+                      <button class="btn-icon btn-danger" (click)="deleteEntry(entry)" title="Delete">
+                        🗑️
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <div class="pagination">
+            <button
+              class="btn-secondary"
+              (click)="previousPage()"
+              [disabled]="currentPage() === 0 || loading()"
+            >
+              Previous
+            </button>
+            <span class="page-info">
+              Page {{ currentPage() + 1 }} of {{ Math.ceil(totalEntries() / pageSize()) || 1 }}
+              ({{ totalEntries() }} total)
+            </span>
+            <button
+              class="btn-secondary"
+              (click)="nextPage()"
+              [disabled]="currentPage() >= Math.ceil(totalEntries() / pageSize()) - 1 || loading()"
+            >
+              Next
+            </button>
+          </div>
+        }
+      </div>
+    </div>
+    <!-- Welcome Message -->
+    <div class="card welcome-card">
+      <div class="card-body">
+        <h2>Welcome to AWS Microservices Platform! 🎉</h2>
+        <p>
+          You are successfully authenticated using AWS Cognito.
+          This application demonstrates a complete microservices architecture with:
+        </p>
+        <ul>
+          <li>OAuth2/OIDC authentication with AWS Cognito</li>
+          <li>JWT-based authorization</li>
+          <li>Multi-tenant support</li>
+          <li>Spring Cloud Gateway</li>
+          <li>Service discovery with Eureka</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+

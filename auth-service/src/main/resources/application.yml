@@ -46,7 +46,7 @@ spring:
               - profile
               - phone
               - aws.cognito.signin.user.admin
-            redirect-uri: ${COGNITO_REDIRECT_URI:http://localhost:8081/login/oauth2/code/cognito}
+            redirect-uri: ${COGNITO_REDIRECT_URI:http://localhost:8081/auth/login/oauth2/code/cognito}
             authorization-grant-type: authorization_code
             client-name: Cognito
         provider:
@@ -60,10 +60,12 @@ cognito:
   client-id: ${COGNITO_CLIENT_ID}
   domain: ${COGNITO_DOMAIN}
   region: ${AWS_REGION:us-east-1}
-  logout-redirect-url: ${COGNITO_LOGOUT_REDIRECT_URL:http://localhost:8081/logged-out}
+  logout-redirect-url: ${COGNITO_LOGOUT_REDIRECT_URL:http://localhost:8081/auth/logged-out}
 
 server:
   port: ${SERVER_PORT:8081}
+  servlet:
+    context-path: /auth
 
 # Eureka Client
 eureka:

@@ -35,6 +35,8 @@ public class SecurityConfig {
                                 "/auth/login/**",
                                 "/auth/signup/**",
                                 "/auth/oauth2/**",
+                                "/auth/tokens",
+                                "/auth/logout",
                                 "/auth/.well-known/**",
                                 "/auth/logged-out",
                                 "/actuator/**",

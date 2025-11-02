@@ -1,8 +1,8 @@
 # AWS-Infra Project - Unified Index & Source of Truth
 
-**Last Updated:** 2025-10-30
-**Version:** 2.3.0
-**Status:** ✅ Production-Ready Multi-Tenant Microservices Architecture
+**Last Updated:** 2025-11-02
+**Version:** 2.4.0
+**Status:** ✅ Production-Ready Multi-Tenant Microservices Architecture with Angular Frontend
 
 ---
 
@@ -69,9 +69,25 @@ Enterprise SaaS platform supporting multiple tenants with complete data isolatio
 
 **1. User Login Flow:**
 ```
-User → Frontend → Gateway (8080) → Auth-Service (8081) → Cognito
-                                                    ↓
-User ← Frontend ← Gateway ← Auth-Service ← JWT Token ← Cognito
+User → Frontend (4200) → Click "Login with Cognito"
+  ↓
+Gateway (8080/auth/oauth2/authorization/cognito) → Auth-Service (8081/auth/oauth2/authorization/cognito)
+  ↓
+Cognito Hosted UI (Modern Managed Login v2)
+  ↓
+User enters credentials → Cognito validates
+  ↓
+Cognito redirects to: http://localhost:8081/auth/login/oauth2/code/cognito
+  ↓
+Auth-Service exchanges code for tokens → Creates session (JSESSIONID)
+  ↓
+Auth-Service redirects to: http://localhost:4200/#/callback
+  ↓
+Frontend calls: http://localhost:8080/auth/tokens (with session cookie)
+  ↓
+Auth-Service extracts JWT from session → Returns JWT
+  ↓
+Frontend stores JWT in localStorage → Redirects to dashboard
 ```
 
 **2. API Request Flow:**
@@ -115,7 +131,8 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 | Language    | TypeScript  | 5.9.2     | Type-safe JavaScript   |
 | Build       | Angular CLI | 20.3.7    | Build and dev server   |
 | Testing     | Jasmine + Karma | Latest | Unit testing           |
-| SSR         | Angular SSR | 20.3.7    | Server-side rendering  |
+| Routing     | Hash-based  | -         | Client-side routing    |
+| State       | Signals     | Latest    | Reactive state management |
 
 ### Infrastructure
 | Component   | Technology   | Version   | Purpose                |
@@ -159,12 +176,14 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 - JWT token extraction
 - User info endpoint
 - Logout functionality
+- **Servlet Context Path:** `/auth`
 - Endpoints:
-  - `GET /auth/login` - Redirect to Cognito Hosted UI
-  - `GET /auth/oauth2/callback` - OAuth2 callback handler
+  - `GET /auth/oauth2/authorization/cognito` - Initiate OAuth2 login flow
+  - `GET /auth/login/oauth2/code/cognito` - OAuth2 callback handler
   - `GET /auth/tokens` - Extract JWT from session
-  - `GET /auth/user-info` - Get user information
+  - `GET /auth/me` - Get current user information
   - `POST /auth/logout` - Logout and clear session
+  - `GET /auth/logged-out` - Logout confirmation page
 
 ### Gateway Service (Port 8080)
 - API Gateway with JWT validation and routing
@@ -244,6 +263,10 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 ---
 
 ## 📝 Known Issues & TODOs
+- [x] Frontend authentication flow with Angular
+- [x] OAuth2 callback URL configuration with servlet context path
+- [x] Health check configuration for Docker services
+- [ ] Entry management UI (CRUD operations)
 - [ ] ECS/ECR deployment automation
 - [ ] Full CI/CD pipeline
 - [ ] Advanced monitoring and tracing
@@ -275,8 +298,66 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 ---
 
+## 📄 Documentation File Pattern
+
+**IMPORTANT:** Always update existing .md files rather than creating new ones for each change.
+
+### Standard Documentation Files
+
+1. **copilot-index.md** (This file)
+   - Single source of truth for project overview
+   - Architecture, technology stack, project structure
+   - High-level documentation
+   - Update after every significant architectural change
+
+2. **CURRENT_STATUS.md**
+   - Current implementation status
+   - What's working, what's next
+   - Service configuration details
+   - Recent fixes and troubleshooting
+   - Quick reference for developers
+   - Update after completing features or fixing issues
+
+3. **IMPLEMENTATION_TASKS.md**
+   - Detailed task tracking
+   - Implementation progress
+   - Technical decisions
+   - Update as tasks are completed
+
+4. **HLD.md** (High-Level Design)
+   - System architecture
+   - Design decisions
+   - Component interactions
+   - Update when architecture changes
+
+5. **README.md**
+   - Getting started guide
+   - Quick setup instructions
+   - Basic usage
+   - Keep concise and user-friendly
+
+### Documentation Rules
+
+- ✅ **DO:** Update existing files with new information
+- ✅ **DO:** Keep related information together in the same file
+- ✅ **DO:** Use clear section headers for easy navigation
+- ❌ **DON'T:** Create new .md files for each change
+- ❌ **DON'T:** Duplicate information across multiple files
+- ❌ **DON'T:** Create temporary or one-off documentation files
+
+### When to Create New Files
+
+Only create new documentation files for:
+- New major features that need dedicated documentation
+- API documentation (e.g., API_REFERENCE.md)
+- Deployment guides (e.g., DEPLOYMENT.md)
+- Contributing guidelines (e.g., CONTRIBUTING.md)
+
+---
+
 ## Update Policy
-- This file is the single source of truth
+- This file is the single source of truth for project overview
 - Update after every significant architectural or flow change
-- Remove all duplicates (e.g., co-pilot-index.md)
+- Always prefer updating existing files over creating new ones
+- Remove all duplicates and consolidate information
 

@@ -32,21 +32,23 @@ variable "environment" {
 }
 
 variable "callback_urls" {
-  description = "List of allowed callback URLs for OAuth"
+  description = "List of allowed callback URLs for OAuth. Must be explicitly configured in terraform.tfvars"
   type        = list(string)
-  default = [
-    "http://localhost:8081/login/oauth2/code/cognito",
-    "http://localhost:3000/callback"
-  ]
+
+  validation {
+    condition     = length(var.callback_urls) > 0
+    error_message = "At least one callback URL must be specified."
+  }
 }
 
 variable "logout_urls" {
-  description = "List of allowed logout URLs"
+  description = "List of allowed logout URLs. Must be explicitly configured in terraform.tfvars"
   type        = list(string)
-  default = [
-    "http://localhost:8081/logged-out",
-    "http://localhost:3000"
-  ]
+
+  validation {
+    condition     = length(var.logout_urls) > 0
+    error_message = "At least one logout URL must be specified."
+  }
 }
 
 variable "access_token_validity" {

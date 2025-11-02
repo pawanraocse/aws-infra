@@ -19,7 +19,7 @@ public class RouteConfig {
                 .route("auth-service", r -> r
                         .path("/auth/**")
                         .filters(f -> f
-                                .rewritePath("/auth/(?<segment>.*)", "/${segment}")
+                                .preserveHostHeader()  // Preserve original Host header for OAuth2 redirects
                                 .circuitBreaker(config -> config
                                         .setName("authServiceCircuitBreaker")
                                         .setFallbackUri("forward:/fallback"))

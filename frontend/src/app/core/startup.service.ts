@@ -10,7 +10,9 @@ export class StartupService {
    */
   init(): Promise<void> {
     return new Promise(resolve => {
-      this.authService.checkAuth().subscribe(() => resolve());
+      // Check if user is authenticated by loading from storage
+      // The AuthService constructor already does this
+      this.authService.getUserInfo().subscribe(() => resolve());
     });
   }
 }

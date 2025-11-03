@@ -41,11 +41,11 @@ class OpenApiTest extends BaseIntegrationTest {
         mockMvc.perform(get("/v3/api-docs"))
                 .andDo(print())
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.paths./api/entries.post").exists())
-                .andExpect(jsonPath("$.paths./api/entries.get").exists())
-                .andExpect(jsonPath("$.paths./api/entries/{id}.get").exists())
-                .andExpect(jsonPath("$.paths./api/entries/{id}.put").exists())
-                .andExpect(jsonPath("$.paths./api/entries/{id}.delete").exists());
+                .andExpect(jsonPath("$.paths./api/v1/entries.post").exists())
+                .andExpect(jsonPath("$.paths./api/v1/entries.get").exists())
+                .andExpect(jsonPath("$.paths./api/v1/entries/{id}.get").exists())
+                .andExpect(jsonPath("$.paths./api/v1/entries/{id}.put").exists())
+                .andExpect(jsonPath("$.paths./api/v1/entries/{id}.delete").exists());
     }
 
     @Test

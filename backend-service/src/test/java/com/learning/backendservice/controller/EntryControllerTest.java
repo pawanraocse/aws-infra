@@ -32,7 +32,7 @@ class EntryControllerTest extends BaseControllerTest {
         EntryRequestDto request = new EntryRequestDto("test-key", "test-value");
 
         // When/Then
-        mockMvc.perform(post("/api/entries")
+        mockMvc.perform(post("/api/v1/entries")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andDo(print())
@@ -50,7 +50,7 @@ class EntryControllerTest extends BaseControllerTest {
         EntryRequestDto request = new EntryRequestDto("", "value");
 
         // When/Then
-        mockMvc.perform(post("/api/entries")
+        mockMvc.perform(post("/api/v1/entries")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andDo(print())
@@ -64,7 +64,7 @@ class EntryControllerTest extends BaseControllerTest {
         entryRepository.save(Entry.builder().key("key2").value("value2").build());
 
         // When/Then
-        mockMvc.perform(get("/api/entries"))
+        mockMvc.perform(get("/api/v1/entries"))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
@@ -78,7 +78,7 @@ class EntryControllerTest extends BaseControllerTest {
         Entry saved = entryRepository.save(Entry.builder().key("find-me").value("found").build());
 
         // When/Then
-        mockMvc.perform(get("/api/entries/{id}", saved.getId()))
+        mockMvc.perform(get("/api/v1/entries/{id}", saved.getId()))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(saved.getId()))
@@ -88,7 +88,7 @@ class EntryControllerTest extends BaseControllerTest {
 
     @Test
     void shouldReturn404WhenEntryNotFound() throws Exception {
-        mockMvc.perform(get("/api/entries/{id}", 99999L))
+        mockMvc.perform(get("/api/v1/entries/{id}", 99999L))
                 .andDo(print())
                 .andExpect(status().isNotFound());
     }
@@ -100,7 +100,7 @@ class EntryControllerTest extends BaseControllerTest {
         EntryRequestDto request = new EntryRequestDto("updated-key", "updated-value");
 
         // When/Then
-        mockMvc.perform(put("/api/entries/{id}", existing.getId())
+        mockMvc.perform(put("/api/v1/entries/{id}", existing.getId())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andDo(print())
@@ -118,18 +118,18 @@ class EntryControllerTest extends BaseControllerTest {
         Entry saved = entryRepository.save(Entry.builder().key("delete-me").value("value").build());
 
         // When/Then
-        mockMvc.perform(delete("/api/entries/{id}", saved.getId()))
+        mockMvc.perform(delete("/api/v1/entries/{id}", saved.getId()))
                 .andDo(print())
                 .andExpect(status().isNoContent());
 
         // Verify deleted
-        mockMvc.perform(get("/api/entries/{id}", saved.getId()))
+        mockMvc.perform(get("/api/v1/entries/{id}", saved.getId()))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void shouldReturn404WhenDeletingNonExistentEntry() throws Exception {
-        mockMvc.perform(delete("/api/entries/{id}", 99999L))
+        mockMvc.perform(delete("/api/v1/entries/{id}", 99999L))
                 .andDo(print())
                 .andExpect(status().isNotFound());
     }
@@ -138,14 +138,14 @@ class EntryControllerTest extends BaseControllerTest {
     void shouldPreventDuplicateKeys() throws Exception {
         // Given - Create first entry
         EntryRequestDto request1 = new EntryRequestDto("duplicate-key", "value1");
-        mockMvc.perform(post("/api/entries")
+        mockMvc.perform(post("/api/v1/entries")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
 
         // When/Then - Try to create with same key
         EntryRequestDto request2 = new EntryRequestDto("duplicate-key", "value2");
-        mockMvc.perform(post("/api/entries")
+        mockMvc.perform(post("/api/v1/entries")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andDo(print())
@@ -164,7 +164,7 @@ class EntryControllerTest extends BaseControllerTest {
         }
 
         // When/Then - Request page 0, size 10
-        mockMvc.perform(get("/api/entries")
+        mockMvc.perform(get("/api/v1/entries")
                         .param("page", "0")
                         .param("size", "10"))
                 .andDo(print())

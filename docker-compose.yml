@@ -67,6 +67,7 @@ services:
       - awsinfra-net
     ports:
       - "8080:8080"
+      - "5005:5005"
     depends_on:
       eureka-server:
         condition: service_healthy

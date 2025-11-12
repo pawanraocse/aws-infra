@@ -21,6 +21,7 @@ RUN mkdir -p /app/logs && chown -R spring:spring /app
 USER spring
 
 EXPOSE 8080
+ENV JAVA_TOOL_OPTIONS="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD wget -q --spider http://localhost:8080/actuator/health || exit 1

@@ -110,3 +110,9 @@ logging:
     com.learning.authservice: DEBUG
     org.springframework.security: INFO
     org.springframework.web: INFO
+
+# NT-21 singleton Cognito client feature flag
+auth:
+  cognito:
+    singleton:
+      enabled: true

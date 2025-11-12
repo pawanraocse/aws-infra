@@ -1,7 +1,7 @@
 # AWS-Infra Project - Unified Index & Source of Truth
 
 **Last Updated:** 2025-11-12
-**Version:** 2.4.1
+**Version:** 2.4.2
 **Status:** ✅ Production-Ready Multi-Tenant Microservices Architecture with Angular Frontend (hardening in progress)
 
 ---
@@ -24,6 +24,7 @@
 15. [Known Issues & TODOs](#known-issues--todos)
 16. [Flow Verification & Implementation Gaps](#flow-verification--implementation-gaps)
 17. [ADRs](#adrs)
+18. [Semantic Commits & Edge Cases](#semantic-commits--edge-cases)
 
 ---
 
@@ -441,4 +442,135 @@ Only create new documentation files for:
 
 <a id="adrs"></a>
 ## ADRs
-- [ADR 0001: Gateway-Centric Identity & Authorization Enforcement](docs/adr/0001-gateway-identity-enforcement.md) – Accepted (2025-11-12)
+- [ADR 0001: Gateway-Centric Identity & Authorization Enforcement](docs/adr/0001-gateway-identity-enforcement.md)
+
+---
+
+<a id="semantic-commits--edge-cases"></a>
+## Semantic Commits & Edge Cases (NT-20)
+
+### Commit Strategy (Canonical Prefixes)
+`feat:` new feature; `fix:` bug fix; `refactor:` structural change; `chore:` maintenance/build; `docs:` documentation; `test:` tests only; `perf:` performance; `style:` formatting; `build:` build system; `ci:` pipeline; `revert:` rollback.
+
+Rules:
+- Use scope: `feat(gateway): enforce tenant conflict error (NT-01)`
+- Imperative mood; one concern per commit.
+- Reference task IDs (NT-XX) in subject or body.
+- Multi-module change: list touched services in body.
+
+### Critical Edge Case Summary (Full table in `next_task.md` NT-20)
+| ID | Scenario | Expected |
+|----|----------|----------|
+| EC-01 | Missing tenant claim | 403 TENANT_MISSING (gateway) |
+| EC-02 | Multiple tenant groups | 400 TENANT_CONFLICT |
+| EC-03 | Invalid tenant format | 400 TENANT_INVALID_FORMAT |
+| EC-07 | Missing X-Request-Id | Generated UUID reused in logs/response |
+| EC-09 | /auth/tokens null principal | 401 UNAUTHORIZED JSON |
+| EC-12 | Missing Cognito property | Startup abort (fail fast) |
+| EC-14 | Backend missing tenant header | 403 TENANT_MISSING |
+| EC-15 | Backend invalid tenant format | 400 TENANT_INVALID_FORMAT |
+| EC-28 | Token refresh includes refreshToken | Field present & distinct access/id |
+| EC-30 | Tenant length =3 | Accepted |
+| EC-31 | Tenant length =64 | Accepted |
+| EC-32 | Tenant length >64 | 400 TENANT_INVALID_FORMAT |
+| EC-33 | Invalid token /api/** | 401 UNAUTHORIZED JSON |
+| EC-34 | Forbidden action | 403 ACCESS_DENIED JSON |
+
+Deferred / flagged edge cases documented for future hardening: HMAC signature validation, internal token minting, direct backend bypass (EC-25), observability metrics (EC-26).
+
+Refer to `next_task.md` NT-20 for exhaustive list and coverage mapping.
+
+---
+
+## Naming Conventions
+- Controllers: `*Controller.java`
+- Services: `*.service.ts`
+- Tests: `*.spec.ts`, `*Test.java`
+- Config: `application-<env>.yml`
+
+---
+
+## Test Coverage Map
+- Auth Service: 80%+ unit/integration
+- Backend Service: 85%+ unit/integration
+- Gateway: 85%+ integration & unit (tenant extraction, header sanitization, request id, logging)
+- Frontend: 80%+ unit/e2e
+
+---
+
+## Auth/Security Approach
+- All external APIs secured with JWT
+- User/tenant context propagated via headers
+- SSM Parameter Store for secrets
+- No JPA entities exposed externally
+
+---
+
+## 📄 Documentation File Pattern
+
+**IMPORTANT:** Always update existing .md files rather than creating new ones for each change.
+
+### Standard Documentation Files
+
+1. **copilot-index.md** (This file)
+   - Single source of truth for project overview
+   - Architecture, technology stack, project structure
+   - High-level documentation
+   - Update after every significant architectural change
+
+2. **CURRENT_STATUS.md**
+   - Current implementation status
+   - What's working, what's next
+   - Service configuration details
+   - Recent fixes and troubleshooting
+   - Quick reference for developers
+   - Update after completing features or fixing issues
+
+3. **IMPLEMENTATION_TASKS.md**
+   - Detailed task tracking
+   - Implementation progress
+   - Technical decisions
+   - Update as tasks are completed
+
+4. **HLD.md** (High-Level Design)
+   - System architecture
+   - Design decisions
+   - Component interactions
+   - Update when architecture changes
+
+5. **README.md**
+   - Getting started guide
+   - Quick setup instructions
+   - Basic usage
+   - Keep concise and user-friendly
+
+### Documentation Rules
+
+- ✅ **DO:** Update existing files with new information
+- ✅ **DO:** Keep related information together in the same file
+- ✅ **DO:** Use clear section headers for easy navigation
+- ❌ **DON'T:** Create new .md files for each change
+- ❌ **DON'T:** Duplicate information across multiple files
+- ❌ **DON'T:** Create temporary or one-off documentation files
+
+### When to Create New Files
+
+Only create new documentation files for:
+- New major features that need dedicated documentation
+- API documentation (e.g., API_REFERENCE.md)
+- Deployment guides (e.g., DEPLOYMENT.md)
+- Contributing guidelines (e.g., CONTRIBUTING.md)
+
+---
+
+## Update Policy
+- This file is the single source of truth for project overview
+- Update after every significant architectural or flow change
+- Always prefer updating existing files over creating new ones
+- Remove all duplicates and consolidate information
+
+---
+
+<a id="adrs"></a>
+## ADRs
+- [ADR 0001: Gateway-Centric Identity & Authorization Enforcement](docs/adr/0001-gateway-identity-enforcement.md)

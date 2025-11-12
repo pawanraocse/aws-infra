@@ -18,8 +18,6 @@ import org.springframework.security.web.authentication.logout.SecurityContextLog
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
-import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminCreateUserRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminInitiateAuthRequest;
@@ -43,13 +41,7 @@ public class AuthServiceImpl implements AuthService {
     private final CognitoProperties cognitoProperties;
     private final HttpServletRequest request;
     private final HttpServletResponse response;
-
-    private CognitoIdentityProviderClient cognitoClient() {
-        return CognitoIdentityProviderClient.builder()
-                .region(Region.of(cognitoProperties.getRegion()))
-                .credentialsProvider(DefaultCredentialsProvider.create())
-                .build();
-    }
+    private final CognitoIdentityProviderClient cognitoClient; // NT-21 injected singleton bean
 
     @Override
     @Transactional(readOnly = true)
@@ -73,7 +65,8 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponseDto login(AuthRequestDto requestDto) {
-        try (CognitoIdentityProviderClient client = cognitoClient()) {
+        // changed: removed try-with-resources, use injected cognitoClient
+        try {
             AdminInitiateAuthRequest authRequest = AdminInitiateAuthRequest.builder()
                     .userPoolId(cognitoProperties.getUserPoolId())
                     .clientId(cognitoProperties.getClientId())
@@ -83,12 +76,12 @@ public class AuthServiceImpl implements AuthService {
                             "PASSWORD", requestDto.getPassword()
                     ))
                     .build();
-            AdminInitiateAuthResponse cognitoResponse = client.adminInitiateAuth(authRequest);
+            AdminInitiateAuthResponse cognitoResponse = cognitoClient.adminInitiateAuth(authRequest);
             var result = cognitoResponse.authenticationResult();
             log.info("operation=login status=success userId={} requestId={}", requestDto.getEmail(), request.getAttribute("X-Request-Id"));
             return new AuthResponseDto(
                     result.accessToken(),
-                    null, // idToken not available in admin password flow
+                    null,
                     result.refreshToken(),
                     result.tokenType(),
                     result.expiresIn() != null ? result.expiresIn().longValue() : null,
@@ -110,7 +103,8 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponseDto signup(SignupRequestDto requestDto) {
-        try (CognitoIdentityProviderClient client = cognitoClient()) {
+        // changed: removed try-with-resources, use injected cognitoClient
+        try {
             AdminCreateUserRequest createUserRequest = AdminCreateUserRequest.builder()
                     .userPoolId(cognitoProperties.getUserPoolId())
                     .username(requestDto.getEmail())
@@ -121,15 +115,14 @@ public class AuthServiceImpl implements AuthService {
                     .desiredDeliveryMediums(DeliveryMediumType.EMAIL)
                     .messageAction(MessageActionType.SUPPRESS)
                     .build();
-            client.adminCreateUser(createUserRequest);
-            client.adminSetUserPassword(b -> b
+            cognitoClient.adminCreateUser(createUserRequest);
+            cognitoClient.adminSetUserPassword(b -> b
                     .userPoolId(cognitoProperties.getUserPoolId())
                     .username(requestDto.getEmail())
                     .password(requestDto.getPassword())
                     .permanent(true)
             );
             log.info("operation=signup status=success userId={} requestId={}", requestDto.getEmail(), request.getAttribute("X-Request-Id"));
-            // Auto-login after signup
             return login(new AuthRequestDto(requestDto.getEmail(), requestDto.getPassword()));
         } catch (UsernameExistsException e) {
             log.warn("operation=signup status=failed code=USER_EXISTS userId={} requestId={} error={}", requestDto.getEmail(), request.getAttribute("X-Request-Id"), e.getMessage());

@@ -14,6 +14,7 @@ import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
+import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 
 import java.time.Instant;
 import java.util.List;
@@ -34,8 +35,10 @@ class AuthServiceImplGetCurrentUserTest {
         props.setDomain("domain");
         props.setRegion("us-east-1");
         props.setClientId("client");
+        CognitoIdentityProviderClient cognitoIdentityProviderClient =
+                Mockito.mock(CognitoIdentityProviderClient.class);
         // Note: Not calling props.validate() to avoid throwing during these tests; we only test getCurrentUser.
-        return new AuthServiceImpl(props, req, resp);
+        return new AuthServiceImpl(props, req, resp, cognitoIdentityProviderClient);
     }
 
     private DefaultOidcUser oidcUser(String sub, String email, String name) {

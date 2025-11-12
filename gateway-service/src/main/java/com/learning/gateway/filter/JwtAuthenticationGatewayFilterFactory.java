@@ -8,12 +8,27 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.core.io.buffer.DataBuffer;
+import reactor.core.publisher.Mono;
+import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Component
 public class JwtAuthenticationGatewayFilterFactory
         extends AbstractGatewayFilterFactory<JwtAuthenticationGatewayFilterFactory.Config> {
+
+    private static final String TENANT_GROUP_PREFIX = "tenant_";
+    private static final Pattern TENANT_ID_PATTERN = Pattern.compile("^[a-zA-Z0-9_-]{3,64}$");
+    private static final String REQUEST_ID_HEADER = "X-Request-Id";
 
     public JwtAuthenticationGatewayFilterFactory() {
         super(Config.class);
@@ -26,61 +41,100 @@ public class JwtAuthenticationGatewayFilterFactory
                 .cast(JwtAuthenticationToken.class)
                 .flatMap(authentication -> {
                     Jwt jwt = authentication.getToken();
-
-                    // Extract user information from JWT
-                    String tenantId = extractTenantId(jwt);
+                    TenantExtractionResult tenantResult = extractTenantId(jwt);
+                    if (!tenantResult.success()) {
+                        log.debug("NT-01 deny userId={} code={} status={}", jwt.getSubject(), tenantResult.errorCode(), tenantResult.errorStatus().value());
+                        return writeError(exchange, tenantResult.errorStatus(), tenantResult.errorCode(), tenantResult.errorMessage());
+                    }
+                    String tenantId = tenantResult.tenantId();
                     String userId = jwt.getSubject();
                     String username = jwt.getClaimAsString("username");
                     String email = jwt.getClaimAsString("email");
-
-                    // Extract authorities
                     String authorities = authentication.getAuthorities().stream()
                             .map(Object::toString)
                             .collect(Collectors.joining(","));
 
-                    // Add headers for downstream services
-                    var request = exchange.getRequest().mutate()
+                    var builder = exchange.getRequest().mutate()
                             .header("X-User-Id", userId)
                             .header("X-Username", username != null ? username : "")
                             .header("X-Email", email != null ? email : "")
-                            .header("X-Tenant-Id", tenantId)
-                            .header("X-Authorities", authorities)
-                            .build();
+                            .header("X-Tenant-Id", tenantId);
+                    if (!authorities.isBlank()) {
+                        builder.header("X-Authorities", authorities);
+                    }
 
-                    log.debug("Forwarding request to {} with user: {}, tenant: {}",
-                            exchange.getRequest().getPath(), userId, tenantId);
-
-                    return chain.filter(exchange.mutate().request(request).build());
+                    log.debug("NT-01 allow path={} userId={} tenantId={}", exchange.getRequest().getPath(), userId, tenantId);
+                    return chain.filter(exchange.mutate().request(builder.build()).build());
                 })
                 .switchIfEmpty(chain.filter(exchange));
     }
 
-    private String extractTenantId(Jwt jwt) {
-        // Extract from cognito:groups (format: tenant_<tenantId>)
-        var groups = jwt.getClaimAsStringList("cognito:groups");
-        if (groups != null) {
-            String tenant = groups.stream()
-                    .filter(g -> g.startsWith("tenant_"))
-                    .map(g -> g.substring(7))
-                    .findFirst()
-                    .orElse(null);
-
-            if (tenant != null) {
-                return tenant;
+    private TenantExtractionResult extractTenantId(Jwt jwt) {
+        List<String> groups = jwt.getClaimAsStringList("cognito:groups");
+        if (groups != null && !groups.isEmpty()) {
+            List<String> tenantGroups = groups.stream()
+                    .filter(g -> g != null && g.startsWith(TENANT_GROUP_PREFIX))
+                    .toList();
+            if (tenantGroups.size() > 1) {
+                return TenantExtractionResult.error(HttpStatus.BAD_REQUEST, "TENANT_CONFLICT", "Multiple tenant groups present");
+            }
+            if (tenantGroups.size() == 1) {
+                String raw = tenantGroups.get(0).substring(TENANT_GROUP_PREFIX.length());
+                if (!TENANT_ID_PATTERN.matcher(raw).matches()) {
+                    return TenantExtractionResult.error(HttpStatus.BAD_REQUEST, "TENANT_INVALID_FORMAT", "Tenant ID format invalid");
+                }
+                return TenantExtractionResult.success(raw);
             }
         }
-
-        // Or from custom claim
         String tenantClaim = jwt.getClaimAsString("custom:tenant_id");
-        if (tenantClaim != null) {
-            return tenantClaim;
+        if (tenantClaim == null) {
+            tenantClaim = jwt.getClaimAsString("custom:tenantId");
+        }
+        if (tenantClaim == null) {
+            tenantClaim = jwt.getClaimAsString("tenantId");
         }
 
-        log.warn("No tenant ID found in JWT for user: {}", jwt.getSubject());
-        return "default";
+        if (tenantClaim != null && !tenantClaim.isBlank()) {
+            if (!TENANT_ID_PATTERN.matcher(tenantClaim).matches()) {
+                return TenantExtractionResult.error(HttpStatus.BAD_REQUEST, "TENANT_INVALID_FORMAT", "Tenant ID format invalid");
+            }
+            return TenantExtractionResult.success(tenantClaim);
+        }
+        return TenantExtractionResult.error(HttpStatus.FORBIDDEN, "TENANT_MISSING", "Tenant claim missing");
+    }
+
+    private Mono<Void> writeError(org.springframework.web.server.ServerWebExchange exchange,
+                                  HttpStatus status, String code, String message) {
+        exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_ALREADY_ROUTED_ATTR, Boolean.TRUE);
+        var response = exchange.getResponse();
+        if (response.isCommitted()) {
+            return Mono.error(new IllegalStateException("Response already committed for code=" + code));
+        }
+        response.setStatusCode(status);
+        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        String requestId = Optional.ofNullable(exchange.getRequest().getHeaders().getFirst(REQUEST_ID_HEADER)).orElse("none");
+        String body = String.format("{\"timestamp\":\"%s\",\"status\":%d,\"code\":\"%s\",\"message\":\"%s\",\"requestId\":\"%s\"}",
+                Instant.now(), status.value(), code, message.replace("\"", "\\\""), requestId);
+        DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
+        return response.writeWith(Mono.just(buffer));
     }
 
     public static class Config {
-        // Configuration properties if needed in future
+    }
+
+    private record TenantExtractionResult(
+            boolean success,
+            String tenantId,
+            HttpStatus errorStatus,
+            String errorCode,
+            String errorMessage) {
+
+        static TenantExtractionResult success(String tenantId) {
+            return new TenantExtractionResult(true, tenantId, null, null, null);
+        }
+
+        static TenantExtractionResult error(HttpStatus status, String code, String message) {
+            return new TenantExtractionResult(false, null, status, code, message);
+        }
     }
 }

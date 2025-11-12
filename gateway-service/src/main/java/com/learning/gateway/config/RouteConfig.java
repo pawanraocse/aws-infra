@@ -1,48 +1,60 @@
 package com.learning.gateway.config;
 
+import com.learning.gateway.filter.JwtAuthenticationGatewayFilterFactory;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpStatus;
 
 @Slf4j
 @Configuration
+@RequiredArgsConstructor
+@Profile("!test")
 public class RouteConfig {
+
+    // === Route and filter constants ===
+    private static final String AUTH_SERVICE_ID = "auth-service";
+    private static final String BACKEND_SERVICE_ID = "backend-service";
+    private static final String FALLBACK_URI = "forward:/fallback";
+    private static final String AUTH_PATH = "/auth/**";
+    private static final String API_PATH = "/api/**";
+    private static final String CB_AUTH = "authServiceCircuitBreaker";
+    private static final String CB_BACKEND = "backendServiceCircuitBreaker";
+
+    private final JwtAuthenticationGatewayFilterFactory jwtFilterFactory;
 
     @Bean
     public RouteLocator customRouteLocator(RouteLocatorBuilder builder) {
         log.info("Configuring custom routes");
 
         return builder.routes()
-                // Auth Service routes
-                .route("auth-service", r -> r
-                        .path("/auth/**")
+                .route(AUTH_SERVICE_ID, r -> r
+                        .path(AUTH_PATH)
                         .filters(f -> f
-                                .preserveHostHeader()  // Preserve original Host header for OAuth2 redirects
-                                .circuitBreaker(config -> config
-                                        .setName("authServiceCircuitBreaker")
-                                        .setFallbackUri("forward:/fallback"))
-                                .retry(config -> config
+                                .preserveHostHeader()
+                                .circuitBreaker(c -> c
+                                        .setName(CB_AUTH)
+                                        .setFallbackUri(FALLBACK_URI))
+                                .retry(rCfg -> rCfg
                                         .setRetries(3)
-                                        .setStatuses(org.springframework.http.HttpStatus.BAD_GATEWAY,
-                                                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE)))
-                        .uri("lb://auth-service"))
+                                        .setStatuses(HttpStatus.BAD_GATEWAY, HttpStatus.SERVICE_UNAVAILABLE)))
+                        .uri("lb://" + AUTH_SERVICE_ID))
 
-                // Backend Service routes
-                .route("backend-service", r -> r
-                        .path("/api/**")
+                .route(BACKEND_SERVICE_ID, r -> r
+                        .path(API_PATH)
                         .filters(f -> f
-                                .filter(new com.learning.gateway.filter.JwtAuthenticationGatewayFilterFactory().apply(
-                                        new com.learning.gateway.filter.JwtAuthenticationGatewayFilterFactory.Config()))
-                                .circuitBreaker(config -> config
-                                        .setName("backendServiceCircuitBreaker")
-                                        .setFallbackUri("forward:/fallback"))
-                                .retry(config -> config
+                                .filter(jwtFilterFactory.apply(new JwtAuthenticationGatewayFilterFactory.Config()))
+                                .circuitBreaker(c -> c
+                                        .setName(CB_BACKEND)
+                                        .setFallbackUri(FALLBACK_URI))
+                                .retry(rCfg -> rCfg
                                         .setRetries(3)
-                                        .setStatuses(org.springframework.http.HttpStatus.BAD_GATEWAY,
-                                                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE)))
-                        .uri("lb://backend-service"))
+                                        .setStatuses(HttpStatus.BAD_GATEWAY, HttpStatus.SERVICE_UNAVAILABLE)))
+                        .uri("lb://" + BACKEND_SERVICE_ID))
 
                 .build();
     }

@@ -5,10 +5,12 @@ import com.learning.authservice.dto.AuthRequestDto;
 import com.learning.authservice.dto.AuthResponseDto;
 import com.learning.authservice.dto.SignupRequestDto;
 import com.learning.authservice.dto.UserInfoDto;
+import com.learning.authservice.exception.AuthLoginException;
+import com.learning.authservice.exception.AuthSignupException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -27,19 +29,20 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.AuthFlowTyp
 import software.amazon.awssdk.services.cognitoidentityprovider.model.CognitoIdentityProviderException;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.DeliveryMediumType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.MessageActionType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.NotAuthorizedException;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UserNotFoundException;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UsernameExistsException;
 
 import java.util.Map;
 
-@Slf4j
+@RequiredArgsConstructor
 @Service
+@Slf4j
 public class AuthServiceImpl implements AuthService {
 
-    @Autowired
-    private CognitoProperties cognitoProperties;
-    @Autowired
-    private HttpServletRequest request;
-    @Autowired
-    private HttpServletResponse response;
+    private final CognitoProperties cognitoProperties;
+    private final HttpServletRequest request;
+    private final HttpServletResponse response;
 
     private CognitoIdentityProviderClient cognitoClient() {
         return CognitoIdentityProviderClient.builder()
@@ -80,20 +83,27 @@ public class AuthServiceImpl implements AuthService {
                             "PASSWORD", requestDto.getPassword()
                     ))
                     .build();
-            AdminInitiateAuthResponse response = client.adminInitiateAuth(authRequest);
-            var result = response.authenticationResult();
-            log.info("operation=login, userId={}, requestId={}, status=success", requestDto.getEmail(), request.getAttribute("X-Request-Id"));
+            AdminInitiateAuthResponse cognitoResponse = client.adminInitiateAuth(authRequest);
+            var result = cognitoResponse.authenticationResult();
+            log.info("operation=login status=success userId={} requestId={}", requestDto.getEmail(), request.getAttribute("X-Request-Id"));
             return new AuthResponseDto(
                     result.accessToken(),
+                    null, // idToken not available in admin password flow
                     result.refreshToken(),
                     result.tokenType(),
                     result.expiresIn() != null ? result.expiresIn().longValue() : null,
                     requestDto.getEmail(),
                     requestDto.getEmail()
             );
+        } catch (NotAuthorizedException e) {
+            log.warn("operation=login status=failed code=INVALID_CREDENTIALS userId={} requestId={} error={}", requestDto.getEmail(), request.getAttribute("X-Request-Id"), e.getMessage());
+            throw new AuthLoginException("INVALID_CREDENTIALS", "Invalid username or password", e);
+        } catch (UserNotFoundException e) {
+            log.warn("operation=login status=failed code=USER_NOT_FOUND userId={} requestId={} error={}", requestDto.getEmail(), request.getAttribute("X-Request-Id"), e.getMessage());
+            throw new AuthLoginException("USER_NOT_FOUND", "User not found", e);
         } catch (CognitoIdentityProviderException e) {
-            log.warn("operation=login, userId={}, requestId={}, status=failed, error={}", requestDto.getEmail(), request.getAttribute("X-Request-Id"), e.awsErrorDetails().errorMessage());
-            throw new RuntimeException("Login failed: " + e.awsErrorDetails().errorMessage(), e);
+            log.warn("operation=login status=failed code=LOGIN_FAILED userId={} requestId={} error={} awsCode={}", requestDto.getEmail(), request.getAttribute("X-Request-Id"), e.getMessage(), e.awsErrorDetails().errorCode());
+            throw new AuthLoginException("LOGIN_FAILED", "Login failed: " + e.awsErrorDetails().errorMessage(), e);
         }
     }
 
@@ -112,22 +122,21 @@ public class AuthServiceImpl implements AuthService {
                     .messageAction(MessageActionType.SUPPRESS)
                     .build();
             client.adminCreateUser(createUserRequest);
-            // Set password (requires separate call)
             client.adminSetUserPassword(b -> b
                     .userPoolId(cognitoProperties.getUserPoolId())
                     .username(requestDto.getEmail())
                     .password(requestDto.getPassword())
                     .permanent(true)
             );
-            log.info("operation=signup, userId={}, requestId={}, status=success", requestDto.getEmail(), request.getAttribute("X-Request-Id"));
-            // Optionally, auto-login after signup
-            AuthRequestDto loginRequest = new AuthRequestDto();
-            loginRequest.setEmail(requestDto.getEmail());
-            loginRequest.setPassword(requestDto.getPassword());
-            return login(loginRequest);
+            log.info("operation=signup status=success userId={} requestId={}", requestDto.getEmail(), request.getAttribute("X-Request-Id"));
+            // Auto-login after signup
+            return login(new AuthRequestDto(requestDto.getEmail(), requestDto.getPassword()));
+        } catch (UsernameExistsException e) {
+            log.warn("operation=signup status=failed code=USER_EXISTS userId={} requestId={} error={}", requestDto.getEmail(), request.getAttribute("X-Request-Id"), e.getMessage());
+            throw new AuthSignupException("USER_EXISTS", "User already exists", e);
         } catch (CognitoIdentityProviderException e) {
-            log.warn("operation=signup, userId={}, requestId={}, status=failed, error={}", requestDto.getEmail(), request.getAttribute("X-Request-Id"), e.awsErrorDetails().errorMessage());
-            throw new RuntimeException("Signup failed: " + e.awsErrorDetails().errorMessage(), e);
+            log.warn("operation=signup status=failed code=SIGNUP_FAILED userId={} requestId={} error={} awsCode={}", requestDto.getEmail(), request.getAttribute("X-Request-Id"), e.getMessage(), e.awsErrorDetails().errorCode());
+            throw new AuthSignupException("SIGNUP_FAILED", "Signup failed: " + e.awsErrorDetails().errorMessage(), e);
         }
     }
 

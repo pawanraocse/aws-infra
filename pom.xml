@@ -35,6 +35,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <springboot.version>3.5.6</springboot.version>
         <aws.sdk.version>2.36.3</aws.sdk.version>
+        <logstash-logback.version>7.4</logstash-logback.version>
         <aws.springcloud.parameter.store.version>3.4.0</aws.springcloud.parameter.store.version>
     </properties>
 

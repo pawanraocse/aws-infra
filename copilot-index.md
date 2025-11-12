@@ -1,12 +1,12 @@
 # AWS-Infra Project - Unified Index & Source of Truth
 
-**Last Updated:** 2025-11-02
-**Version:** 2.4.0
-**Status:** ✅ Production-Ready Multi-Tenant Microservices Architecture with Angular Frontend
+**Last Updated:** 2025-11-12
+**Version:** 2.4.1
+**Status:** ✅ Production-Ready Multi-Tenant Microservices Architecture with Angular Frontend (hardening in progress)
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 1. [Project Overview](#project-overview)
 2. [Architecture](#architecture)
 3. [Technology Stack](#technology-stack)
@@ -22,10 +22,13 @@
 13. [Monitoring & Observability](#monitoring--observability)
 14. [Development Workflow](#development-workflow)
 15. [Known Issues & TODOs](#known-issues--todos)
+16. [Flow Verification & Implementation Gaps](#flow-verification--implementation-gaps)
+17. [ADRs](#adrs)
 
 ---
 
-## 🎯 Project Overview
+<a id="project-overview"></a>
+## Project Overview
 
 ### Purpose
 Production-ready AWS-based Spring Boot microservices platform with Angular frontend, implementing:
@@ -53,7 +56,8 @@ Enterprise SaaS platform supporting multiple tenants with complete data isolatio
 
 ---
 
-## 🏗️ Architecture
+<a id="architecture"></a>
+## Architecture
 
 ### High-Level Architecture Diagram
 ```
@@ -105,7 +109,8 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 ---
 
-## 💻 Technology Stack
+<a id="technology-stack"></a>
+## Technology Stack
 
 ### Backend
 | Component         | Technology         | Version   | Purpose                                 |
@@ -150,7 +155,8 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 ---
 
-## 📂 Project Structure
+<a id="project-structure"></a>
+## Project Structure
 
 - **/auth-service/**: Handles authentication, JWT, and user info
 - **/backend-service/**: Business logic, multi-tenant data, CRUD APIs
@@ -162,7 +168,8 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 ---
 
-## 🧩 Microservices
+<a id="microservices"></a>
+## Microservices
 
 ### Eureka Server (Port 8761)
 - Service discovery and registration
@@ -199,7 +206,15 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 ---
 
-## 🛡️ Authentication & Security
+<a id="infrastructure-terraform"></a>
+## Infrastructure (Terraform)
+
+<!-- TODO: Summarize Terraform modules (VPC, RDS, Cognito, ECS/EKS planned) and state management practices. -->
+
+---
+
+<a id="authentication--security"></a>
+## Authentication & Security
 - OAuth2/OIDC with AWS Cognito
 - JWT-based authentication
 - Tenant context propagation via headers
@@ -208,7 +223,8 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 ---
 
-## 🗄️ Database & Multi-Tenancy
+<a id="database--multi-tenancy"></a>
+## Database & Multi-Tenancy
 - PostgreSQL 16-alpine
 - Schema-per-tenant isolation
 - Flyway for migrations
@@ -216,14 +232,16 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 ---
 
-## ⚙️ Configuration Management
+<a id="configuration-management"></a>
+## Configuration Management
 - All secrets and config in AWS SSM Parameter Store
 - Environment-specific YAML files
 - Terraform manages SSM parameters
 
 ---
 
-## 🚀 Build & Deployment
+<a id="build--deployment"></a>
+## Build & Deployment
 - Maven multi-module build
 - Docker Compose for local dev
 - Terraform for AWS infra
@@ -231,27 +249,31 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 ---
 
-## 📑 API Documentation
+<a id="api-documentation"></a>
+## API Documentation
 - SpringDoc OpenAPI 2.8.13
 - Swagger UI at `/swagger-ui.html` for each service
 
 ---
 
-## 🧪 Testing Strategy
+<a id="testing-strategy"></a>
+## Testing Strategy
 - JUnit 5, Mockito, AssertJ for unit tests
 - Testcontainers for integration tests
 - Cypress/Playwright for frontend e2e
 
 ---
 
-## 📈 Monitoring & Observability
+<a id="monitoring--observability"></a>
+## Monitoring & Observability
 - Prometheus, Grafana (planned)
 - Distributed tracing (planned)
 - Centralized logging (planned)
 
 ---
 
-## 🛠️ Development Workflow
+<a id="development-workflow"></a>
+## Development Workflow
 - Feature branches, semantic commits
 - PR review checklist:
   - End-to-end flow complete
@@ -262,7 +284,8 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 ---
 
-## 📝 Known Issues & TODOs
+<a id="known-issues--todos"></a>
+## Known Issues & TODOs
 - [x] Frontend authentication flow with Angular
 - [x] OAuth2 callback URL configuration with servlet context path
 - [x] Health check configuration for Docker services
@@ -273,6 +296,59 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 - [ ] Tenant onboarding automation
 
 ---
+
+<a id="flow-verification--implementation-gaps"></a>
+## Flow Verification & Implementation Gaps
+(Review Date: 2025-11-12)
+
+### Summary
+End-to-end auth + routing flow functions under Docker Compose, but several divergences exist between documented intent and current implementation state. This section tracks gaps to close before declaring the hardening phase complete.
+
+### Validated Runtime Flow
+```
+Frontend (Angular) → Gateway (JWT validation + header enrichment) → Backend-Service (tenant filter) → PostgreSQL
+Frontend → Cognito Hosted UI → Auth-Service (session) → /auth/tokens → JWT → Stored → Subsequent API calls
+```
+All core components start and pass their health checks (`docker-compose.yml`). JWT enrichment headers (`X-User-Id`, `X-Tenant-Id`, `X-Email`, `X-Authorities`) are injected by gateway for `/api/**` routes.
+
+### Discrepancies / Gaps
+| Area | Expected (Docs) | Actual (Code / Compose) | Gap / Risk | Action |
+|------|-----------------|--------------------------|------------|--------|
+| Backend Endpoint Protection | `authenticated()` for business APIs | `permitAll()` (SecurityConfig) | APIs callable without auth if gateway is bypassed | Switch to `.anyRequest().authenticated()` after internal token rollout or add temporary resource-server config (defense-in-depth) |
+| Multi-Tenancy Enforcement | Fail-closed at gateway + backend validation | Backend allows all requests; tenant validation only header-based | Missing auth layer could allow anonymous calls with forged headers | Add internal signed token / HMAC phase, restrict direct header trust |
+| Swagger/OpenAPI Exposure | Documented; secured in production | Accessible anonymously | Information disclosure | Require auth in non-dev profiles; restrict via feature flag |
+| Error Schema Consistency | Unified JSON across all services | Minor variance: backend includes `path`, gateway omits it | Inconsistent observability parsing | Standardize error DTO (shared module) + propagate `path` uniformly |
+| CORS Origins | Multi-origin support documented | Single origin via `cors.allowed-origins` property | Harder multi-environment dev | Externalize list to env/SSM; update compose with variable |
+| Request Correlation | RequestId everywhere | Backend may generate new ID if missing | Possible trace discontinuity | Ensure gateway always sets `X-Request-Id`; add filter test |
+| Security Hardening Flags | Listed in SYSTEM_DESIGN.md | Some missing in properties (`security.gateway.*`) | Drift between config & docs | Introduce consolidated `application.yml` section + defaults |
+| Internal Token Strategy | Planned in docs | Not yet started | Future dependency for header trust reduction | Begin ADR 0002 + platform-service bootstrap |
+| Metrics & Observability | Planned metrics enumerated | No custom metrics yet | Reduced insight for tuning | Add Micrometer counters for tenant deny/allow flows |
+| Frontend Containerization | Compose orchestrates backend only | Frontend not included | Manual startup / drift | Add Angular service block (dev-only) with proper network |
+| SSM / Secret Retrieval | Compose sets env vars directly | AWS keys passed via environment | Risk of local leak / misuse | Replace with scripts fetching ephemeral session tokens (STS) |
+| Database Migration Separation | Per-service Flyway tables documented | Auth service sets distinct table; backend not shown | Need confirm backend uses separate history | Verify backend config & document both tables |
+
+### Confirmed Correct Items
+- Gateway tenant extraction fail-closed (no default).
+- Header sanitization global filters present.
+- Structured JSON logging patterns implemented in gateway/auth-service.
+- Circuit breaker + retry configured for both upstream routes.
+
+### Recommended Immediate Fixes (Priority Order)
+1. Enforce backend authentication (defense-in-depth) – even with gateway in front.
+2. Introduce shared `platform-shared` module for `ErrorResponse`, header constants, regex reuse.
+3. Add Micrometer metrics: `gateway.requests.total`, `gateway.tenant.missing.total`, `backend.tenant.invalid.total`.
+4. Extend docker-compose with optional `redis` (future permission cache) and `zipkin` (tracing) placeholders.
+5. Normalize error schema (add `path` to gateway responses; remove variance) before integrating centralized log parsing.
+6. Add Angular container block for parity in local orchestration.
+7. Document current backend security posture explicitly (temporary) until internal token implementation.
+
+### Validation Artifacts To Add
+- Integration test: missing `X-Tenant-Id` returns 403 from backend.
+- Integration test: multiple tenant groups returns 400 `TENANT_CONFLICT` from gateway.
+- Unit test: error response serialization matches canonical schema.
+
+### Tracking
+Each item above should gain a task ID in `next_task.md` or consolidated task file; mark completion and update this section. Remove resolved rows rather than adding duplicates.
 
 ## Naming Conventions
 - Controllers: `*Controller.java`
@@ -285,7 +361,7 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 ## Test Coverage Map
 - Auth Service: 80%+ unit/integration
 - Backend Service: 85%+ unit/integration
-- Gateway: 70%+ integration
+- Gateway: 85%+ integration & unit (tenant extraction, header sanitization, request id, logging)
 - Frontend: 80%+ unit/e2e
 
 ---
@@ -361,3 +437,8 @@ Only create new documentation files for:
 - Always prefer updating existing files over creating new ones
 - Remove all duplicates and consolidate information
 
+---
+
+<a id="adrs"></a>
+## ADRs
+- [ADR 0001: Gateway-Centric Identity & Authorization Enforcement](docs/adr/0001-gateway-identity-enforcement.md) – Accepted (2025-11-12)

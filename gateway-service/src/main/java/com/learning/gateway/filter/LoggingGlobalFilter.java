@@ -1,41 +1,15 @@
 package com.learning.gateway.filter;
 
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.cloud.gateway.filter.GatewayFilterChain;
-import org.springframework.cloud.gateway.filter.GlobalFilter;
-import org.springframework.core.Ordered;
-import org.springframework.http.server.reactive.ServerHttpRequest;
-import org.springframework.stereotype.Component;
-import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Mono;
+// NT-03: Deprecated. Replaced by EnhancedLoggingGlobalFilter. Keeping class stub for history.
+// Removed @Component annotation to disable registration.
+// Previous implementation removed to avoid duplicate logs.
 
-@Slf4j
-@Component
-public class LoggingGlobalFilter implements GlobalFilter, Ordered {
-
+public class LoggingGlobalFilter implements org.springframework.cloud.gateway.filter.GlobalFilter, org.springframework.core.Ordered {
     @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        ServerHttpRequest request = exchange.getRequest();
-
-        log.info("Request: {} {} from {}",
-                request.getMethod(),
-                request.getPath(),
-                request.getRemoteAddress());
-
-        long startTime = System.currentTimeMillis();
-
-        return chain.filter(exchange).then(Mono.fromRunnable(() -> {
-            long duration = System.currentTimeMillis() - startTime;
-            log.info("Response: {} {} completed in {}ms with status {}",
-                    request.getMethod(),
-                    request.getPath(),
-                    duration,
-                    exchange.getResponse().getStatusCode());
-        }));
+    public reactor.core.publisher.Mono<Void> filter(org.springframework.web.server.ServerWebExchange exchange, org.springframework.cloud.gateway.filter.GatewayFilterChain chain) {
+        // No-op
+        return chain.filter(exchange);
     }
-
     @Override
-    public int getOrder() {
-        return Ordered.LOWEST_PRECEDENCE;
-    }
+    public int getOrder() { return org.springframework.core.Ordered.LOWEST_PRECEDENCE; }
 }

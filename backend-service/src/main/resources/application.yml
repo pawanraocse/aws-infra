@@ -6,7 +6,7 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/awsinfra}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:postgres}
-    driver-class-name: org.postgresql.Driver
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.postgresql.Driver}
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -33,6 +33,7 @@ spring:
     baseline-on-migrate: true
     locations: classpath:db/migration
     schemas: public
+    table: flyway_schema_history_backend  # distinct from auth-service
     validate-on-migrate: true
 
 server:
@@ -123,3 +124,7 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n"
     level: '%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]'
+
+security:
+  backend:
+    allow-missing-tenant: false

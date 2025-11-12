@@ -9,10 +9,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class AuthResponseDto {
     private String accessToken;
+    private String idToken; // NT-07 added: distinct ID token
     private String refreshToken;
     private String tokenType;
     private Long expiresIn;
     private String userId;
     private String email;
 }
-

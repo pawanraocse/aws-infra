@@ -17,6 +17,11 @@
     <description>Multi-tenant backend microservice</description>
 
     <dependencies>
+        <dependency>
+            <groupId>com.learning</groupId>
+            <artifactId>common-module</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
         <!-- Eureka Client -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>

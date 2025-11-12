@@ -1,5 +1,6 @@
 package com.learning.authservice.exception;
 
+import com.learning.common.error.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -7,13 +8,8 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import jakarta.servlet.http.HttpServletRequest;
 
-import java.time.Instant;
 import java.util.UUID;
 
-/**
- * NT-08 Global exception handling for auth-service.
- * Maps generic RuntimeException to 500 until domain-specific exceptions (NT-09) are introduced.
- */
 @Slf4j
 @ControllerAdvice
 public class GlobalExceptionHandler {
@@ -48,15 +44,8 @@ public class GlobalExceptionHandler {
     private ResponseEntity<ErrorResponse> buildAndLog(HttpStatus status, String code, String message, HttpServletRequest request, Exception ex) {
         String requestId = headerOrGenerate(request, REQUEST_ID_HEADER);
         String path = request.getRequestURI();
-        ErrorResponse body = new ErrorResponse(
-                status.value(),
-                code,
-                sanitize(message),
-                requestId,
-                path,
-                Instant.now()
-        );
-        log.warn("error code={} status={} path={} requestId={} message={} exception={}", code, status.value(), path, requestId, body.message(), ex.getClass().getSimpleName());
+        ErrorResponse body = ErrorResponse.of(status.value(), code, sanitize(message), requestId, path);
+        log.warn("error code={} status={} path={} requestId={} message={} exception={}", code, status.value(), path, requestId, message, ex.getClass().getSimpleName());
         return ResponseEntity.status(status).body(body);
     }
 

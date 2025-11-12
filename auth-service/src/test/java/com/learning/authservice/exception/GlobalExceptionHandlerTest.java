@@ -1,5 +1,6 @@
 package com.learning.authservice.exception;
 
+import com.learning.common.error.ErrorResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;

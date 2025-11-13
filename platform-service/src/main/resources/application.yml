@@ -1,7 +1,6 @@
 spring:
   application:
-    name: backend-service
-  
+    name: platform-service
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/awsinfra}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
@@ -13,10 +12,9 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
-  
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     show-sql: false
     properties:
       hibernate:
@@ -27,19 +25,40 @@ spring:
           batch_size: 20
         order_inserts: true
         order_updates: true
-
   flyway:
     enabled: true
     baseline-on-migrate: true
     locations: classpath:db/migration
     schemas: public
-    table: flyway_schema_history_backend  # distinct from auth-service
+    table: flyway_platform_service
     validate-on-migrate: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OAUTH2_ISSUER_URI:https://cognito-idp.us-east-1.amazonaws.com/us-east-1_8asmhblbI}
+      # Uncomment if platform-service later needs OAuth2 client (interactive admin UI flows)
+      # client:
+      #   registration:
+      #     cognito:
+      #       client-id: ${COGNITO_CLIENT_ID:}
+      #       client-secret: ${COGNITO_CLIENT_SECRET:}
+      #       scope:
+      #         - openid
+      #         - email
+      #         - profile
+      #       redirect-uri: ${COGNITO_REDIRECT_URI:http://localhost:8083/login/oauth2/code/cognito}
+      #       authorization-grant-type: authorization_code
+      #       client-name: Cognito
+      #   provider:
+      #     cognito:
+      #       issuer-uri: ${COGNITO_ISSUER_URI:}
+      #       user-name-attribute: username
 
 server:
-  port: ${SERVER_PORT:8082}
+  port: ${SERVER_PORT:8083}
   servlet:
-    context-path: /
+    context-path: /platform
   tomcat:
     threads:
       max: 200
@@ -47,25 +66,6 @@ server:
     max-connections: 10000
     accept-count: 100
 
-# Eureka Client
-eureka:
-  client:
-    service-url:
-      defaultZone: ${EUREKA_URI:http://localhost:8761/eureka}
-    register-with-eureka: true
-    fetch-registry: true
-    registry-fetch-interval-seconds: 30
-
-  instance:
-    prefer-ip-address: ${EUREKA_INSTANCE_PREFER_IP_ADDRESS:false}
-    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
-    lease-renewal-interval-in-seconds: 30
-    lease-expiration-duration-in-seconds: 90
-    metadata-map:
-      version: 1.0.0
-      context-path: /
-
-# Management and Monitoring
 management:
   endpoints:
     web:
@@ -94,7 +94,6 @@ management:
     readinessstate:
       enabled: true
 
-  # Distributed Tracing
   tracing:
     sampling:
       probability: ${TRACING_PROBABILITY:1.0}
@@ -103,7 +102,24 @@ management:
     tracing:
       endpoint: ${ZIPKIN_URL:http://localhost:9411}/api/v2/spans
 
-# OpenAPI Documentation
+
+# Eureka Client
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URI:http://localhost:8761/eureka}
+    register-with-eureka: true
+    fetch-registry: true
+    registry-fetch-interval-seconds: 30
+  instance:
+    prefer-ip-address: ${EUREKA_INSTANCE_PREFER_IP_ADDRESS:false}
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
+    lease-renewal-interval-in-seconds: 30
+    lease-expiration-duration-in-seconds: 90
+    metadata-map:
+      version: 1.0.0
+      context-path: /platform
+
 springdoc:
   api-docs:
     path: /v3/api-docs
@@ -113,20 +129,21 @@ springdoc:
     operations-sorter: method
     tags-sorter: alpha
 
-# Logging
+platform:
+  db-per-tenant:
+    enabled: false
+
 logging:
   level:
     root: INFO
-    com.learning.backendservice: DEBUG
+    com.learning.platformservice: DEBUG
     org.springframework.security: INFO
     org.springframework.cloud: INFO
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
 
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n"
-    level: '%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]'
-
-security:
-  backend:
-    allow-missing-tenant: false
+# Cognito (used for admin user creation via AWS SDK, not interactive login)
+cognito:
+  user-pool-id: ${COGNITO_USER_POOL_ID:}
+  client-id: ${COGNITO_CLIENT_ID:}
+  domain: ${COGNITO_DOMAIN:}
+  region: ${AWS_REGION:us-east-1}
+  # logout-redirect-url intentionally omitted for platform-service

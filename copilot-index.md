@@ -163,6 +163,8 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 - **/backend-service/**: Business logic, multi-tenant data, CRUD APIs
 - **/gateway-service/**: API Gateway, JWT validation, routing
 - **/eureka-server/**: Service registry
+- 
+- **/platform-service/**: Centralized tenant lifecycle & provisioning, policy management, internal token issuance
 - **/frontend/**: Angular SPA
 - **/terraform/**: Infrastructure as Code
 - **/scripts/**: Utility scripts
@@ -204,6 +206,16 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 - Multi-tenant business logic
 - Schema-per-tenant data isolation
 - CRUD APIs
+
+### Platform Service (Port 8083)
+- Central authority for tenant lifecycle and provisioning (schema/database per tenant)
+- Admin account creation in Cognito for new tenants
+- Policy storage and decision API (planned)
+- Internal token issuance (planned) with JWK endpoint
+- Endpoints:
+  - `POST /api/tenants` – Provision tenant + admin user
+  - `GET /api/tenants/{id}` – Tenant metadata
+  - `GET /actuator/health` – Health check
 
 ---
 

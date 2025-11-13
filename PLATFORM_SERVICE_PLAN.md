@@ -22,6 +22,7 @@ Introduce a dedicated `platform-service` microservice to centralize multi-tenant
 |----------|----------------|
 | Tenant Lifecycle | Create, activate, suspend, archive, delete tenants |
 | Provisioning | Schema creation OR database allocation + Flyway migrations |
+| Admin Account Creation | Create initial admin user in Cognito for each new tenant; assign to tenant group; seed ADMIN role and permissions |
 | Metadata Registry | Store tenant state, storage mode, DB credentials refs, limits, SLA tier |
 | Policy Management | CRUD roles, permissions, resource-action mappings, feature flags per tenant |
 | Token Issuance (Internal) | Mint short-lived signed service tokens (JWT or opaque) for gateway→service trust |
@@ -45,7 +46,7 @@ Out-of-Scope (initial phase): Real-time billing, per-tenant report generation, c
 ## 5. APIs (Draft)
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | /api/tenants | Provision new tenant (schema or DB) |
+| POST | /api/tenants | Provision new tenant (schema or DB); create initial admin user in Cognito; assign to tenant group; seed ADMIN role |
 | GET | /api/tenants/{id} | Retrieve tenant metadata |
 | PATCH | /api/tenants/{id}/suspend | Suspend tenant (write lock) |
 | PATCH | /api/tenants/{id}/activate | Reactivate tenant |
@@ -90,6 +91,7 @@ Out-of-Scope (initial phase): Real-time billing, per-tenant report generation, c
 | Step | Action |
 |------|--------|
 | 1 | Create platform-service module (Spring Boot) + registry tables |
+| 1a | Implement admin account creation logic: call Cognito AdminCreateUser, assign to tenant group, seed ADMIN role/permissions |
 | 2 | Move tenant provisioning endpoints from backend-service → platform-service |
 | 3 | Introduce platform-shared module (ErrorResponse, header constants, policy DTOs) |
 | 4 | Gateway: add policy decision call before routing protected endpoints (feature-flag) |
@@ -161,7 +163,7 @@ Out-of-Scope (initial phase): Real-time billing, per-tenant report generation, c
 | Phase | Scope | Success Metric |
 |-------|-------|----------------|
 | P1 | Platform-service skeleton + tenant read APIs | Service healthy; registry mirrored |
-| P2 | Move provisioning + schema creation | 100% new tenants via platform-service |
+| P2 | Move provisioning + schema creation + admin account creation | 100% new tenants via platform-service; each tenant has initial admin user |
 | P3 | Policy storage + decision API | Gateway calling decision API for protected routes |
 | P4 | Internal token issuance & gateway integration | Reduced header surface; tokens validated |
 | P5 | DB-per-tenant provisioning | Selected tenants migrated successfully |
@@ -189,10 +191,137 @@ Rollback: Disable new features via flags; retain legacy provisioning path until 
 ## 18. Acceptance Criteria
 - Platform-service deployed with health & tenant read endpoint.
 - Backend provisioning removed after P2 (flag controlled).
+- Every new tenant is provisioned with an initial admin account in Cognito, assigned to the correct group, and seeded with ADMIN role/permissions.
 - Gateway can optionally call policy decision endpoint (flag). 
 - Internal token prototype documented & ADR approved before implementation.
 - Monitoring dashboards include platform-service tenant & migration metrics.
 
 ---
-**End of PLATFORM_SERVICE_PLAN.md**
 
+## 19. Implementation & Progress Monitoring Plan
+
+This section details the step-by-step implementation of the platform-service, ensuring production-grade quality, traceability, and alignment with modern practices. Progress should be tracked and updated after each milestone.
+
+### Steps
+
+1. **Service Bootstrap & Project Setup**
+   - Create `platform-service/` module (Spring Boot 3.x, Java 21+).
+   - Add to root `pom.xml` as a new Maven module.
+   - Add Dockerfile for platform-service; update `docker-compose.yml` to include platform-service with healthcheck, environment variables, and network.
+   - Add Flyway dependency and configuration for DB migrations.
+   - Update copilot-index.md with new service entry and flow.
+
+2. **Core Data Model & Migrations**
+   - Implement entities: Tenant, TenantMigrationHistory, PolicyDocument, InternalTokenSignatureKey, TenantQuota.
+   - Write Flyway migration scripts for all tables.
+   - Seed baseline roles/permissions for new tenants.
+
+3. **API Layer & DTOs**
+   - Define DTOs for tenant provisioning, admin account creation, policy management, internal token issuance.
+   - Implement REST controllers for all endpoints in PLATFORM_SERVICE_PLAN.md (tenant lifecycle, policy CRUD, decision, internal tokens, health).
+   - Ensure OpenAPI documentation is generated and secured.
+
+4. **Tenant Provisioning Logic**
+   - Implement service logic for DB/schema creation per tenant.
+   - Integrate with AWS Cognito: create initial admin user, assign to tenant group, seed ADMIN role.
+   - Store DB credentials in AWS SSM Parameter Store.
+   - Emit audit events for all provisioning actions.
+
+5. **Policy & Authorization Engine**
+   - Implement policy document CRUD and evaluation logic (JSON DSL).
+   - Expose policy decision API for gateway-service integration.
+   - Cache decisions (Caffeine/Redis); emit events for changes.
+
+6. **Internal Token Issuance**
+   - Implement JWT minting for internal tokens, JWK endpoint for validation.
+   - Integrate with gateway-service for token issuance and validation.
+   - Add key rotation logic and feature flags.
+
+7. **Observability, Security, and Validation**
+   - Add structured logging (SLF4J + Logback), metrics (Micrometer), tracing (OpenTelemetry).
+   - Implement health endpoints and readiness/liveness probes.
+   - Enforce input validation, error handling, and audit trails.
+   - Secure all endpoints with JWT; validate tenant context.
+
+8. **Testing & Documentation**
+   - Write unit and integration tests (JUnit 5, Mockito, Testcontainers).
+   - Document all APIs, flows, and edge cases in copilot-index.md and ADRs.
+   - Update test coverage map and semantic commit history.
+
+9. **Infrastructure & Integration**
+   - Update `docker-compose.yml`:
+     - Add platform-service block with build context, ports, healthcheck, environment, and network.
+     - Ensure dependencies (PostgreSQL, SSM, Cognito) are available.
+   - Update root `pom.xml`:
+     - Add platform-service as a module.
+     - Add required dependencies (Spring Boot, Flyway, AWS SDK, JWT, OpenAPI, Micrometer).
+   - Ensure platform-service is included in CI/CD pipeline.
+
+10. **Progress Monitoring & Milestones**
+    - Track each step as a milestone in copilot-index.md and/or a dedicated progress file.
+    - Mark completion of: project setup, DB migrations, API endpoints, Cognito integration, policy engine, internal token, observability, tests, infra changes.
+    - Use semantic commits for traceability (e.g., `feat(platform): add tenant provisioning API (PS-01)`).
+    - Update documentation and test coverage after each milestone.
+
+### Further Considerations
+
+1. Should admin onboarding use email/SMS or manual activation? (recommend email with temp password)
+2. How will policy evaluation scale for large tenants? (recommend Redis/Caffeine hybrid cache)
+3. Should DB-per-tenant be default, or feature-flagged for premium tenants?
+4. Ensure rollback strategy for each major change (feature flags, legacy path retention).
+5. Document all integration points and update copilot-index.md after each significant change.
+
+## 19.1 Progress Tracker (Milestones)
+
+| ID | Milestone | Status | Notes |
+|----|-----------|--------|-------|
+| PS-01 | Module scaffold (pom, application.yml, Dockerfile) | DONE | Compiles; added to docker-compose |
+| PS-02 | Flyway V1 migrations (registry tables) | DONE | pgcrypto enabled; separate Flyway table |
+| PS-03 | Basic REST API (POST /api/tenants, GET /api/tenants/{id}) | DONE | DTOs/controllers/services wired |
+| PS-04 | Eureka registration & health endpoint | DONE | Actuator health exposed; compose healthcheck |
+| PS-05 | OpenAPI config & Swagger UI | DONE | springdoc configured |
+| PS-06 | Security (OAuth2 resource server) | DONE | `/api/**` protected; `/actuator/**` public |
+| PS-07 | Docker Compose integration | DONE | `platform-service` block added |
+| PS-08 | Root pom module update | DONE | `platform-service` added to `<modules>` |
+| PS-09 | README & run instructions | DONE | Local run & health commands documented |
+| PS-10 | DB/schema provisioning logic | PENDING | Implement per-tenant schema/db creation |
+| PS-11 | Admin account creation (Cognito) | PENDING | Integrate AdminCreateUser + group assignment |
+| PS-12 | Policy storage & decision API | PENDING | CRUD + resolve endpoint |
+| PS-13 | Internal token issuance & JWK | PENDING | JWT minting + JWK hosting |
+| PS-14 | Metrics & observability | PENDING | Micrometer counters, tracing |
+| PS-15 | Tests (unit/integration) | PENDING | Testcontainers + API tests |
+
+## 19.2 Local Build & Run Checklist
+
+- Build module only:
+```bash
+./mvnw -f platform-service/pom.xml clean package -DskipTests
+```
+- Run service:
+```bash
+java -jar platform-service/target/platform-service-0.0.1-SNAPSHOT.jar
+```
+- Health check:
+```bash
+curl http://localhost:8083/actuator/health
+```
+- Swagger UI:
+```bash
+open http://localhost:8083/swagger-ui/index.html
+```
+
+## 19.3 Docker Compose & Root pom Updates
+- `docker-compose.yml`: Added `platform-service` with healthcheck and dependencies on `eureka-server` and `postgres`.
+- `pom.xml` (root): Added `<module>platform-service</module>` under `<modules>`.
+- `platform-service/pom.xml`: Added dependencies for web, JPA, security, OAuth2, Flyway, PostgreSQL, Eureka client, OpenAPI, logging, tests.
+
+## 19.4 Next Implementation Batch (Target)
+- PS-10: Implement `TenantProvisioner` to create schema or DB per tenant; update registry with JDBC URL.
+- PS-11: Implement `CognitoAdminService` to create initial admin user and assign to tenant group; add audit logs.
+- PS-12: Implement `PolicyController` and `PolicyService` for policy CRUD and `/api/policies/resolve`.
+- PS-13: Implement `InternalTokenService` issuing short-lived JWTs; expose `/api/jwks/internal`.
+- PS-14: Add metrics (`platform.tenants.count`, `platform.provision.duration`) and tracing; structured logs (`platform_event`).
+- PS-15: Add Testcontainers integration tests for tenant provisioning and API endpoints.
+
+---
+**End of PLATFORM_SERVICE_PLAN.md**

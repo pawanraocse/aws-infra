@@ -104,14 +104,13 @@ management:
       endpoint: ${ZIPKIN_URL:http://localhost:9411}/api/v2/spans
 
 # OpenAPI Documentation
+
 springdoc:
   api-docs:
-    path: /v3/api-docs
-  swagger-ui:
-    path: /swagger-ui.html
     enabled: true
-    operations-sorter: method
-    tags-sorter: alpha
+  swagger-ui:
+    enabled: true
+    disable-swagger-default-url: true
 
 # Logging
 logging:
@@ -126,7 +125,3 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n"
     level: '%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]'
-
-security:
-  backend:
-    allow-missing-tenant: false

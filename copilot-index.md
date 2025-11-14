@@ -209,7 +209,8 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 ### Platform Service (Port 8083)
 - Central authority for tenant lifecycle and provisioning (schema/database per tenant)
-- Servlet Context Path: `/platform`- Per-tenant schema provisioning implemented (PS-10 DONE)
+- Servlet Context Path: `/platform`
+- Per-tenant schema provisioning implemented (PS-10 DONE)
 - Migration history tracking implemented
 - Metrics counters & timer added (provision attempts/success/failure, migration duration)
 - Admin account creation in Cognito for new tenants (planned)

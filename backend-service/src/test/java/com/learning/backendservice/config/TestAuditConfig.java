@@ -8,11 +8,12 @@ import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 import java.util.Optional;
 
 @TestConfiguration
-@EnableJpaAuditing(auditorAwareRef = "testAuditorProvider")
-public class TestJpaAuditConfig {
-
+@EnableJpaAuditing
+public class TestAuditConfig {
     @Bean
     public AuditorAware<String> testAuditorProvider() {
+        // Matches expectation in tests for createdBy/updatedBy
         return () -> Optional.of("test-user");
     }
 }
+

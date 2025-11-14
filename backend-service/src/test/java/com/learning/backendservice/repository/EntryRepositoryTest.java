@@ -23,14 +23,15 @@ class EntryRepositoryTest extends BaseIntegrationTest {
                 .build();
 
         // When
-        Entry saved = entryRepository.save(entry);
+        Entry saved = entryRepository.saveAndFlush(entry);
+        Entry reloaded = entryRepository.findById(saved.getId()).orElseThrow();
 
         // Then
-        assertThat(saved.getId()).isNotNull();
-        assertThat(saved.getKey()).isEqualTo("test-key");
-        assertThat(saved.getValue()).isEqualTo("test-value");
-        assertThat(saved.getCreatedAt()).isNotNull();
-        assertThat(saved.getCreatedBy()).isEqualTo("test-user");
+        assertThat(reloaded.getId()).isNotNull();
+        assertThat(reloaded.getKey()).isEqualTo("test-key");
+        assertThat(reloaded.getValue()).isEqualTo("test-value");
+        assertThat(reloaded.getCreatedAt()).isNotNull();
+        assertThat(reloaded.getCreatedBy()).isEqualTo("test-user");
     }
 
     @Test
@@ -70,10 +71,11 @@ class EntryRepositoryTest extends BaseIntegrationTest {
 
         // When
         saved.setValue("updated");
-        Entry updated = entryRepository.saveAndFlush(entry);
+        entryRepository.saveAndFlush(saved);
+        Entry reloaded = entryRepository.findById(saved.getId()).orElseThrow();
 
         // Then
-        assertThat(updated.getUpdatedAt()).isNotNull();
-        assertThat(updated.getUpdatedBy()).isEqualTo("test-user");
+        assertThat(reloaded.getUpdatedAt()).isNotNull();
+        assertThat(reloaded.getUpdatedBy()).isEqualTo("test-user");
     }
 }

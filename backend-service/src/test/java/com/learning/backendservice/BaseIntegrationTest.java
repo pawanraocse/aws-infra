@@ -1,7 +1,7 @@
 package com.learning.backendservice;
 
+import com.learning.backendservice.config.TestAuditConfig;
 import com.learning.backendservice.config.TestConfig;
-import com.learning.backendservice.config.TestJpaAuditConfig;
 import org.junit.jupiter.api.BeforeAll;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -19,7 +19,7 @@ import org.testcontainers.utility.DockerImageName;
         "spring.jpa.show-sql=true"
     }
 )
-@Import({TestConfig.class, TestJpaAuditConfig.class})
+@Import({TestConfig.class, TestAuditConfig.class})
 @Testcontainers
 @ActiveProfiles("test")
 public abstract class BaseIntegrationTest {

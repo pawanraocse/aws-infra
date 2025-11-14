@@ -34,14 +34,6 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
-    @ExceptionHandler(TenantProvisioningException.class)
-    public ResponseEntity<ErrorResponse> handleTenantProvisioning(
-            TenantProvisioningException ex, HttpServletRequest request) {
-        String requestId = request.getHeader(HeaderNames.REQUEST_ID);
-        ErrorResponse error = ErrorResponse.of(HttpStatus.INTERNAL_SERVER_ERROR.value(), "TENANT_PROVISIONING_FAILED", ex.getMessage(), requestId, request.getRequestURI());
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-    }
-
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationErrors(
             MethodArgumentNotValidException ex, HttpServletRequest request) {

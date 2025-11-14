@@ -1,23 +1,22 @@
 package com.learning.platformservice.tenant.service;
 
+import com.learning.platformservice.tenant.action.TenantProvisionAction;
 import com.learning.platformservice.tenant.dto.ProvisionTenantRequest;
+import com.learning.platformservice.tenant.dto.TenantDto;
 import com.learning.platformservice.tenant.entity.Tenant;
-import com.learning.platformservice.tenant.entity.TenantMigrationHistory;
 import com.learning.platformservice.tenant.exception.TenantAlreadyExistsException;
-import com.learning.platformservice.tenant.provision.TenantProvisioner;
-import com.learning.platformservice.tenant.repo.TenantMigrationHistoryRepository;
+import com.learning.platformservice.tenant.exception.TenantProvisioningException;
 import com.learning.platformservice.tenant.repo.TenantRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.*;
 
+import java.util.List;
 import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -26,40 +25,45 @@ class TenantProvisioningServiceTest {
     @Mock
     TenantRepository tenantRepository;
     @Mock
-    TenantMigrationHistoryRepository migrationHistoryRepository;
+    TenantProvisionAction storageAction;
     @Mock
-    TenantProvisioner tenantProvisioner;
+    TenantProvisionAction migrationAction;
+    @Mock
+    TenantProvisionAction auditAction;
 
     SimpleMeterRegistry meterRegistry;
-
     TenantProvisioningService service;
 
     @BeforeEach
     void init() {
         MockitoAnnotations.openMocks(this);
         meterRegistry = new SimpleMeterRegistry();
-        service = new TenantProvisioningServiceImpl(tenantRepository, migrationHistoryRepository, tenantProvisioner, meterRegistry);
+        service = new TenantProvisioningServiceImpl(
+                tenantRepository,
+                meterRegistry,
+                List.of(storageAction, migrationAction, auditAction)
+        );
     }
 
     @Test
-    @DisplayName("Should provision tenant successfully (SCHEMA mode)")
+    @DisplayName("Should provision tenant successfully and invoke actions in order")
     void provisionTenant_success() {
         ProvisionTenantRequest req = new ProvisionTenantRequest("acme", "Acme Corp", "SCHEMA", "STANDARD");
         when(tenantRepository.findById("acme")).thenReturn(Optional.empty());
-        when(tenantProvisioner.provisionTenantStorage("acme", "SCHEMA")).thenReturn("jdbc:postgresql://localhost:5432/awsinfra?currentSchema=tenant_acme");
         when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(migrationHistoryRepository.save(any(TenantMigrationHistory.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        var dto = service.provision(req);
+        TenantDto dto = service.provision(req);
 
         assertThat(dto).isNotNull();
         assertThat(dto.id()).isEqualTo("acme");
         assertThat(dto.status()).isEqualTo("ACTIVE");
-        assertThat(dto.jdbcUrl()).contains("tenant_acme");
 
-        verify(tenantProvisioner).provisionTenantStorage("acme", "SCHEMA");
-        verify(tenantRepository, times(2)).save(any(Tenant.class)); // initial + finalize
-        verify(migrationHistoryRepository, atLeastOnce()).save(any(TenantMigrationHistory.class));
+        InOrder inOrder = inOrder(storageAction, migrationAction, auditAction);
+        inOrder.verify(storageAction).execute(any());
+        inOrder.verify(migrationAction).execute(any());
+        inOrder.verify(auditAction).execute(any());
+
+        verify(tenantRepository, atLeast(2)).save(any(Tenant.class));
     }
 
     @Test
@@ -70,6 +74,28 @@ class TenantProvisioningServiceTest {
 
         assertThatThrownBy(() -> service.provision(req))
                 .isInstanceOf(TenantAlreadyExistsException.class);
+
+        verifyNoInteractions(storageAction, migrationAction, auditAction);
+    }
+
+    @Test
+    @DisplayName("Should mark tenant PROVISION_ERROR when an action fails")
+    void provisionTenant_actionFailure() {
+        ProvisionTenantRequest req = new ProvisionTenantRequest("failco", "Fail Co", "SCHEMA", "STANDARD");
+        when(tenantRepository.findById("failco")).thenReturn(Optional.empty());
+        when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> inv.getArgument(0));
+        doThrow(new RuntimeException("boom")).when(migrationAction).execute(any());
+
+        assertThatThrownBy(() -> service.provision(req))
+                .isInstanceOf(TenantProvisioningException.class)
+                .hasMessageContaining("Failed provisioning");
+
+        ArgumentCaptor<Tenant> captor = ArgumentCaptor.forClass(Tenant.class);
+        verify(tenantRepository, atLeast(2)).save(captor.capture());
+        boolean errorStatusSeen = captor.getAllValues().stream()
+                .anyMatch(t -> "PROVISION_ERROR".equals(t.getStatus()));
+        assertThat(errorStatusSeen).isTrue();
+
+        verify(auditAction, never()).execute(any());
     }
 }
-

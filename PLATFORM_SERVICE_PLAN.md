@@ -291,7 +291,7 @@ This section details the step-by-step implementation of the platform-service, en
 | PS-13 | Internal token issuance & JWK | PENDING | JWT minting + JWK hosting |
 | PS-14 | Metrics & observability | PARTIAL | Provisioning counters/timer + active gauge done; tracing pending |
 | PS-15 | Tests (unit/integration) | PARTIAL | Unit + provisioning integration tests added; edge cases & failure paths pending |
-| PS-16 | Cross-service cleanup (remove redundant tenant/policy logic) | PENDING | Backend/gateway/auth refactors staged |
+| PS-16 | Cross-service cleanup (remove redundant tenant/policy logic) | PARTIAL | Backend-service tenant provisioning & multi-tenancy removed; gateway & shared client still pending |
 | PS-17 | Communication client & shared module rollout | PENDING | platform-client + platform-shared DTO adoption |
 
 ### 19.1.2 Immediate Next Tasks
@@ -311,6 +311,13 @@ This section details the step-by-step implementation of the platform-service, en
 - Logging: Structured `tenant_provisioned` / `tenant_provision_failed` messages include tenantId, storageMode, durationMs.
 - Error Handling: Returns standardized ErrorResponse (conflict, validation, provisioning error).
 - Security: Resource server JWT configured; test profile overrides with permit-all filter chain.
+- Backend Cleanup (PS-16 start): Removed legacy tenant entity, repository, service, controller, multi-tenant DataSource config, and header filter from backend-service; auditing re-enabled independently.
+
+### 19.1.6 Swagger & CSP Fix (Backend-Service)
+- Issue: Swagger UI resources blocked by strict CSP `default-src 'none'` resulting in 500 and blocked static assets.
+- Fix: Adjusted CSP in backend `SecurityConfig` to allow self scripts/styles/images/fonts (`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self';`).
+- Result: Swagger UI accessible at `/swagger-ui.html` (OpenAPI JSON available at `/v3/api-docs`).
+- Next Hardening: Remove `'unsafe-inline'` once swagger assets moved to stricter CSP or adopt nonce-based strategy.
 
 ### 19.1.5 Remaining Gaps Post PS-10
 | Gap | Description | Planned Fix |
@@ -320,6 +327,7 @@ This section details the step-by-step implementation of the platform-service, en
 | Retry endpoint | Missing for PROVISION_ERROR | Add `/api/tenants/{id}/retry` (PS-15) |
 | Audit event emission | Logging only | Introduce async publisher (Kafka/SNS) (PS-14) |
 | PlatformClient adoption | Other services still direct | Implement shared REST client (PS-17) |
+| Gateway tenant logic cleanup | Gateway still relies on headers only | Remove legacy stubs, integrate policy/internal token (PS-16 continuation) |
 
 ---
 **End of PLATFORM_SERVICE_PLAN.md**

@@ -21,7 +21,7 @@ public class TenantServiceImpl implements TenantService {
     @Transactional(readOnly = true)
     public Optional<TenantDto> getTenant(String id) {
         var dto = tenantRepository.findById(id)
-                .map(t -> new TenantDto(t.getId(), t.getName(), t.getStatus(), t.getStorageMode(), t.getSlaTier(), t.getJdbcUrl()));
+                .map(t -> new TenantDto(t.getId(), t.getName(), t.getStatus(), t.getStorageMode(), t.getSlaTier(), t.getJdbcUrl(), t.getLastMigrationVersion()));
         log.debug("tenant_lookup tenantId={} found={}", id, dto.isPresent());
         return dto;
     }

@@ -6,7 +6,7 @@ public record TenantDto(
         String status,
         String storageMode,
         String slaTier,
-        String jdbcUrl
+        String jdbcUrl,
+        String lastMigrationVersion
 ) {
 }
-

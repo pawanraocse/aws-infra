@@ -313,12 +313,14 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 - [x] OAuth2 callback URL configuration with servlet context path
 - [x] Health check configuration for Docker services
 - [x] Tenant provisioning core (PS-10)
+- [x] Backend tenant provisioning cleanup (PS-16 partial)
+- [x] Backend Swagger CSP fix
 - [ ] Admin user creation (PS-11)
 - [ ] Policy engine & decision API (PS-12)
 - [ ] Internal service token issuance (PS-13)
 - [ ] Extended observability (tracing spans + additional metrics) (PS-14)
 - [ ] Retry endpoint & error recovery flows (PS-15)
-- [ ] Cross-service tenant logic cleanup (PS-16)
+- [ ] Gateway tenant logic cleanup (PS-16 continuation)
 - [ ] Shared platform-client adoption (PS-17)
 - [ ] Entry management UI (CRUD operations)
 - [ ] ECS/ECR deployment automation
@@ -333,16 +335,16 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 ### Updated (2025-11-14)
 | Area | Current State | Gap / Risk | Action |
 |------|---------------|------------|--------|
-| Backend Endpoint Protection | Partially permissive | Defense-in-depth incomplete | Enforce authenticated() + internal token (PS-13) |
-| Multi-Tenancy Enforcement | Header-based + schema switch | Header trust without internal token | Implement internal token trust layer (PS-13) |
-| Swagger/OpenAPI Exposure | Public in dev | Need prod restriction | Add profile flag `platform.swagger.enabled=false` |
-| Error Schema Consistency | Platform uses shared ErrorResponse | Gateway variance remains | Normalize gateway error contract (shared module) |
-| CORS Origins | Single origin | Multi-env blocking | Externalize origins to SSM parameter list |
-| Request Correlation | Gateway sets requestId (needs test) | Missing verification tests | Add correlation tests & filter assertion |
-| DATABASE Mode | Feature-flag disabled | Not validated | Implement & test provisioning path (PS-14) |
-| Per-schema Domain Migrations | Placeholder timer only | Domain tables not migrated automatically | Add programmatic Flyway per schema (PS-14) |
-| Retry Provisioning | Unsupported | Manual ops overhead | Add retry endpoint (PS-15) |
-| Audit Events | Logging only | Lacks event pipeline | Integrate Kafka/SNS publisher (PS-14) |
+| Backend Endpoint Protection | Permissive (temporary) | Needs defense-in-depth | Switch to authenticated() after internal tokens (PS-13) |
+| Swagger/OpenAPI Exposure | Accessible & CSP relaxed | Inline styles allowed | Introduce nonce/CSP tightening (post UI stabilization) |
+| Error Schema Consistency | Platform unified / Backend uses shared | Gateway variance remains | Normalize gateway error contract |
+| CORS Origins | Single origin | Multi-env blocking | Externalize origins to SSM list |
+| Request Correlation | Basic requestId | No test coverage | Add correlation tests |
+| DATABASE Mode | Disabled by flag | Unimplemented path | Implement & test (PS-14) |
+| Per-schema Domain Migrations | Placeholder only | Domain tables not migrated | Programmatic per-schema Flyway (PS-14) |
+| Retry Provisioning | Missing | Manual remediation | Add retry endpoint (PS-15) |
+| Audit Events | Logging only | No event pipeline | Kafka/SNS publisher (PS-14) |
+| PlatformClient | Not present | Direct coupling risk | Implement shared REST client (PS-17) |
 
 ### Resolved Items (Removed from Gap List)
 - Tenant provisioning orchestration (schema mode) implemented

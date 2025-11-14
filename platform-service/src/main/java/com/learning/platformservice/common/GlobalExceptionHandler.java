@@ -1,0 +1,67 @@
+package com.learning.platformservice.common;
+
+import com.learning.common.constants.ErrorCodes;
+import com.learning.common.error.ErrorResponse;
+import com.learning.platformservice.tenant.exception.TenantAlreadyExistsException;
+import com.learning.platformservice.tenant.exception.TenantProvisioningException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@RestControllerAdvice
+@Slf4j
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(TenantAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> tenantExists(TenantAlreadyExistsException ex, HttpServletRequest req) {
+        log.warn("tenant_exists tenantId={}", ex.getTenantId());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of(HttpStatus.CONFLICT.value(), ErrorCodes.TENANT_CONFLICT.name(), ex.getMessage(), requestId(req), req.getRequestURI()));
+    }
+
+    @ExceptionHandler(TenantProvisioningException.class)
+    public ResponseEntity<ErrorResponse> provisioning(TenantProvisioningException ex, HttpServletRequest req) {
+        log.error("tenant_provisioning_error tenantId={} error={}", ex.getTenantId(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ErrorResponse.of(HttpStatus.INTERNAL_SERVER_ERROR.value(), "PROVISION_ERROR", ex.getMessage(), requestId(req), req.getRequestURI()));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> invalid(MethodArgumentNotValidException ex, HttpServletRequest req) {
+        Map<String, String> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
+                .collect(Collectors.toMap(f -> f.getField(), f -> f.getDefaultMessage() == null ? "Invalid" : f.getDefaultMessage()));
+        log.warn("validation_error fields={}", fieldErrors);
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), ErrorCodes.TENANT_INVALID_FORMAT.name(), "Invalid request", requestId(req), req.getRequestURI()));
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> constraint(ConstraintViolationException ex, HttpServletRequest req) {
+        Map<String, String> violations = ex.getConstraintViolations().stream()
+                .collect(Collectors.toMap(v -> v.getPropertyPath().toString(), v -> v.getMessage()));
+        log.warn("constraint_violation violations={}", violations);
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), ErrorCodes.TENANT_INVALID_FORMAT.name(), "Constraint violation", requestId(req), req.getRequestURI()));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> generic(Exception ex, HttpServletRequest req) {
+        log.error("unexpected_error error={}", ex.getMessage(), ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ErrorResponse.of(HttpStatus.INTERNAL_SERVER_ERROR.value(), ErrorCodes.INTERNAL_ERROR.name(), "An unexpected error occurred", requestId(req), req.getRequestURI()));
+    }
+
+    private String requestId(HttpServletRequest req) {
+        String rid = req.getHeader("X-Request-Id");
+        return rid != null ? rid : "NA";
+    }
+}
+

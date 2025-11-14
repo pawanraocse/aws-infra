@@ -1,7 +1,7 @@
 # AWS-Infra Project - Unified Index & Source of Truth
 
-**Last Updated:** 2025-11-12
-**Version:** 2.4.2
+**Last Updated:** 2025-11-13
+**Version:** 2.5.0
 **Status:** ✅ Production-Ready Multi-Tenant Microservices Architecture with Angular Frontend (hardening in progress)
 
 ---
@@ -209,13 +209,17 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 ### Platform Service (Port 8083)
 - Central authority for tenant lifecycle and provisioning (schema/database per tenant)
-- Admin account creation in Cognito for new tenants
+- Servlet Context Path: `/platform`- Per-tenant schema provisioning implemented (PS-10 DONE)
+- Migration history tracking implemented
+- Metrics counters & timer added (provision attempts/success/failure, migration duration)
+- Admin account creation in Cognito for new tenants (planned)
 - Policy storage and decision API (planned)
 - Internal token issuance (planned) with JWK endpoint
 - Endpoints:
-  - `POST /api/tenants` – Provision tenant + admin user
-  - `GET /api/tenants/{id}` – Tenant metadata
-  - `GET /actuator/health` – Health check
+  - `POST /platform/api/tenants` – Provision tenant (schema mode active; database mode feature-flagged)
+  - `GET /platform/api/tenants/{id}` – Tenant metadata
+  - `GET /platform/actuator/health` – Health check
+  - Swagger UI: `/platform/swagger-ui.html`
 
 ---
 
@@ -274,6 +278,11 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 - JUnit 5, Mockito, AssertJ for unit tests
 - Testcontainers for integration tests
 - Cypress/Playwright for frontend e2e
+### Platform-Service Tests
+- Unit: Tenant provisioning happy path + duplicate ID conflict
+- Integration: Provisioning via Testcontainers (`BaseIntegrationTest` abstraction)
+- Metrics verification pending (future PS-14) for histogram & status breakdown
+- Upcoming: DATABASE mode rejection test, PROVISION_ERROR retry test, per-schema migration invocation test
 
 ---
 
@@ -302,153 +311,41 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 - [x] Frontend authentication flow with Angular
 - [x] OAuth2 callback URL configuration with servlet context path
 - [x] Health check configuration for Docker services
+- [x] Tenant provisioning core (PS-10)
+- [ ] Admin user creation (PS-11)
+- [ ] Policy engine & decision API (PS-12)
+- [ ] Internal service token issuance (PS-13)
+- [ ] Extended observability (tracing spans + additional metrics) (PS-14)
+- [ ] Retry endpoint & error recovery flows (PS-15)
+- [ ] Cross-service tenant logic cleanup (PS-16)
+- [ ] Shared platform-client adoption (PS-17)
 - [ ] Entry management UI (CRUD operations)
 - [ ] ECS/ECR deployment automation
 - [ ] Full CI/CD pipeline
 - [ ] Advanced monitoring and tracing
-- [ ] Tenant onboarding automation
+- [ ] Tenant onboarding automation UI
 
 ---
 
 <a id="flow-verification--implementation-gaps"></a>
 ## Flow Verification & Implementation Gaps
-(Review Date: 2025-11-12)
+### Updated (2025-11-14)
+| Area | Current State | Gap / Risk | Action |
+|------|---------------|------------|--------|
+| Backend Endpoint Protection | Partially permissive | Defense-in-depth incomplete | Enforce authenticated() + internal token (PS-13) |
+| Multi-Tenancy Enforcement | Header-based + schema switch | Header trust without internal token | Implement internal token trust layer (PS-13) |
+| Swagger/OpenAPI Exposure | Public in dev | Need prod restriction | Add profile flag `platform.swagger.enabled=false` |
+| Error Schema Consistency | Platform uses shared ErrorResponse | Gateway variance remains | Normalize gateway error contract (shared module) |
+| CORS Origins | Single origin | Multi-env blocking | Externalize origins to SSM parameter list |
+| Request Correlation | Gateway sets requestId (needs test) | Missing verification tests | Add correlation tests & filter assertion |
+| DATABASE Mode | Feature-flag disabled | Not validated | Implement & test provisioning path (PS-14) |
+| Per-schema Domain Migrations | Placeholder timer only | Domain tables not migrated automatically | Add programmatic Flyway per schema (PS-14) |
+| Retry Provisioning | Unsupported | Manual ops overhead | Add retry endpoint (PS-15) |
+| Audit Events | Logging only | Lacks event pipeline | Integrate Kafka/SNS publisher (PS-14) |
 
-### Summary
-End-to-end auth + routing flow functions under Docker Compose, but several divergences exist between documented intent and current implementation state. This section tracks gaps to close before declaring the hardening phase complete.
-
-### Validated Runtime Flow
-```
-Frontend (Angular) → Gateway (JWT validation + header enrichment) → Backend-Service (tenant filter) → PostgreSQL
-Frontend → Cognito Hosted UI → Auth-Service (session) → /auth/tokens → JWT → Stored → Subsequent API calls
-```
-All core components start and pass their health checks (`docker-compose.yml`). JWT enrichment headers (`X-User-Id`, `X-Tenant-Id`, `X-Email`, `X-Authorities`) are injected by gateway for `/api/**` routes.
-
-### Discrepancies / Gaps
-| Area | Expected (Docs) | Actual (Code / Compose) | Gap / Risk | Action |
-|------|-----------------|--------------------------|------------|--------|
-| Backend Endpoint Protection | `authenticated()` for business APIs | `permitAll()` (SecurityConfig) | APIs callable without auth if gateway is bypassed | Switch to `.anyRequest().authenticated()` after internal token rollout or add temporary resource-server config (defense-in-depth) |
-| Multi-Tenancy Enforcement | Fail-closed at gateway + backend validation | Backend allows all requests; tenant validation only header-based | Missing auth layer could allow anonymous calls with forged headers | Add internal signed token / HMAC phase, restrict direct header trust |
-| Swagger/OpenAPI Exposure | Documented; secured in production | Accessible anonymously | Information disclosure | Require auth in non-dev profiles; restrict via feature flag |
-| Error Schema Consistency | Unified JSON across all services | Minor variance: backend includes `path`, gateway omits it | Inconsistent observability parsing | Standardize error DTO (shared module) + propagate `path` uniformly |
-| CORS Origins | Multi-origin support documented | Single origin via `cors.allowed-origins` property | Harder multi-environment dev | Externalize list to env/SSM; update compose with variable |
-| Request Correlation | RequestId everywhere | Backend may generate new ID if missing | Possible trace discontinuity | Ensure gateway always sets `X-Request-Id`; add filter test |
-| Security Hardening Flags | Listed in SYSTEM_DESIGN.md | Some missing in properties (`security.gateway.*`) | Drift between config & docs | Introduce consolidated `application.yml` section + defaults |
-| Internal Token Strategy | Planned in docs | Not yet started | Future dependency for header trust reduction | Begin ADR 0002 + platform-service bootstrap |
-| Metrics & Observability | Planned metrics enumerated | No custom metrics yet | Reduced insight for tuning | Add Micrometer counters for tenant deny/allow flows |
-| Frontend Containerization | Compose orchestrates backend only | Frontend not included | Manual startup / drift | Add Angular service block (dev-only) with proper network |
-| SSM / Secret Retrieval | Compose sets env vars directly | AWS keys passed via environment | Risk of local leak / misuse | Replace with scripts fetching ephemeral session tokens (STS) |
-| Database Migration Separation | Per-service Flyway tables documented | Auth service sets distinct table; backend not shown | Need confirm backend uses separate history | Verify backend config & document both tables |
-
-### Confirmed Correct Items
-- Gateway tenant extraction fail-closed (no default).
-- Header sanitization global filters present.
-- Structured JSON logging patterns implemented in gateway/auth-service.
-- Circuit breaker + retry configured for both upstream routes.
-
-### Recommended Immediate Fixes (Priority Order)
-1. Enforce backend authentication (defense-in-depth) – even with gateway in front.
-2. Introduce shared `platform-shared` module for `ErrorResponse`, header constants, regex reuse.
-3. Add Micrometer metrics: `gateway.requests.total`, `gateway.tenant.missing.total`, `backend.tenant.invalid.total`.
-4. Extend docker-compose with optional `redis` (future permission cache) and `zipkin` (tracing) placeholders.
-5. Normalize error schema (add `path` to gateway responses; remove variance) before integrating centralized log parsing.
-6. Add Angular container block for parity in local orchestration.
-7. Document current backend security posture explicitly (temporary) until internal token implementation.
-
-### Validation Artifacts To Add
-- Integration test: missing `X-Tenant-Id` returns 403 from backend.
-- Integration test: multiple tenant groups returns 400 `TENANT_CONFLICT` from gateway.
-- Unit test: error response serialization matches canonical schema.
-
-### Tracking
-Each item above should gain a task ID in `next_task.md` or consolidated task file; mark completion and update this section. Remove resolved rows rather than adding duplicates.
-
-## Naming Conventions
-- Controllers: `*Controller.java`
-- Services: `*.service.ts`
-- Tests: `*.spec.ts`, `*Test.java`
-- Config: `application-<env>.yml`
-
----
-
-## Test Coverage Map
-- Auth Service: 80%+ unit/integration
-- Backend Service: 85%+ unit/integration
-- Gateway: 85%+ integration & unit (tenant extraction, header sanitization, request id, logging)
-- Frontend: 80%+ unit/e2e
-
----
-
-## Auth/Security Approach
-- All external APIs secured with JWT
-- User/tenant context propagated via headers
-- SSM Parameter Store for secrets
-- No JPA entities exposed externally
-
----
-
-## 📄 Documentation File Pattern
-
-**IMPORTANT:** Always update existing .md files rather than creating new ones for each change.
-
-### Standard Documentation Files
-
-1. **copilot-index.md** (This file)
-   - Single source of truth for project overview
-   - Architecture, technology stack, project structure
-   - High-level documentation
-   - Update after every significant architectural change
-
-2. **CURRENT_STATUS.md**
-   - Current implementation status
-   - What's working, what's next
-   - Service configuration details
-   - Recent fixes and troubleshooting
-   - Quick reference for developers
-   - Update after completing features or fixing issues
-
-3. **IMPLEMENTATION_TASKS.md**
-   - Detailed task tracking
-   - Implementation progress
-   - Technical decisions
-   - Update as tasks are completed
-
-4. **HLD.md** (High-Level Design)
-   - System architecture
-   - Design decisions
-   - Component interactions
-   - Update when architecture changes
-
-5. **README.md**
-   - Getting started guide
-   - Quick setup instructions
-   - Basic usage
-   - Keep concise and user-friendly
-
-### Documentation Rules
-
-- ✅ **DO:** Update existing files with new information
-- ✅ **DO:** Keep related information together in the same file
-- ✅ **DO:** Use clear section headers for easy navigation
-- ❌ **DON'T:** Create new .md files for each change
-- ❌ **DON'T:** Duplicate information across multiple files
-- ❌ **DON'T:** Create temporary or one-off documentation files
-
-### When to Create New Files
-
-Only create new documentation files for:
-- New major features that need dedicated documentation
-- API documentation (e.g., API_REFERENCE.md)
-- Deployment guides (e.g., DEPLOYMENT.md)
-- Contributing guidelines (e.g., CONTRIBUTING.md)
-
----
-
-## Update Policy
-- This file is the single source of truth for project overview
-- Update after every significant architectural or flow change
-- Always prefer updating existing files over creating new ones
-- Remove all duplicates and consolidate information
+### Resolved Items (Removed from Gap List)
+- Tenant provisioning orchestration (schema mode) implemented
+- Migration history persistence operational
 
 ---
 

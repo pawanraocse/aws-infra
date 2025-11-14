@@ -279,49 +279,47 @@ This section details the step-by-step implementation of the platform-service, en
 | PS-02 | Flyway V1 migrations (registry tables) | DONE | pgcrypto enabled; separate Flyway table |
 | PS-03 | Basic REST API (POST /api/tenants, GET /api/tenants/{id}) | DONE | DTOs/controllers/services wired |
 | PS-04 | Eureka registration & health endpoint | DONE | Actuator health exposed; compose healthcheck |
-| PS-05 | OpenAPI config & Swagger UI | DONE | springdoc configured |
-| PS-06 | Security (OAuth2 resource server) | DONE | `/api/**` protected; `/actuator/**` public |
+| PS-05 | OpenAPI config & Swagger UI | DONE | springdoc configured; context path `/platform` |
+| PS-06 | Security (OAuth2 resource server) | DONE | JWT issuer-uri configured; `/actuator/**`, docs permitted |
+| PS-06a | Swagger security allowance | DONE | `/swagger-ui.html`, `/swagger-ui/**`, `/webjars/**` permitted |
 | PS-07 | Docker Compose integration | DONE | `platform-service` block added |
 | PS-08 | Root pom module update | DONE | `platform-service` added to `<modules>` |
 | PS-09 | README & run instructions | DONE | Local run & health commands documented |
-| PS-10 | DB/schema provisioning logic | PENDING | Implement per-tenant schema/db creation |
+| PS-10 | DB/schema provisioning logic | DONE | Implemented TenantProvisioner + TenantProvisioningService; per-tenant schema creation, migration history, Micrometer counters, Testcontainers integration |
 | PS-11 | Admin account creation (Cognito) | PENDING | Integrate AdminCreateUser + group assignment |
 | PS-12 | Policy storage & decision API | PENDING | CRUD + resolve endpoint |
 | PS-13 | Internal token issuance & JWK | PENDING | JWT minting + JWK hosting |
-| PS-14 | Metrics & observability | PENDING | Micrometer counters, tracing |
-| PS-15 | Tests (unit/integration) | PENDING | Testcontainers + API tests |
+| PS-14 | Metrics & observability | PARTIAL | Provisioning counters/timer + active gauge done; tracing pending |
+| PS-15 | Tests (unit/integration) | PARTIAL | Unit + provisioning integration tests added; edge cases & failure paths pending |
+| PS-16 | Cross-service cleanup (remove redundant tenant/policy logic) | PENDING | Backend/gateway/auth refactors staged |
+| PS-17 | Communication client & shared module rollout | PENDING | platform-client + platform-shared DTO adoption |
 
-## 19.2 Local Build & Run Checklist
+### 19.1.2 Immediate Next Tasks
+1. PS-11: Implement `CognitoAdminService` for initial tenant admin creation (AdminCreateUser + group assignment + audit event).
+2. PS-12: Policy storage & decision API (JSON DSL + evaluation service + caching layer).
+3. PS-13: Internal token issuance (JWT + JWK endpoint) and gateway integration behind feature flag.
+4. PS-14: Add tracing spans + additional metrics (status-based counts, histogram for provision duration).
+5. PS-15: Expand tests (DATABASE mode flag rejection, PROVISION_ERROR retry scenario, validation failures).
+6. PS-16: Backend-service cleanup (remove legacy provisioning code, adopt PlatformClient).
+7. PS-17: Introduce `platform-shared` module & replace duplicate ErrorResponse/Header constants.
 
-- Build module only:
-```bash
-./mvnw -f platform-service/pom.xml clean package -DskipTests
-```
-- Run service:
-```bash
-java -jar platform-service/target/platform-service-0.0.1-SNAPSHOT.jar
-```
-- Health check:
-```bash
-curl http://localhost:8083/actuator/health
-```
-- Swagger UI:
-```bash
-open http://localhost:8083/swagger-ui/index.html
-```
+### 19.1.4 Provisioning Implementation Addendum (Completed PS-10)
+- Components: `TenantProvisioner` (schema creation), `TenantProvisioningServiceImpl` (orchestration), `GlobalExceptionHandler`, domain exceptions.
+- Metrics added: `platform.tenants.provision.attempts`, `platform.tenants.provision.success`, `platform.tenants.provision.failure`, `platform.tenants.migration.duration` timer, active tenants gauge.
+- Persistence: `tenant` and `tenant_migration_history` tables seeded via Flyway V1; migration history rows recorded with STARTED/SUCCESS/FAILED.
+- Tests: Unit (happy path + duplicate conflict), Integration (Testcontainers via `BaseIntegrationTest` abstract class). DATABASE mode currently disabled by flag.
+- Logging: Structured `tenant_provisioned` / `tenant_provision_failed` messages include tenantId, storageMode, durationMs.
+- Error Handling: Returns standardized ErrorResponse (conflict, validation, provisioning error).
+- Security: Resource server JWT configured; test profile overrides with permit-all filter chain.
 
-## 19.3 Docker Compose & Root pom Updates
-- `docker-compose.yml`: Added `platform-service` with healthcheck and dependencies on `eureka-server` and `postgres`.
-- `pom.xml` (root): Added `<module>platform-service</module>` under `<modules>`.
-- `platform-service/pom.xml`: Added dependencies for web, JPA, security, OAuth2, Flyway, PostgreSQL, Eureka client, OpenAPI, logging, tests.
-
-## 19.4 Next Implementation Batch (Target)
-- PS-10: Implement `TenantProvisioner` to create schema or DB per tenant; update registry with JDBC URL.
-- PS-11: Implement `CognitoAdminService` to create initial admin user and assign to tenant group; add audit logs.
-- PS-12: Implement `PolicyController` and `PolicyService` for policy CRUD and `/api/policies/resolve`.
-- PS-13: Implement `InternalTokenService` issuing short-lived JWTs; expose `/api/jwks/internal`.
-- PS-14: Add metrics (`platform.tenants.count`, `platform.provision.duration`) and tracing; structured logs (`platform_event`).
-- PS-15: Add Testcontainers integration tests for tenant provisioning and API endpoints.
+### 19.1.5 Remaining Gaps Post PS-10
+| Gap | Description | Planned Fix |
+|-----|-------------|------------|
+| Per-schema domain migrations | Placeholder only | Programmatic Flyway per schema (PS-14 extension) |
+| DATABASE mode provisioning | Feature flag disabled | Implement admin DataSource + secret storage (PS-11/PS-14) |
+| Retry endpoint | Missing for PROVISION_ERROR | Add `/api/tenants/{id}/retry` (PS-15) |
+| Audit event emission | Logging only | Introduce async publisher (Kafka/SNS) (PS-14) |
+| PlatformClient adoption | Other services still direct | Implement shared REST client (PS-17) |
 
 ---
 **End of PLATFORM_SERVICE_PLAN.md**

@@ -324,3 +324,170 @@ backend-service/
 │   └── EntryServiceTest.java
 └── repository/
 └── EntryRepositoryTest.java
+
+
+## PS-10 Tenant Provisioning Architecture – Detailed Implementation Plan (Temporary Appendix)
+
+(This appendix will be merged into `HLD.md` once file edit mapping issue is resolved.)
+
+### 1. Ownership & Boundary
+- `platform-service` = sole authority for tenant lifecycle (provision, suspend, archive, delete).
+- Other services consume metadata only; never create tenants.
+- Backend legacy provisioning disabled: `backend.tenant.provision.enabled=false`.
+
+### 2. Provisioning Modes
+| Mode | Action | Intended Tenants | Status |
+|------|--------|------------------|--------|
+| SCHEMA | Create schema `tenant_<id>` in shared DB | Default path | ENABLED |
+| DATABASE | Create dedicated DB & user | Large / regulated | FLAGGED OFF (enable later) |
+
+Feature flag: `platform.storage.database.enabled`.
+
+### 3. Registry Data Model (`public.tenant`)
+| Field | Purpose |
+|-------|---------|
+| id | Slug identifier (unique) |
+| name | Display/legal name |
+| status | PROVISIONING / ACTIVE / SUSPENDED / ARCHIVED / PROVISION_ERROR |
+| storage_mode | SCHEMA or DATABASE |
+| jdbc_url | Tenant data JDBC URL |
+| db_user_secret_ref | Secret ref (DATABASE mode) |
+| sla_tier | STANDARD / PREMIUM / ENTERPRISE |
+| last_migration_version | Highest migration applied |
+| created_at / updated_at | Audit timestamps |
+
+### 4. Components
+| Component | Responsibility |
+|-----------|---------------|
+| TenantController | Validate + delegate |
+| TenantProvisioningService | Orchestrate workflow |
+| TenantProvisioner | Physical schema/database creation |
+| FlywayTenantMigrator | Run tenant migrations |
+| TenantRepository | Registry persistence |
+| TenantMigrationHistoryRepository | Track migrations |
+| AuditPublisher | Emit lifecycle events |
+| PlatformClient | Read-only retrieval from other services |
+
+### 5. SCHEMA Provisioning Workflow
+1. Validate request (pattern, uniqueness, mode).
+2. Insert row `status=PROVISIONING`.
+3. Create schema `tenant_<id>`.
+4. Build JDBC URL with `currentSchema`.
+5. Run Flyway domain migrations in new schema.
+6. Update row: set `jdbc_url`, `last_migration_version`, `status=ACTIVE`.
+7. Publish audit event.
+8. Return `TenantDto`.
+
+### 6. Error & Rollback
+| Failure | Result | Recovery |
+|---------|--------|----------|
+| Validation | 400 | Fix request |
+| Schema creation | PROVISION_ERROR | Retry endpoint (future) |
+| Migration failure | PROVISION_ERROR | Investigate + retry |
+| Final update concurrency | PROVISION_ERROR | Manual retry |
+
+### 7. Concurrency & Idempotency
+- Unique `id` enforces idempotency.
+- Parallel attempts produce one success + one 409 conflict.
+- `PROVISIONING` interim status visible for monitoring.
+
+### 8. DATABASE Mode (Deferred)
+- `CREATE DATABASE tenant_<id>`; create role & password.
+- Store credentials in SSM/Secrets Manager.
+- Dedicated JDBC URL; migrations run directly.
+
+### 9. Security
+- Regex validation on `id`: `^[a-zA-Z0-9_-]{3,64}$`.
+- Protected by resource server & `ROLE_PLATFORM_ADMIN`.
+- Sanitized schema/db names (lowercase slug).
+- Limited DDL—only controlled create statements.
+
+### 10. Observability
+Metrics:
+- `platform.tenants.provision.attempts`
+- `platform.tenants.provision.success`
+- `platform.tenants.provision.failure`
+- `platform.tenants.migration.duration`
+- `platform.tenants.active`
+
+Audit events: `TENANT_PROVISIONED`, `TENANT_PROVISION_FAILED`.
+
+### 11. API Contracts
+POST `/platform/api/tenants` → creates tenant.
+GET `/platform/api/tenants/{id}` → fetch metadata.
+Errors: 400 INVALID_ID, 409 TENANT_EXISTS, 422 MODE_DISABLED, 500 PROVISION_ERROR.
+
+### 12. Core Pseudocode
+```java
+public TenantDto provisionTenant(ProvisionTenantRequest r) {
+  validate(r);
+  Tenant t = insert(r, PROVISIONING);
+  try {
+    String url = provisioner.provisionTenantStorage(r.id(), r.storageMode());
+    String version = migrator.applyMigrations(r.id(), url);
+    finalize(t.getId(), url, version, ACTIVE);
+    audit.publishProvisioned(t.getId());
+    return mapper.toDto(repository.findById(t.getId()).orElseThrow());
+  } catch (Exception e) {
+    markProvisionError(t.getId(), e.getMessage());
+    audit.publishFailed(t.getId(), e);
+    throw new TenantProvisioningException("Failed to provision tenant", e);
+  }
+}
+```
+
+### 13. Backend Cleanup
+- Remove `TenantAdminController`.
+- Delete schema creation utilities.
+- Introduce `PlatformClient`.
+- Ensure flag disables legacy endpoints before removal.
+
+### 14. Testing Matrix
+| Test | Goal |
+|------|------|
+| Unit | Validate rules, transitions |
+| Integration | End-to-end provisioning (Testcontainers) |
+| Concurrency | Ensure 409 on duplicate race |
+| Migration | Idempotent baseline |
+| Security | Unauthorized returns 403 |
+| Metrics | Counters increment |
+| Error | Simulate migration failure → PROVISION_ERROR |
+
+### 15. Rollout Phases
+P1 SCHEMA + tests → P2 Cleanup + Client → P3 Metrics + Audit → P4 DATABASE mode flag → P5 Retry endpoint / tooling.
+
+### 16. Performance
+- Schema creation trivial; migrations must remain lightweight.
+- Monitor pool saturation as tenant count grows.
+- Future: shard by tier or region.
+
+### 17. Future Hardening
+- Internal signed service tokens.
+- Credential rotation (DATABASE mode).
+- KMS key mapping per tenant for encryption.
+
+### 18. Risks & Mitigations
+| Risk | Mitigation |
+|------|-----------|
+| DDL privilege misuse | Restrict admin role + audit |
+| Orphaned schemas | Sweeper for PROVISION_ERROR aged rows |
+| Migration drift | Review + Flyway checksum |
+| Spike provisioning | Queue + async worker (future) |
+
+### 19. Acceptance Criteria
+- Active tenant returned with JDBC URL.
+- Duplicate id → 409.
+- Invalid id → 400.
+- Migration history recorded.
+- Metrics emitted.
+- Backend provisioning disabled.
+- HLD & `copilot-index.md` updated.
+
+### 20. Future Enhancements
+- Retry provisioning endpoint.
+- Policy decision API integration.
+- Internal token issuance & JWK.
+- Quota enforcement.
+
+---
+

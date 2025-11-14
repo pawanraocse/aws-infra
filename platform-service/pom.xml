@@ -13,6 +13,11 @@
     <description>Platform service for tenant lifecycle, provisioning, policy, and internal tokens</description>
 
     <dependencies>
+        <dependency>
+            <groupId>com.learning</groupId>
+            <artifactId>common-module</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <!-- Core Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

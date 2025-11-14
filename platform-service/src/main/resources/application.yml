@@ -132,6 +132,15 @@ springdoc:
 platform:
   db-per-tenant:
     enabled: false
+  tenant:
+    provisioning:
+      enabled: true
+    database-mode:
+      enabled: false # feature flag for DATABASE storage mode
+  audit:
+    enabled: false # placeholder for future Kafka/SNS publishing
+  internal-token:
+    enabled: false # future PS-13
 
 logging:
   level:
@@ -147,3 +156,7 @@ cognito:
   domain: ${COGNITO_DOMAIN:}
   region: ${AWS_REGION:us-east-1}
   # logout-redirect-url intentionally omitted for platform-service
+
+metrics:
+  tenant:
+    enabled: true

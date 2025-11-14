@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: platform-service-test
+  cloud:
+    discovery:
+      enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    table: flyway_platform_service
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://dummy-issuer.invalid
+server:
+  servlet:
+    context-path: /platform
+
+platform:
+  tenant:
+    provisioning:
+      enabled: true
+    database-mode:
+      enabled: false
+
+logging:
+  level:
+    root: INFO
+    com.learning.platformservice: DEBUG
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+  instance:
+    prefer-ip-address: false

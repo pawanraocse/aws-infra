@@ -52,6 +52,19 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), ErrorCodes.TENANT_INVALID_FORMAT.name(), "Constraint violation", requestId(req), req.getRequestURI()));
     }
 
+    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
+    public ResponseEntity<ErrorResponse> illegal(RuntimeException ex, HttpServletRequest req) {
+        log.warn("request_invalid error={}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of(
+                        HttpStatus.BAD_REQUEST.value(),
+                        ErrorCodes.TENANT_INVALID_FORMAT.name(),
+                        ex.getMessage(),
+                        requestId(req),
+                        req.getRequestURI()
+                ));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> generic(Exception ex, HttpServletRequest req) {
         log.error("unexpected_error error={}", ex.getMessage(), ex);

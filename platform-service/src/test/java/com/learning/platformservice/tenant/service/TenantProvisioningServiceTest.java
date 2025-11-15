@@ -1,11 +1,13 @@
 package com.learning.platformservice.tenant.service;
 
 import com.learning.platformservice.tenant.action.TenantProvisionAction;
+import com.learning.platformservice.tenant.config.PlatformTenantProperties;
 import com.learning.platformservice.tenant.dto.ProvisionTenantRequest;
 import com.learning.platformservice.tenant.dto.TenantDto;
 import com.learning.platformservice.tenant.entity.Tenant;
 import com.learning.platformservice.tenant.exception.TenantAlreadyExistsException;
 import com.learning.platformservice.tenant.exception.TenantProvisioningException;
+import com.learning.platformservice.tenant.provision.TenantProvisioner;
 import com.learning.platformservice.tenant.repo.TenantRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +32,10 @@ class TenantProvisioningServiceTest {
     TenantProvisionAction migrationAction;
     @Mock
     TenantProvisionAction auditAction;
+    @Mock
+    TenantProvisioner tenantProvisioner;
 
+    PlatformTenantProperties tenantProperties;
     SimpleMeterRegistry meterRegistry;
     TenantProvisioningService service;
 
@@ -38,10 +43,13 @@ class TenantProvisioningServiceTest {
     void init() {
         MockitoAnnotations.openMocks(this);
         meterRegistry = new SimpleMeterRegistry();
+        tenantProperties = new PlatformTenantProperties();
         service = new TenantProvisioningServiceImpl(
                 tenantRepository,
                 meterRegistry,
-                List.of(storageAction, migrationAction, auditAction)
+                List.of(storageAction, migrationAction, auditAction),
+                tenantProperties,
+                tenantProvisioner
         );
     }
 
@@ -97,5 +105,22 @@ class TenantProvisioningServiceTest {
         assertThat(errorStatusSeen).isTrue();
 
         verify(auditAction, never()).execute(any());
+    }
+
+    @Test
+    @DisplayName("Drops tenant database on failure when dropOnFailure true and storageMode=DATABASE")
+    void provisionTenant_dropOnFailure() {
+        tenantProperties.setDropOnFailure(true);
+        tenantProperties.setTenantDatabaseModeEnabled(true);
+        tenantProperties.setDbPerTenantEnabled(true);
+        ProvisionTenantRequest req = new ProvisionTenantRequest("dbfail", "DB Fail Co", "DATABASE", "STANDARD");
+        when(tenantRepository.findById("dbfail")).thenReturn(Optional.empty());
+        when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> inv.getArgument(0));
+        doThrow(new RuntimeException("boom")).when(migrationAction).execute(any());
+
+        assertThatThrownBy(() -> service.provision(req))
+                .isInstanceOf(TenantProvisioningException.class);
+
+        verify(tenantProvisioner, times(1)).dropTenantDatabase("dbfail");
     }
 }

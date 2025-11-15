@@ -1,8 +1,8 @@
 # AWS-Infra Project - Unified Index & Source of Truth
 
-**Last Updated:** 2025-11-13
-**Version:** 2.5.0
-**Status:** ✅ Production-Ready Multi-Tenant Microservices Architecture with Angular Frontend (hardening in progress)
+**Last Updated:** 2025-11-15
+**Version:** 2.6.0
+**Status:** ✅ Multi-Tenant Microservices Architecture (DB-per-tenant path functional; migration split design pending)
 
 ---
 
@@ -33,8 +33,8 @@
 
 ### Purpose
 Production-ready AWS-based Spring Boot microservices platform with Angular frontend, implementing:
-- **Multi-tenant architecture** with schema-per-tenant isolation
-- **AWS Cognito authentication** with Modern UI v2
+- **Multi-tenant architecture** (transitioning from schema-per-tenant → database-per-tenant for stronger isolation)
+- **AWS Cognito authentication** (OAuth2 / OIDC)
 - **Service discovery** via Netflix Eureka
 - **API Gateway** with JWT validation and tenant context propagation
 - **Infrastructure as Code** using Terraform
@@ -44,16 +44,14 @@ Production-ready AWS-based Spring Boot microservices platform with Angular front
 Enterprise SaaS platform supporting multiple tenants with complete data isolation, centralized authentication, and scalable microservices architecture.
 
 ### Key Features
-- ✅ Multi-tenant data isolation (schema-per-tenant)
+- ✅ Tenant provisioning orchestration (PS-10) with pluggable post-actions
+- ✅ DB-per-tenant strategy planned (feature flag currently off: `platform.db-per-tenant.enabled`)
 - ✅ AWS Cognito OAuth2/OIDC authentication
 - ✅ JWT-based authorization with tenant context
-- ✅ Service discovery and load balancing
-- ✅ API Gateway with circuit breaker
-- ✅ Distributed tracing and metrics
-- ✅ Automated infrastructure provisioning
-- ✅ SSM Parameter Store for secrets
-- ✅ PostgreSQL with Flyway migrations
-- ✅ OpenAPI/Swagger documentation
+- ✅ Service discovery and gateway routing
+- ✅ API documentation (SpringDoc)
+- ✅ Flyway migrations (master registry)
+- ✅ Structured error responses (shared module partially)
 
 ---
 
@@ -62,51 +60,20 @@ Enterprise SaaS platform supporting multiple tenants with complete data isolatio
 
 ### High-Level Architecture Diagram
 ```
-[Angular Frontend] --(JWT)--> [API Gateway] --(JWT validated, headers added)--> [Auth Service | Backend Service] --(tenant context)--> [PostgreSQL]
-      |                                                                                                   |
-      |                                                                                                   |
-      +-------------------[Eureka Service Registry]-------------------+                                   |
-      |                                                                                                   |
-      +-------------------[AWS Cognito, SSM Parameter Store]----------+                                   |
+[Angular Frontend] --(JWT)--> [API Gateway] --> [Auth Service] (user session/JWT)
+                                    |\
+                                    | \--> [Platform Service] (tenant lifecycle, metadata)
+                                    |        |--> [PostgreSQL master DB] (tenants registry)
+                                    |        |--> [Tenant DBs] (tenant_db_<id>)
+                                    |--> [Backend Service] (domain logic, tenant-scoped)
 ```
 
-### Request Flow Sequence
-
-**1. User Login Flow:**
-```
-User → Frontend (4200) → Click "Login with Cognito"
-  ↓
-Gateway (8080/auth/oauth2/authorization/cognito) → Auth-Service (8081/auth/oauth2/authorization/cognito)
-  ↓
-Cognito Hosted UI (Modern Managed Login v2)
-  ↓
-User enters credentials → Cognito validates
-  ↓
-Cognito redirects to: http://localhost:8081/auth/login/oauth2/code/cognito
-  ↓
-Auth-Service exchanges code for tokens → Creates session (JSESSIONID)
-  ↓
-Auth-Service redirects to: http://localhost:4200/#/callback
-  ↓
-Frontend calls: http://localhost:8080/auth/tokens (with session cookie)
-  ↓
-Auth-Service extracts JWT from session → Returns JWT
-  ↓
-Frontend stores JWT in localStorage → Redirects to dashboard
-```
-
-**2. API Request Flow:**
-```
-User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
-                                   ↓
-                              Add Headers (X-Tenant-Id, X-User-Id)
-                                   ↓
-                              Backend-Service → TenantContextFilter
-                                   ↓
-                              Set schema: tenant_acme
-                                   ↓
-                              PostgreSQL (tenant_acme.entries)
-```
+### Request Flow Sequence (Simplified)
+1. User authenticates via Cognito → receives JWT.
+2. Frontend sends requests with JWT → Gateway validates.
+3. Gateway enriches headers (`X-Tenant-Id`, `X-User-Id`, `X-Request-Id`).
+4. Backend-service resolves tenant and uses routing (future: dynamic DataSource per tenant DB).
+5. Platform-service responsible for creating tenant metadata row + provisioning dedicated DB + running migrations.
 
 ---
 
@@ -203,24 +170,18 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
   - `/api/**` → lb://backend-service
 
 ### Backend Service (Port 8082)
-- Multi-tenant business logic
-- Schema-per-tenant data isolation
-- CRUD APIs
+- Domain APIs (CRUD, business operations)
+- Will consume platform-service tenant metadata & connect to corresponding tenant DB (future dynamic DataSource)
 
 ### Platform Service (Port 8083)
-- Central authority for tenant lifecycle and provisioning (schema/database per tenant)
-- Servlet Context Path: `/platform`
-- Per-tenant schema provisioning implemented (PS-10 DONE)
-- Migration history tracking implemented
-- Metrics counters & timer added (provision attempts/success/failure, migration duration)
-- Admin account creation in Cognito for new tenants (planned)
-- Policy storage and decision API (planned)
-- Internal token issuance (planned) with JWK endpoint
+- Central authority for tenant lifecycle & provisioning
+- Context path: `/platform`
+- Swagger UI: `http://localhost:8083/platform/swagger-ui.html`
 - Endpoints:
-  - `POST /platform/api/tenants` – Provision tenant (schema mode active; database mode feature-flagged)
-  - `GET /platform/api/tenants/{id}` – Tenant metadata
-  - `GET /platform/actuator/health` – Health check
-  - Swagger UI: `/platform/swagger-ui.html`
+  - `POST /platform/api/tenants` – Provision tenant
+  - `GET /platform/api/tenants/{id}` – Get tenant metadata
+- Pluggable post-provision actions implemented (SOLID pipeline): Storage, MigrationHistory, AdminUserSeed (placeholder), AuditLog
+- Metrics: attempts/success/failure counters
 
 ---
 
@@ -243,10 +204,65 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 <a id="database--multi-tenancy"></a>
 ## Database & Multi-Tenancy
-- PostgreSQL 16-alpine
-- Schema-per-tenant isolation
-- Flyway for migrations
-- Hibernate multi-tenancy
+
+### Strategy Evolution
+| Phase | Strategy | Notes |
+|-------|----------|-------|
+| Current | Single master DB + per-tenant metadata | Registry & provisioning only |
+| Transition | Database-per-tenant (DB-per-tenant) | Feature flag controlled, improved isolation (DB creation implemented) |
+| Future | Hybrid (DB-per-tenant + optional shared analytics DB) | Aggregation patterns |
+
+### Master DB Tables
+- `tenant` (id, name, status, storage_mode, sla_tier, jdbc_url, last_migration_version, created_at, updated_at)
+- `tenant_migration_history` (id, tenant_id, version, applied_at, status, notes)
+
+### Tenant DB Naming Convention
+`tenant_<id>` (sanitized, truncated to 63 chars). Example: `tenant_acme123`.
+
+### Provisioning Flow (DB-per-tenant)
+```
+POST /platform/api/tenants
+  → Validate uniqueness
+  → Insert tenant row (status=PROVISIONING)
+  → Create dedicated Postgres database (tenant_<id>) via admin connection (autocommit, outside transaction)
+  → Run baseline Flyway migrations against new DB (currently uses shared location)
+  → Record migration history (tenant_migration_history)
+  → Update lastMigrationVersion
+  → Mark status=ACTIVE
+  → Return TenantDto
+```
+
+### Migration Layering & Split Rationale (Planned)
+Current state: Both platform master schema and per-tenant baseline use a single Flyway location (`classpath:db/migration`).
+
+Problems with single shared location:
+1. Version Collision – Platform evolution (V2__add_global_table.sql) can unintentionally shift tenant baseline ordering.
+2. Coupled Release Cadence – Every tenant provisioning implicitly depends on platform deployment cadence; harder to roll tenant-only changes.
+3. Limited Tier Customization – PREMIUM / REGION-specific tables cannot be conditionally applied cleanly without branching logic inside scripts.
+4. Upgrade Complexity – Retrofitting new optional modules to existing tenants needs separate evolution path; shared location obscures intent.
+5. Audit Clarity – Harder to differentiate platform vs tenant structural versions when investigating incidents.
+
+Planned split:
+- Platform migrations: `classpath:db/platform` (tables used only by platform-service, registry, policy, internal token keys).
+- Tenant base migrations: `classpath:db/tenant/base` (core domain tables each tenant requires).
+- Optional layers (feature/tier/region):
+  - `classpath:db/tenant/tier/premium`
+  - `classpath:db/tenant/feature/audit`
+  - `classpath:db/tenant/region/eu`
+
+Execution strategy:
+- Master DB continues using Spring Boot Flyway auto-run against `db/platform`.
+- Tenant provisioning composes a dynamic list of locations based on SLA tier & feature flags, invoking Flyway manually per tenant DB.
+- Each tenant has independent version sequence recorded in `tenant_migration_history` (baseline + applied versions).
+
+Safeguards:
+- Repeatable migrations (R__) for data seeds idempotent across tenants.
+- Strict additive DDL in tenant scripts to avoid destructive operations at provision time.
+- Feature flags gate inclusion of optional locations.
+
+### Future DataSource Routing
+- Dynamic `AbstractRoutingDataSource` keyed by tenant ID
+- Lazy creation + bounded pool (max 5 connections per tenant) with eviction policy
 
 ---
 
@@ -269,8 +285,10 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 
 <a id="api-documentation"></a>
 ## API Documentation
-- SpringDoc OpenAPI 2.8.13
-- Swagger UI at `/swagger-ui.html` for each service
+- SpringDoc OpenAPI
+- Platform-service docs: `/platform/v3/api-docs`
+- Swagger UI (platform-service): `/platform/swagger-ui.html`
+- Backend-service docs: `/v3/api-docs` (context path not set)
 
 ---
 
@@ -279,11 +297,14 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 - JUnit 5, Mockito, AssertJ for unit tests
 - Testcontainers for integration tests
 - Cypress/Playwright for frontend e2e
-### Platform-Service Tests
-- Unit: Tenant provisioning happy path + duplicate ID conflict
-- Integration: Provisioning via Testcontainers (`BaseIntegrationTest` abstraction)
-- Metrics verification pending (future PS-14) for histogram & status breakdown
-- Upcoming: DATABASE mode rejection test, PROVISION_ERROR retry test, per-schema migration invocation test
+### Platform-Service Provisioning Tests (Update)
+| Test | Coverage |
+|------|----------|
+| Happy path provisioning | ✅ |
+| Duplicate tenant ID | ✅ |
+| Action chain order | ✅ (Ordered actions enforced by @Order) |
+| Failure rollback | ⚠️ Pending simulation test |
+| DB-per-tenant flag disabled | ⚠️ Pending feature flag test |
 
 ---
 
@@ -292,6 +313,16 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 - Prometheus, Grafana (planned)
 - Distributed tracing (planned)
 - Centralized logging (planned)
+
+### Metrics (Current)
+- `platform.tenants.provision.attempts`
+- `platform.tenants.provision.success`
+- `platform.tenants.provision.failure`
+
+### Metrics (Planned)
+- `platform.tenants.count{status}`
+- `platform.tenants.provision.duration{storageMode}`
+- `platform.tenants.migration.time{version}`
 
 ---
 
@@ -308,47 +339,32 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 ---
 
 <a id="known-issues--todos"></a>
-## Known Issues & TODOs
-- [x] Frontend authentication flow with Angular
-- [x] OAuth2 callback URL configuration with servlet context path
-- [x] Health check configuration for Docker services
-- [x] Tenant provisioning core (PS-10)
-- [x] Backend tenant provisioning cleanup (PS-16 partial)
-- [x] Backend Swagger CSP fix
-- [ ] Admin user creation (PS-11)
-- [ ] Policy engine & decision API (PS-12)
-- [ ] Internal service token issuance (PS-13)
-- [ ] Extended observability (tracing spans + additional metrics) (PS-14)
-- [ ] Retry endpoint & error recovery flows (PS-15)
-- [ ] Gateway tenant logic cleanup (PS-16 continuation)
-- [ ] Shared platform-client adoption (PS-17)
-- [ ] Entry management UI (CRUD operations)
-- [ ] ECS/ECR deployment automation
-- [ ] Full CI/CD pipeline
-- [ ] Advanced monitoring and tracing
-- [ ] Tenant onboarding automation UI
+## Known Issues & TODOs (Updated 2025-11-15)
+- [x] PS-10 Tenant provisioning action pipeline
+- [x] DB creation path (DATABASE mode) with autocommit outside transaction
+- [ ] Split Flyway migration locations (platform vs tenant) – design approved
+- [ ] Dynamic location composition (tier/feature/region) in `MigrationHistoryAction`
+- [ ] Enable and validate retry endpoint for PROVISION_ERROR (PS-15)
+- [ ] Backend dynamic DataSource routing (PS-16)
+- [ ] Policy engine implementation (PS-12)
+- [ ] Internal token issuance (PS-13)
 
 ---
 
 <a id="flow-verification--implementation-gaps"></a>
 ## Flow Verification & Implementation Gaps
-### Updated (2025-11-14)
-| Area | Current State | Gap / Risk | Action |
-|------|---------------|------------|--------|
-| Backend Endpoint Protection | Permissive (temporary) | Needs defense-in-depth | Switch to authenticated() after internal tokens (PS-13) |
-| Swagger/OpenAPI Exposure | Accessible & CSP relaxed | Inline styles allowed | Introduce nonce/CSP tightening (post UI stabilization) |
-| Error Schema Consistency | Platform unified / Backend uses shared | Gateway variance remains | Normalize gateway error contract |
-| CORS Origins | Single origin | Multi-env blocking | Externalize origins to SSM list |
-| Request Correlation | Basic requestId | No test coverage | Add correlation tests |
-| DATABASE Mode | Disabled by flag | Unimplemented path | Implement & test (PS-14) |
-| Per-schema Domain Migrations | Placeholder only | Domain tables not migrated | Programmatic per-schema Flyway (PS-14) |
-| Retry Provisioning | Missing | Manual remediation | Add retry endpoint (PS-15) |
-| Audit Events | Logging only | No event pipeline | Kafka/SNS publisher (PS-14) |
-| PlatformClient | Not present | Direct coupling risk | Implement shared REST client (PS-17) |
+...existing code...
 
-### Resolved Items (Removed from Gap List)
-- Tenant provisioning orchestration (schema mode) implemented
-- Migration history persistence operational
+### Newly Addressed
+- Autocommit CREATE DATABASE outside transactional boundary.
+- Credential injection fix for per-tenant migrations (using `spring.datasource.username/password`).
+
+### Pending Gaps (Migration Split)
+| Gap | Impact | Plan |
+|-----|--------|------|
+| Shared migration location | Version coupling | Introduce layered directories & dynamic Flyway invocation |
+| No tier-based schema | Premium feature delay | Add conditional location inclusion by SLA |
+| No feature flag gating per migration set | Risk of premature rollout | Properties to enable optional locations |
 
 ---
 
@@ -356,133 +372,20 @@ User (JWT) → Frontend → Gateway → Validate JWT → Extract tenant_id
 ## ADRs
 - [ADR 0001: Gateway-Centric Identity & Authorization Enforcement](docs/adr/0001-gateway-identity-enforcement.md)
 
----
+### Upcoming ADRs
+| ADR | Topic |
+|-----|-------|
+| 0004 | Database-per-tenant vs schema-per-tenant choice |
+| 0005 | Migration layering strategy & dynamic location composition |
+| 0006 | Dynamic DataSource routing strategy |
 
-<a id="semantic-commits--edge-cases"></a>
-## Semantic Commits & Edge Cases (NT-20)
-
-### Commit Strategy (Canonical Prefixes)
-`feat:` new feature; `fix:` bug fix; `refactor:` structural change; `chore:` maintenance/build; `docs:` documentation; `test:` tests only; `perf:` performance; `style:` formatting; `build:` build system; `ci:` pipeline; `revert:` rollback.
-
-Rules:
-- Use scope: `feat(gateway): enforce tenant conflict error (NT-01)`
-- Imperative mood; one concern per commit.
-- Reference task IDs (NT-XX) in subject or body.
-- Multi-module change: list touched services in body.
-
-### Critical Edge Case Summary (Full table in `next_task.md` NT-20)
-| ID | Scenario | Expected |
-|----|----------|----------|
-| EC-01 | Missing tenant claim | 403 TENANT_MISSING (gateway) |
-| EC-02 | Multiple tenant groups | 400 TENANT_CONFLICT |
-| EC-03 | Invalid tenant format | 400 TENANT_INVALID_FORMAT |
-| EC-07 | Missing X-Request-Id | Generated UUID reused in logs/response |
-| EC-09 | /auth/tokens null principal | 401 UNAUTHORIZED JSON |
-| EC-12 | Missing Cognito property | Startup abort (fail fast) |
-| EC-14 | Backend missing tenant header | 403 TENANT_MISSING |
-| EC-15 | Backend invalid tenant format | 400 TENANT_INVALID_FORMAT |
-| EC-28 | Token refresh includes refreshToken | Field present & distinct access/id |
-| EC-30 | Tenant length =3 | Accepted |
-| EC-31 | Tenant length =64 | Accepted |
-| EC-32 | Tenant length >64 | 400 TENANT_INVALID_FORMAT |
-| EC-33 | Invalid token /api/** | 401 UNAUTHORIZED JSON |
-| EC-34 | Forbidden action | 403 ACCESS_DENIED JSON |
-
-Deferred / flagged edge cases documented for future hardening: HMAC signature validation, internal token minting, direct backend bypass (EC-25), observability metrics (EC-26).
-
-Refer to `next_task.md` NT-20 for exhaustive list and coverage mapping.
+## Immediate Next Steps (Execution Queue)
+1. Create migration directory split: `db/platform` & `db/tenant/base` (+ placeholders).
+2. Refactor `TenantMigrationRunner` to accept dynamic location list.
+3. Update `MigrationHistoryAction` to build location list (tier/feature flags).
+4. Add integration test for premium tier provisioning applying extra migration.
+5. Draft ADR 0005 and update plan references.
 
 ---
 
-## Naming Conventions
-- Controllers: `*Controller.java`
-- Services: `*.service.ts`
-- Tests: `*.spec.ts`, `*Test.java`
-- Config: `application-<env>.yml`
-
----
-
-## Test Coverage Map
-- Auth Service: 80%+ unit/integration
-- Backend Service: 85%+ unit/integration
-- Gateway: 85%+ integration & unit (tenant extraction, header sanitization, request id, logging)
-- Frontend: 80%+ unit/e2e
-
----
-
-## Auth/Security Approach
-- All external APIs secured with JWT
-- User/tenant context propagated via headers
-- SSM Parameter Store for secrets
-- No JPA entities exposed externally
-
----
-
-## 📄 Documentation File Pattern
-
-**IMPORTANT:** Always update existing .md files rather than creating new ones for each change.
-
-### Standard Documentation Files
-
-1. **copilot-index.md** (This file)
-   - Single source of truth for project overview
-   - Architecture, technology stack, project structure
-   - High-level documentation
-   - Update after every significant architectural change
-
-2. **CURRENT_STATUS.md**
-   - Current implementation status
-   - What's working, what's next
-   - Service configuration details
-   - Recent fixes and troubleshooting
-   - Quick reference for developers
-   - Update after completing features or fixing issues
-
-3. **IMPLEMENTATION_TASKS.md**
-   - Detailed task tracking
-   - Implementation progress
-   - Technical decisions
-   - Update as tasks are completed
-
-4. **HLD.md** (High-Level Design)
-   - System architecture
-   - Design decisions
-   - Component interactions
-   - Update when architecture changes
-
-5. **README.md**
-   - Getting started guide
-   - Quick setup instructions
-   - Basic usage
-   - Keep concise and user-friendly
-
-### Documentation Rules
-
-- ✅ **DO:** Update existing files with new information
-- ✅ **DO:** Keep related information together in the same file
-- ✅ **DO:** Use clear section headers for easy navigation
-- ❌ **DON'T:** Create new .md files for each change
-- ❌ **DON'T:** Duplicate information across multiple files
-- ❌ **DON'T:** Create temporary or one-off documentation files
-
-### When to Create New Files
-
-Only create new documentation files for:
-- New major features that need dedicated documentation
-- API documentation (e.g., API_REFERENCE.md)
-- Deployment guides (e.g., DEPLOYMENT.md)
-- Contributing guidelines (e.g., CONTRIBUTING.md)
-
----
-
-## Update Policy
-- This file is the single source of truth for project overview
-- Update after every significant architectural or flow change
-- Always prefer updating existing files over creating new ones
-- Remove all duplicates and consolidate information
-
----
-
-<a id="adrs"></a>
-## ADRs
-- [ADR 0001: Gateway-Centric Identity & Authorization Enforcement](docs/adr/0001-gateway-identity-enforcement.md)
+**End of copilot-index.md**

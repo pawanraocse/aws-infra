@@ -1,11 +1,11 @@
 # Platform Service Plan (Tenant & Policy Core)
 
-**Version:** 1.0  
-**Date:** 2025-11-12  
+**Version:** 1.1  
+**Date:** 2025-11-14  
 **Owner:** Platform Architecture  
 
 ## 1. Purpose
-Introduce a dedicated `platform-service` microservice to centralize multi-tenant lifecycle, provisioning logic, tenant metadata, database allocation (schema or database mode), policy/permission management, internal token issuance, and cross-cutting observability hooks. This reduces duplication in domain services (`backend-service`, future `logic-service`) and strengthens isolation/security.
+Centralize multi-tenant lifecycle, provisioning logic, tenant metadata, database-per-tenant allocation (preferred isolation), policy/permission management, internal token issuance, and cross-cutting observability hooks. Reduces duplication in domain services and strengthens isolation/security.
 
 ## 2. Drivers
 | Driver | Problem Today | Platform-Service Benefit |
@@ -13,7 +13,7 @@ Introduce a dedicated `platform-service` microservice to centralize multi-tenant
 | Tenant Provisioning | Mixed in backend admin controller | Clear lifecycle API + audit |
 | DB-per-tenant migration | Manual orchestration risk | Automated provisioning & migration engine |
 | Policy/Authorization | Planned but absent | Single source of truth + versioning |
-| Internal Trust Model | Header spoof reliance | Issue signed internal service tokens / assertions |
+| Internal Trust Model | Header spoof reliance | Signed internal service tokens |
 | Audit & Compliance | Scattered logs | Central audit event pipeline |
 | Scaling New Services | Each reimplements tenant logic | Reuse via platform APIs and shared module |
 
@@ -21,86 +21,203 @@ Introduce a dedicated `platform-service` microservice to centralize multi-tenant
 | Category | Responsibility |
 |----------|----------------|
 | Tenant Lifecycle | Create, activate, suspend, archive, delete tenants |
-| Provisioning | Schema creation OR database allocation + Flyway migrations |
-| Admin Account Creation | Create initial admin user in Cognito for each new tenant; assign to tenant group; seed ADMIN role and permissions |
-| Metadata Registry | Store tenant state, storage mode, DB credentials refs, limits, SLA tier |
-| Policy Management | CRUD roles, permissions, resource-action mappings, feature flags per tenant |
-| Token Issuance (Internal) | Mint short-lived signed service tokens (JWT or opaque) for gateway→service trust |
-| Audit Events | Emit structured tenant/user lifecycle events (Kafka/SNS) |
-| Quotas & Limits | Track usage metrics (API calls, storage) enforce thresholds |
-| Key Management (Future) | Associate KMS keys per tenant for encryption contexts |
-| Health & Diagnostics | Tenant-level health summaries (DB reachable, migrations status) |
+| Provisioning | Database-per-tenant OR schema (fallback) + baseline migrations |
+| Admin Account Creation | Seed initial admin user & role in Cognito |
+| Metadata Registry | Store tenant state, storage mode, JDBC URL, SLA tier, migration version |
+| Policy Management | CRUD roles, permissions, resource-action mappings |
+| Internal Token Issuance | Mint short-lived signed service tokens |
+| Audit Events | Emit structured lifecycle events |
+| Quotas & Limits | Track usage metrics and enforce limits |
+| Health & Diagnostics | Tenant DB connectivity + migration status |
 
-Out-of-Scope (initial phase): Real-time billing, per-tenant report generation, cross-tenant analytics.
+Out-of-Scope (initial): Real-time billing, cross-tenant analytics.
 
 ## 4. Interaction Diagram (Conceptual)
 ```
-[ Gateway ] --(AuthN JWT)--> [ Auth-Service ] (User session / tokens)
+[ Gateway ] --(JWT)--> [ Auth-Service ]
      |\
-     | \--(Tenant/Policy lookup + internal token request)--> [ Platform-Service ]
-     |                     |
-     |                     \--(DB provisioning + metadata)--> [ PostgreSQL / RDS ]
-     |--(Enriched headers + internal token)--> [ Backend-Service / Logic-Service ]
+     | \--> [ Platform-Service ] --(Provision / Metadata)---> [ Master DB ]
+     |                                  \--> [ Tenant DBs ] (tenant_<id>)
+     |--> [ Backend-Service ] --(tenant routing)--> [ Tenant DB ]
 ```
 
-## 5. APIs (Draft)
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | /api/tenants | Provision new tenant (schema or DB); create initial admin user in Cognito; assign to tenant group; seed ADMIN role |
-| GET | /api/tenants/{id} | Retrieve tenant metadata |
-| PATCH | /api/tenants/{id}/suspend | Suspend tenant (write lock) |
-| PATCH | /api/tenants/{id}/activate | Reactivate tenant |
-| DELETE | /api/tenants/{id} | Archive/delete (soft delete first) |
-| GET | /api/tenants/{id}/health | DB connectivity & migration status |
-| POST | /api/tenants/{id}/migrate-storage | Switch schema→database or vice versa (controlled) |
-| GET | /api/policies | List role → permissions mappings |
-| POST | /api/policies | Create/update policy document (JSON DSL) |
-| GET | /api/policies/resolve?role=...&resource=...&action=... | Policy decision API (internal) |
-| POST | /api/internal-tokens | Issue internal service token (gateway only) |
+## 5. APIs (Initial Delivered + Planned)
+| Method | Path | Purpose | Status |
+|--------|------|---------|--------|
+| POST | /api/tenants | Provision new tenant | ✅ (PS-10) |
+| GET | /api/tenants/{id} | Retrieve tenant metadata | ✅ |
+| PATCH | /api/tenants/{id}/suspend | Suspend tenant | Planned |
+| PATCH | /api/tenants/{id}/activate | Reactivate tenant | Planned |
+| DELETE | /api/tenants/{id} | Archive/delete | Planned |
+| GET | /api/tenants/{id}/health | DB & migration status | Planned |
+| POST | /api/tenants/{id}/retry | Retry failed provisioning | Planned (PS-15) |
+| POST | /api/tenants/{id}/migrate-storage | schema ↔ database | Planned |
+| POST | /api/internal-tokens | Issue internal service token | Planned (PS-13) |
+| GET | /api/policies | List policies | Planned (PS-12) |
+| POST | /api/policies | Create/update policy | Planned (PS-12) |
+| GET | /api/policies/resolve | Policy decision | Planned (PS-12) |
 
-## 6. Data Model (Core Tables / Entities)
+## 6. Data Model (Master DB)
 `tenant`:
 - id (PK)
 - name
 - status (ACTIVE, SUSPENDED, ARCHIVED, PROVISION_ERROR)
-- storage_mode (SCHEMA, DATABASE)
-- jdbc_url (nullable if schema mode)
-- db_user_secret_ref
-- created_at / updated_at
+- storage_mode (DATABASE, SCHEMA)
+- jdbc_url (nullable if SCHEMA)
 - sla_tier (STANDARD, PREMIUM)
 - last_migration_version
+- created_at / updated_at
 
 `tenant_migration_history`:
-- id, tenant_id, version, started_at, ended_at, status, notes
+- id, tenant_id, version, applied_at, status (SUCCESS/FAILED), notes
 
-`policy_document`:
-- id, tenant_id (nullable for global), version, created_at, json_blob (full permission matrix)
+Future tables: `policy_document`, `internal_token_signature_key`, `tenant_quota`.
 
-`internal_token_signature_key` (future for rotation):
-- id, current_key_id, next_key_id, rotated_at
+## 7. Provisioning Strategy
+### Action Chain Pattern (SOLID)
+Each provisioning step is encapsulated in a `TenantProvisionAction` implementation with single responsibility:
+| Action | Responsibility | Order |
+|--------|----------------|-------|
+| StorageProvisionAction | Physical DB / schema creation and JDBC URL assignment | 10 |
+| MigrationHistoryAction | Baseline migration tracking record creation | 20 |
+| AdminUserSeedAction | Cognito admin user & role seed | 30 |
+| AuditLogAction | Emit audit event | 90 |
 
-`tenant_quota`:
-- tenant_id, api_call_limit, storage_limit_gb, period_start, period_end, usage_api_calls, usage_storage_gb
+- Orchestration performed by `TenantProvisioningServiceImpl`: loops ordered list.
+- Fail-fast: On exception, status set to `PROVISION_ERROR`; counters updated; error logged.
+- Extensibility: Adding new post-actions only requires a new bean with `@Order` and implementation; no modification of existing logic (Open/Closed Principle).
 
-## 7. Internal Token Strategy (Phase 2)
+### Database-per-Tenant (Preferred Isolation)
+Flow when `storageMode=DATABASE` and flag `platform.db-per-tenant.enabled=true`:
+```
+1. Insert tenant row (status=PROVISIONING)
+2. Create dedicated database (e.g., tenant_a12bcdef) via admin connection
+3. Run Flyway baseline migrations against tenant DB
+4. Record migration history, update lastMigrationVersion
+5. Execute admin seed & audit actions
+6. Mark status=ACTIVE
+```
+If flag disabled and request asks for DATABASE mode → validation error (400).
+
+### Schema Mode (Fallback / Legacy)
+Used only if full DB creation not yet enabled; same action pipeline except DB creation replaced by schema creation.
+
+### 7.1 On-Demand Per-Service Tenant Migrations (NT-23 Design)
+**Decision (NT-23):** Platform-service provisions an empty per-tenant database; each domain microservice (e.g., backend-service) owns and applies its own Flyway migrations **on demand** via an internal endpoint: `POST /internal/tenants/{tenantId}/migrate`.
+
+**Why Change from Previous Baseline Approach?**
+- Avoids coupling tenant domain schema evolution to platform-service deployment cycles.
+- Preserves microservice autonomy (each service version controls only its tables).
+- Eliminates startup migration overhead for all tenants (migrations run once per tenant per service).
+- Simplifies rollback (platform only manages control-plane metadata; data-plane failures isolated to service).
+
+**Responsibilities Split**
+| Component | Responsibility |
+|-----------|----------------|
+| Platform-Service | Create DB, persist tenant metadata (jdbcUrl, storageMode, SLA), trigger service migrations (synchronous REST for now) |
+| Backend-Service (and future services) | Programmatic Flyway migrate against tenant DB when triggered; idempotent endpoint; owns its DDL/R__ seeds |
+| Future Async Layer (Deferred) | Event bus (Kafka) for decoupled migration triggers |
+
+**Flow (DATABASE mode)**
+```
+1. Request: POST /api/tenants { id, name, storageMode=DATABASE, slaTier }
+2. Platform: Insert tenant row (status=PROVISIONING)
+3. Platform: CREATE DATABASE tenant_<id>
+4. Platform: Save jdbcUrl, mark status=PROVISIONED_NO_SCHEMA
+5. Platform: Call backend-service /internal/tenants/{id}/migrate (and other services later)
+6. Backend-service: Runs Flyway (classpath:db/migration for its domain), responds success with lastVersion
+7. Platform: Update tenant row (last_migration_version=<backend version>), status=ACTIVE (or ACTIVE_PARTIAL if multi-service pending)
+8. Return TenantDto to caller
+```
+
+**Status Model Update**
+Add new statuses:
+- `PROVISIONED_NO_SCHEMA` – DB created, no domain migrations yet.
+- `MIGRATION_ERROR` – At least one service migration failed; retry possible.
+- `ACTIVE_PARTIAL` – Some required services migrated, others pending (optional future multi-service nuance).
+
+**Per-Service Migration Tracking (Planned)**
+Introduce new master table `tenant_service_migration_status` (future NT-24):
+```
+tenant_id VARCHAR, service_name VARCHAR, status (PENDING|IN_PROGRESS|SUCCESS|ERROR), last_version VARCHAR, attempts INT, last_started_at TIMESTAMP, last_completed_at TIMESTAMP, error_message TEXT
+```
+Initial implementation (NT-23) may inline success into tenant row (single-service scenario) before multi-service expansion.
+
+**Internal Endpoint Contract (Service Side)**
+```
+POST /internal/tenants/{tenantId}/migrate
+Response 200: { "lastVersion": "V5" }
+Error 500: Standard error schema (code=MIGRATION_FAILED)
+```
+Idempotent: second call when already current returns same lastVersion without side effects.
+
+**Error Handling**
+- Platform treats non-2xx from service as migration failure → tenant status MIGRATION_ERROR.
+- Retry path: future endpoint `POST /api/tenants/{id}/retry` will re-trigger migration sequence only for failed services.
+
+**Security (Placeholder)**
+Internal calls currently rely on network trust; will migrate to signed internal token (Phase 2) or mTLS.
+
+**Metrics (Minimum)**
+- `platform.tenants.migration.trigger.attempts`
+- `platform.tenants.migration.trigger.success`
+- `platform.tenants.migration.trigger.failure`
+- Service side: `tenant.migration.duration{service}` timer + success/failure counters.
+
+**Logging (Structured)**
+- Platform: `tenant_db_create_success tenantId=... dbName=...`, `tenant_migration_trigger tenantId=... service=backend-service`, `tenant_migration_failed tenantId=... service=backend-service error=...`
+- Service: `tenant_migration_start tenantId=...`, `tenant_migration_success tenantId=... version=... durationMs=...`, `tenant_migration_error tenantId=... error=...`
+
+**Fallback**
+If migration call fails (network/service down): leave status PROVISIONED_NO_SCHEMA, allow later manual retry.
+
+### Migration Layering Strategy (Planned Enhancement)
+Current implementation runs tenant migrations from the same Flyway location as platform master migrations. We will separate concerns:
+
+Layers:
+| Layer | Location | Purpose |
+|-------|----------|---------|
+| Platform Core | `classpath:db/platform` | Platform service registry, policy, internal token tables |
+| Tenant Base | `classpath:db/tenant/base` | Mandatory per-tenant domain tables |
+| Tenant Tier (Premium) | `classpath:db/tenant/tier/premium` | SLA-specific enhancements |
+| Tenant Feature (Audit) | `classpath:db/tenant/feature/audit` | Optional modules gated by flags |
+| Tenant Region (EU) | `classpath:db/tenant/region/eu` | Regional compliance adjustments |
+
+Rationale:
+- Avoid platform vs tenant version collisions.
+- Support tier/feature-specific schema evolution cleanly.
+- Independent cadence: tenant features can ship without platform redeploy.
+- Improved audit trail: separate history tables and clearer version lineage.
+
+Execution Changes:
+- Master DB uses Spring Boot Flyway auto-run pointing only to `db/platform`.
+- Tenant provisioning dynamically composes Flyway locations list based on SLA + feature flags and invokes manual migrate per tenant DB.
+- `tenant_migration_history` records independent version sequence per tenant.
+
+Safeguards & Guidelines:
+- All tenant migrations additive (no DROP) during provisioning.
+- Idempotent repeatable scripts (R__*.sql) for data seeds.
+- Feature/location inclusion behind properties: `platform.migrations.tier.premium.enabled`, etc.
+
+## 8. Internal Token Strategy (Phase 2)
 - Issued by Platform-Service upon gateway request (after successful user JWT validation).
 - Contains: userId, tenantId, roles, issuedAt, expiry (~2-5 min), audience=[service-name], signature (rotating key).
 - Domain services validate signature using cached JWK served by platform-service (`/api/jwks/internal`).
 
-## 8. Migration from Current State
+## 9. Migration from Current State
 | Step | Action |
 |------|--------|
 | 1 | Create platform-service module (Spring Boot) + registry tables |
-| 1a | Implement admin account creation logic: call Cognito AdminCreateUser, assign to tenant group, seed ADMIN role/permissions |
-| 2 | Move tenant provisioning endpoints from backend-service → platform-service |
-| 3 | Introduce platform-shared module (ErrorResponse, header constants, policy DTOs) |
-| 4 | Gateway: add policy decision call before routing protected endpoints (feature-flag) |
-| 5 | Add internal token issuance endpoint & gateway integration (optional early flag) |
-| 6 | Deprecate backend direct provisioning controller; keep read-only tenant info fallback (feature flag) |
-| 7 | Implement storage mode migration path (schema ↔ database) |
-| 8 | Document and add ADR for internal token model |
+| 2 | Implement DB-per-tenant database creation (DONE) |
+| 3 | Split migration directories (platform vs tenant) (PLANNED) |
+| 4 | Refactor migration runner for dynamic locations (PLANNED) |
+| 5 | Move tenant provisioning endpoints from backend-service → platform-service (DONE) |
+| 6 | Introduce admin account creation action (PLANNED) |
+| 7 | Policy engine & decision API (PLANNED) |
+| 8 | Internal token issuance endpoint & JWK (PLANNED) |
+| 9 | Retry provisioning endpoint (PLANNED) |
 
-## 9. Required Changes (Existing Services)
+## 10. Required Changes (Existing Services)
 | Service | Change |
 |---------|--------|
 | Gateway-Service | Add client for policy decision & internal token request; cache decisions; feature flags: `gateway.policy.enabled`, `gateway.internal-token.enabled` |
@@ -109,7 +226,7 @@ Out-of-Scope (initial phase): Real-time billing, per-tenant report generation, c
 | Future Logic-Service | Same pattern as backend-service (stateless header + internal token validation) |
 | Shared Module | Introduce `platform-shared` with DTOs: TenantDto, PolicyDecisionRequest/Response, ErrorResponse, InternalTokenClaims |
 
-## 10. Shared Module Contents (Initial)
+## 11. Shared Module Contents (Initial)
 - `TenantDto` (id, name, status, storageMode, slaTier)
 - `ProvisionTenantRequest` (name, storageMode, slaTier)
 - `PolicyDecisionRequest` (tenantId, roleSet, resource, action, attributes map)
@@ -118,7 +235,7 @@ Out-of-Scope (initial phase): Real-time billing, per-tenant report generation, c
 - `ErrorResponse` (standard schema)
 - `HeaderNames` (constants)
 
-## 11. Policy DSL (Example JSON)
+## 12. Policy DSL (Example JSON)
 ```json
 {
   "version": 1,
@@ -131,16 +248,16 @@ Out-of-Scope (initial phase): Real-time billing, per-tenant report generation, c
 }
 ```
 
-## 12. Feature Flags (New)
+## 13. Feature Flags
 | Flag | Default | Purpose |
 |------|---------|---------|
-| `gateway.policy.enabled` | false | Enable policy decision before routing |
-| `gateway.internal-token.enabled` | false | Replace raw user headers with signed internal token |
-| `platform.db-per-tenant.enabled` | false | Allow provisioning new tenants with dedicated DB |
-| `platform.policy.edit.enabled` | true | Permit updating policy docs |
-| `platform.internal-token.jwk-rotate.enabled` | false | Enable key rotation automation |
+| `platform.db-per-tenant.enabled` | false | Enable DB create path in storage action |
+| `platform.tenant.provisioning.enabled` | true | Allow provisioning endpoint |
+| `platform.tenant.database-mode.enabled` | false | Accept requests with `storageMode=DATABASE` |
+| `platform.audit.enabled` | false | Emit audit events externally |
+| `platform.internal-token.enabled` | false | Issue internal tokens |
 
-## 13. Observability Additions
+## 14. Observability Additions
 - Metrics:
   - `platform.tenants.count{status}`
   - `platform.provision.duration{storageMode}`
@@ -150,184 +267,81 @@ Out-of-Scope (initial phase): Real-time billing, per-tenant report generation, c
 - Logs: Structured `platform_event` lines for provisioning, migration, policy updates.
 - Tracing: Add trace/span decorators for provisioning flows.
 
-## 14. Security Considerations
+## 15. Security Considerations
 | Concern | Mitigation |
 |---------|------------|
-| Privilege escalation via policy API | Strict role requirement + versioned policy changes + audit events |
-| Token forgery | JWKS served with rotation + short TTL internal tokens |
-| Tenant DB credential leakage | Store only secret reference; fetch at runtime with least-privileged IAM role |
-| Migration races | Lock tenant row during migration operations |
-| Excessive policy evaluations | Cache decisions in gateway (LRU, TTL ~60s) |
+| DB credential leakage | Store secret ref only in tenant row; fetch via IAM at runtime |
+| Provision race conditions | Row lock during provisioning (optimistic concurrency) |
+| Unauthorized provisioning | Require PLATFORM_ADMIN role (method security) + validate feature flags |
+| Migration script drift | Separate directories & ADR-defined governance |
 
-## 15. Rollout Strategy
+## 16. Rollout Strategy
 | Phase | Scope | Success Metric |
 |-------|-------|----------------|
-| P1 | Platform-service skeleton + tenant read APIs | Service healthy; registry mirrored |
-| P2 | Move provisioning + schema creation + admin account creation | 100% new tenants via platform-service; each tenant has initial admin user |
-| P3 | Policy storage + decision API | Gateway calling decision API for protected routes |
-| P4 | Internal token issuance & gateway integration | Reduced header surface; tokens validated |
-| P5 | DB-per-tenant provisioning | Selected tenants migrated successfully |
+| P1 | Basic provisioning (schema mode) | Tenants reachable; status=ACTIVE |
+| P2 | DB-per-tenant activation | New tenants use dedicated DB; zero cross-tenant queries |
+| P2a | Migration directory split | Independent versions; no collisions |
+| P3 | Policy engine | Gateway decisions enforced |
+| P4 | Internal tokens | Reduced trust surface |
+| P5 | Advanced observability | Dashboard covers provisioning/migrations |
 
-Rollback: Disable new features via flags; retain legacy provisioning path until decommissioned.
-
-## 16. ADRs to Add
+## 17. ADRs to Add
 | ADR | Topic |
 |-----|-------|
-| 0004 | Platform service introduction & boundaries |
-| 0005 | Policy decision DSL & evaluation strategy |
-| 0006 | Internal token vs HMAC decision |
-| 0007 | Database-per-tenant migration approach |
+| 0004 | Database-per-tenant vs schema-per-tenant choice |
+| 0005 | Provisioning action chain pattern |
+| 0006 | Dynamic DataSource routing strategy |
 
-## 17. Open Questions
+## 18. Open Questions
 | ID | Question |
 |----|----------|
-| Q1 | Policy evaluation caching strategy (size, eviction)? |
-| Q2 | Internal token format (JWT vs opaque + introspection)? |
-| Q3 | Key rotation interval for internal tokens? |
-| Q4 | Do we need multi-region active for platform-service first? |
-| Q5 | Resource naming standard for policies (noun vs URI)? |
-| Q6 | DB-per-tenant backup retention differences per SLA tier? |
+| Q1 | DB naming convention final format? (use short hash vs UUID) |
+| Q2 | How to handle tenant DB deletion safety (grace period)? |
+| Q3 | Per-tenant connection pool limits? |
+| Q4 | Retry strategy for transient creation failures? |
+| Q5 | Flyway script management for tenant DB upgrades? |
+| Q6 | SLA tier mapping to resource quotas? |
 
-## 18. Acceptance Criteria
-- Platform-service deployed with health & tenant read endpoint.
-- Backend provisioning removed after P2 (flag controlled).
-- Every new tenant is provisioned with an initial admin account in Cognito, assigned to the correct group, and seeded with ADMIN role/permissions.
-- Gateway can optionally call policy decision endpoint (flag). 
-- Internal token prototype documented & ADR approved before implementation.
-- Monitoring dashboards include platform-service tenant & migration metrics.
+## 19. Acceptance Criteria (Updated)
+- Tenant DB created per request when `storageMode=DATABASE` feature flag enabled.
+- Platform does **not** run domain Flyway migrations; only triggers service endpoints.
+- Backend-service migration endpoint runs Flyway programmatically and returns last applied version.
+- Tenant status progression: PROVISIONING → PROVISIONED_NO_SCHEMA → ACTIVE (single-service success) OR MIGRATION_ERROR on failure.
+- Duplicate tenant ID returns 409 with standard error schema.
+- Migration failures recorded (log + metrics); no partial silent activation.
+- Endpoint idempotency: re-trigger migrate for already migrated tenant returns current version without error.
+- Error responses follow standard error schema.
 
----
-
-## 19. Implementation & Progress Monitoring Plan
-
-This section details the step-by-step implementation of the platform-service, ensuring production-grade quality, traceability, and alignment with modern practices. Progress should be tracked and updated after each milestone.
-
-### Steps
-
-1. **Service Bootstrap & Project Setup**
-   - Create `platform-service/` module (Spring Boot 3.x, Java 21+).
-   - Add to root `pom.xml` as a new Maven module.
-   - Add Dockerfile for platform-service; update `docker-compose.yml` to include platform-service with healthcheck, environment variables, and network.
-   - Add Flyway dependency and configuration for DB migrations.
-   - Update copilot-index.md with new service entry and flow.
-
-2. **Core Data Model & Migrations**
-   - Implement entities: Tenant, TenantMigrationHistory, PolicyDocument, InternalTokenSignatureKey, TenantQuota.
-   - Write Flyway migration scripts for all tables.
-   - Seed baseline roles/permissions for new tenants.
-
-3. **API Layer & DTOs**
-   - Define DTOs for tenant provisioning, admin account creation, policy management, internal token issuance.
-   - Implement REST controllers for all endpoints in PLATFORM_SERVICE_PLAN.md (tenant lifecycle, policy CRUD, decision, internal tokens, health).
-   - Ensure OpenAPI documentation is generated and secured.
-
-4. **Tenant Provisioning Logic**
-   - Implement service logic for DB/schema creation per tenant.
-   - Integrate with AWS Cognito: create initial admin user, assign to tenant group, seed ADMIN role.
-   - Store DB credentials in AWS SSM Parameter Store.
-   - Emit audit events for all provisioning actions.
-
-5. **Policy & Authorization Engine**
-   - Implement policy document CRUD and evaluation logic (JSON DSL).
-   - Expose policy decision API for gateway-service integration.
-   - Cache decisions (Caffeine/Redis); emit events for changes.
-
-6. **Internal Token Issuance**
-   - Implement JWT minting for internal tokens, JWK endpoint for validation.
-   - Integrate with gateway-service for token issuance and validation.
-   - Add key rotation logic and feature flags.
-
-7. **Observability, Security, and Validation**
-   - Add structured logging (SLF4J + Logback), metrics (Micrometer), tracing (OpenTelemetry).
-   - Implement health endpoints and readiness/liveness probes.
-   - Enforce input validation, error handling, and audit trails.
-   - Secure all endpoints with JWT; validate tenant context.
-
-8. **Testing & Documentation**
-   - Write unit and integration tests (JUnit 5, Mockito, Testcontainers).
-   - Document all APIs, flows, and edge cases in copilot-index.md and ADRs.
-   - Update test coverage map and semantic commit history.
-
-9. **Infrastructure & Integration**
-   - Update `docker-compose.yml`:
-     - Add platform-service block with build context, ports, healthcheck, environment, and network.
-     - Ensure dependencies (PostgreSQL, SSM, Cognito) are available.
-   - Update root `pom.xml`:
-     - Add platform-service as a module.
-     - Add required dependencies (Spring Boot, Flyway, AWS SDK, JWT, OpenAPI, Micrometer).
-   - Ensure platform-service is included in CI/CD pipeline.
-
-10. **Progress Monitoring & Milestones**
-    - Track each step as a milestone in copilot-index.md and/or a dedicated progress file.
-    - Mark completion of: project setup, DB migrations, API endpoints, Cognito integration, policy engine, internal token, observability, tests, infra changes.
-    - Use semantic commits for traceability (e.g., `feat(platform): add tenant provisioning API (PS-01)`).
-    - Update documentation and test coverage after each milestone.
-
-### Further Considerations
-
-1. Should admin onboarding use email/SMS or manual activation? (recommend email with temp password)
-2. How will policy evaluation scale for large tenants? (recommend Redis/Caffeine hybrid cache)
-3. Should DB-per-tenant be default, or feature-flagged for premium tenants?
-4. Ensure rollback strategy for each major change (feature flags, legacy path retention).
-5. Document all integration points and update copilot-index.md after each significant change.
-
-## 19.1 Progress Tracker (Milestones)
-
+## 20. Progress Tracker (Milestones)
 | ID | Milestone | Status | Notes |
 |----|-----------|--------|-------|
-| PS-01 | Module scaffold (pom, application.yml, Dockerfile) | DONE | Compiles; added to docker-compose |
-| PS-02 | Flyway V1 migrations (registry tables) | DONE | pgcrypto enabled; separate Flyway table |
-| PS-03 | Basic REST API (POST /api/tenants, GET /api/tenants/{id}) | DONE | DTOs/controllers/services wired |
-| PS-04 | Eureka registration & health endpoint | DONE | Actuator health exposed; compose healthcheck |
-| PS-05 | OpenAPI config & Swagger UI | DONE | springdoc configured; context path `/platform` |
-| PS-06 | Security (OAuth2 resource server) | DONE | JWT issuer-uri configured; `/actuator/**`, docs permitted |
-| PS-06a | Swagger security allowance | DONE | `/swagger-ui.html`, `/swagger-ui/**`, `/webjars/**` permitted |
-| PS-07 | Docker Compose integration | DONE | `platform-service` block added |
-| PS-08 | Root pom module update | DONE | `platform-service` added to `<modules>` |
-| PS-09 | README & run instructions | DONE | Local run & health commands documented |
-| PS-10 | DB/schema provisioning logic | DONE | Implemented TenantProvisioner + TenantProvisioningService; per-tenant schema creation, migration history, Micrometer counters, Testcontainers integration |
-| PS-11 | Admin account creation (Cognito) | PENDING | Integrate AdminCreateUser + group assignment |
-| PS-12 | Policy storage & decision API | PENDING | CRUD + resolve endpoint |
-| PS-13 | Internal token issuance & JWK | PENDING | JWT minting + JWK hosting |
-| PS-14 | Metrics & observability | PARTIAL | Provisioning counters/timer + active gauge done; tracing pending |
-| PS-15 | Tests (unit/integration) | PARTIAL | Unit + provisioning integration tests added; edge cases & failure paths pending |
-| PS-16 | Cross-service cleanup (remove redundant tenant/policy logic) | PARTIAL | Backend-service tenant provisioning & multi-tenancy removed; gateway & shared client still pending |
-| PS-17 | Communication client & shared module rollout | PENDING | platform-client + platform-shared DTO adoption |
+| PS-01 | Module scaffold | DONE | Included in root build |
+| PS-02 | Flyway V1 migrations | DONE | Master tables created |
+| PS-03 | Basic REST API | DONE | POST + GET implemented |
+| PS-04 | Eureka registration | DONE | Health check operational |
+| PS-05 | OpenAPI config | DONE | springdoc configured |
+| PS-06 | Security (resource server) | DONE | JWT validation configured |
+| PS-07 | Docker Compose integration | DONE | Service runs locally |
+| PS-08 | Provision Action Pipeline | DONE | Storage/Migration/Audit actions wired |
+| PS-09 | Metrics counters | DONE | Attempts/success/failure exposed |
+| PS-10 | Tenant provisioning logic | DONE | Schema mode; pipeline validated |
+| PS-11 | DB-per-tenant enablement | PARTIAL | DB creation OK; migration split pending |
+| PS-12 | Policy storage & decision | PENDING | |
+| PS-13 | Internal token issuance | PENDING | |
+| PS-14 | Advanced metrics & tracing | PENDING | |
+| PS-15 | Retry & failure scenarios | PENDING | |
+| PS-16 | Backend dynamic routing | PENDING | |
+| PS-17 | Shared platform-client | PENDING | |
 
-### 19.1.2 Immediate Next Tasks
-1. PS-11: Implement `CognitoAdminService` for initial tenant admin creation (AdminCreateUser + group assignment + audit event).
-2. PS-12: Policy storage & decision API (JSON DSL + evaluation service + caching layer).
-3. PS-13: Internal token issuance (JWT + JWK endpoint) and gateway integration behind feature flag.
-4. PS-14: Add tracing spans + additional metrics (status-based counts, histogram for provision duration).
-5. PS-15: Expand tests (DATABASE mode flag rejection, PROVISION_ERROR retry scenario, validation failures).
-6. PS-16: Backend-service cleanup (remove legacy provisioning code, adopt PlatformClient).
-7. PS-17: Introduce `platform-shared` module & replace duplicate ErrorResponse/Header constants.
-
-### 19.1.4 Provisioning Implementation Addendum (Completed PS-10)
-- Components: `TenantProvisioner` (schema creation), `TenantProvisioningServiceImpl` (orchestration), `GlobalExceptionHandler`, domain exceptions.
-- Metrics added: `platform.tenants.provision.attempts`, `platform.tenants.provision.success`, `platform.tenants.provision.failure`, `platform.tenants.migration.duration` timer, active tenants gauge.
-- Persistence: `tenant` and `tenant_migration_history` tables seeded via Flyway V1; migration history rows recorded with STARTED/SUCCESS/FAILED.
-- Tests: Unit (happy path + duplicate conflict), Integration (Testcontainers via `BaseIntegrationTest` abstract class). DATABASE mode currently disabled by flag.
-- Logging: Structured `tenant_provisioned` / `tenant_provision_failed` messages include tenantId, storageMode, durationMs.
-- Error Handling: Returns standardized ErrorResponse (conflict, validation, provisioning error).
-- Security: Resource server JWT configured; test profile overrides with permit-all filter chain.
-- Backend Cleanup (PS-16 start): Removed legacy tenant entity, repository, service, controller, multi-tenant DataSource config, and header filter from backend-service; auditing re-enabled independently.
-
-### 19.1.6 Swagger & CSP Fix (Backend-Service)
-- Issue: Swagger UI resources blocked by strict CSP `default-src 'none'` resulting in 500 and blocked static assets.
-- Fix: Adjusted CSP in backend `SecurityConfig` to allow self scripts/styles/images/fonts (`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self';`).
-- Result: Swagger UI accessible at `/swagger-ui.html` (OpenAPI JSON available at `/v3/api-docs`).
-- Next Hardening: Remove `'unsafe-inline'` once swagger assets moved to stricter CSP or adopt nonce-based strategy.
-
-### 19.1.5 Remaining Gaps Post PS-10
-| Gap | Description | Planned Fix |
-|-----|-------------|------------|
-| Per-schema domain migrations | Placeholder only | Programmatic Flyway per schema (PS-14 extension) |
-| DATABASE mode provisioning | Feature flag disabled | Implement admin DataSource + secret storage (PS-11/PS-14) |
-| Retry endpoint | Missing for PROVISION_ERROR | Add `/api/tenants/{id}/retry` (PS-15) |
-| Audit event emission | Logging only | Introduce async publisher (Kafka/SNS) (PS-14) |
-| PlatformClient adoption | Other services still direct | Implement shared REST client (PS-17) |
-| Gateway tenant logic cleanup | Gateway still relies on headers only | Remove legacy stubs, integrate policy/internal token (PS-16 continuation) |
+## 21. Immediate Next Steps
+1. Implement status expansion (add PROVISIONED_NO_SCHEMA, MIGRATION_ERROR) to tenant entity & Flyway migration.
+2. Add platform trigger logic (internal client call to backend-service migrate endpoint).
+3. Create backend-service internal controller + programmatic Flyway runner (disable auto-run).
+4. Add minimal integration test: provision tenant → verify backend tables exist in new tenant DB.
+5. Instrument trigger & service migrations with counters/timers.
+6. Define error handling + retry flow (design for `POST /api/tenants/{id}/retry`).
+7. Plan `tenant_service_migration_status` table (multi-service readiness) – defer to NT-24.
+8. Update documentation & ADR 0005 to reflect on-demand migration decision.
 
 ---
 **End of PLATFORM_SERVICE_PLAN.md**

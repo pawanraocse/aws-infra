@@ -1,11 +1,12 @@
 package com.learning.platformservice.tenant.service;
 
 import com.learning.platformservice.tenant.action.TenantProvisionAction;
-import com.learning.platformservice.tenant.action.TenantProvisionContext;
+import com.learning.platformservice.tenant.config.PlatformTenantProperties;
 import com.learning.platformservice.tenant.dto.ProvisionTenantRequest;
 import com.learning.platformservice.tenant.dto.TenantDto;
 import com.learning.platformservice.tenant.entity.Tenant;
 import com.learning.platformservice.tenant.exception.TenantProvisioningException;
+import com.learning.platformservice.tenant.provision.TenantProvisioner;
 import com.learning.platformservice.tenant.repo.TenantRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,7 +20,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -29,13 +31,18 @@ import static org.mockito.Mockito.*;
 class TenantProvisioningServiceImplTest {
 
     @Mock
-    TenantRepository tenantRepository;
+    private TenantRepository tenantRepository;
 
-    SimpleMeterRegistry meterRegistry;
-    TenantProvisioningServiceImpl service;
+    @Mock
+    private TenantProvisioner tenantProvisioner;
 
-    // Track execution order
-    List<String> executed = new ArrayList<>();
+    @Mock
+    private PlatformTenantProperties platformTenantProperties;
+
+    private SimpleMeterRegistry meterRegistry;
+    private TenantProvisioningServiceImpl service;
+
+    private final List<String> executed = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -44,7 +51,8 @@ class TenantProvisioningServiceImplTest {
     }
 
     private void initServiceWithActions(List<TenantProvisionAction> actions) {
-        service = new TenantProvisioningServiceImpl(tenantRepository, meterRegistry, actions);
+        service = new TenantProvisioningServiceImpl(tenantRepository, meterRegistry, actions,
+                platformTenantProperties, tenantProvisioner);
     }
 
     // Stub actions ---------------------------------------------------------
@@ -52,22 +60,26 @@ class TenantProvisioningServiceImplTest {
         return ctx -> {
             executed.add("storage");
             ctx.setJdbcUrl("jdbc:test://tenant_" + ctx.getTenant().getId());
-        }; }
+        };
+    }
 
     private TenantProvisionAction migrationAction() {
         return ctx -> {
             executed.add("migration");
             ctx.setLastMigrationVersion("V1__init");
-        }; }
+        };
+    }
 
     private TenantProvisionAction auditAction() {
-        return ctx -> executed.add("audit"); }
+        return ctx -> executed.add("audit");
+    }
 
     private TenantProvisionAction failing(String name) {
         return ctx -> {
             executed.add(name);
             throw new RuntimeException("fail at " + name);
-        }; }
+        };
+    }
 
     // Helper for repository stubbing
     private void stubTenantPersistence() {
@@ -155,5 +167,72 @@ class TenantProvisioningServiceImplTest {
         assertThat(meterRegistry.find("platform.tenants.provision.failure").counter().count()).isEqualTo(1);
         assertThat(meterRegistry.find("platform.tenants.provision.success").counter().count()).isEqualTo(0);
     }
+
+    @Test
+    @DisplayName("Database mode success does not invoke dropTenantDatabase")
+    void databaseMode_success_noDrop() {
+        stubTenantPersistence();
+        initServiceWithActions(List.of(storageAction(), migrationAction(), auditAction()));
+        when(platformTenantProperties.isDbPerTenantEnabled()).thenReturn(true);
+        when(platformTenantProperties.isTenantDatabaseModeEnabled()).thenReturn(true);
+        when(platformTenantProperties.isDropOnFailure()).thenReturn(false);
+
+        ProvisionTenantRequest req = new ProvisionTenantRequest("dbsuccess", "DB Success", "DATABASE", "STANDARD");
+        TenantDto dto = service.provision(req);
+
+        assertThat(dto.status()).isEqualTo("ACTIVE");
+        verify(tenantProvisioner, never()).dropTenantDatabase(any());
+    }
+
+    @Test
+    @DisplayName("Database mode failure triggers drop when dropOnFailure true")
+    void databaseMode_failure_triggersDrop() {
+        stubTenantPersistence();
+        initServiceWithActions(List.of(storageAction(), failing("migration"), auditAction()));
+        when(platformTenantProperties.isDbPerTenantEnabled()).thenReturn(true);
+        when(platformTenantProperties.isTenantDatabaseModeEnabled()).thenReturn(true);
+        when(platformTenantProperties.isDropOnFailure()).thenReturn(true);
+
+        ProvisionTenantRequest req = new ProvisionTenantRequest("dbfail", "DB Fail", "DATABASE", "STANDARD");
+        assertThatThrownBy(() -> service.provision(req))
+                .isInstanceOf(TenantProvisioningException.class)
+                .hasMessageContaining("Failed provisioning");
+
+        verify(tenantProvisioner, times(1)).dropTenantDatabase("dbfail");
+    }
+
+    @Test
+    @DisplayName("Database mode failure does not drop when dropOnFailure false")
+    void databaseMode_failure_noDropFlagFalse() {
+        stubTenantPersistence();
+        initServiceWithActions(List.of(storageAction(), failing("migration"), auditAction()));
+        when(platformTenantProperties.isDbPerTenantEnabled()).thenReturn(true);
+        when(platformTenantProperties.isTenantDatabaseModeEnabled()).thenReturn(true);
+        when(platformTenantProperties.isDropOnFailure()).thenReturn(false);
+
+        ProvisionTenantRequest req = new ProvisionTenantRequest("dbfailnodelete", "DB Fail No Delete", "DATABASE", "STANDARD");
+        assertThatThrownBy(() -> service.provision(req))
+                .isInstanceOf(TenantProvisioningException.class);
+
+        verify(tenantProvisioner, never()).dropTenantDatabase(any());
+    }
+
+    @Test
+    @DisplayName("Database mode disabled still attempts drop (document current behavior)")
+    void databaseMode_disabledStillDropsDueToSimplifiedCheck() {
+        stubTenantPersistence();
+        initServiceWithActions(List.of(storageAction(), failing("migration"), auditAction()));
+        when(platformTenantProperties.isDbPerTenantEnabled()).thenReturn(false);
+        when(platformTenantProperties.isTenantDatabaseModeEnabled()).thenReturn(false);
+        when(platformTenantProperties.isDropOnFailure()).thenReturn(true);
+
+        ProvisionTenantRequest req = new ProvisionTenantRequest("dbdisabled", "DB Disabled", "DATABASE", "STANDARD");
+        assertThatThrownBy(() -> service.provision(req))
+                .isInstanceOf(TenantProvisioningException.class);
+
+        // Current implementation only checks storageMode + dropOnFailure.
+        verify(tenantProvisioner, times(1)).dropTenantDatabase("dbdisabled");
+    }
+
 }
 

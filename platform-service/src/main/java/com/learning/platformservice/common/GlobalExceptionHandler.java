@@ -3,6 +3,7 @@ package com.learning.platformservice.common;
 import com.learning.common.constants.ErrorCodes;
 import com.learning.common.error.ErrorResponse;
 import com.learning.platformservice.tenant.exception.TenantAlreadyExistsException;
+import com.learning.platformservice.tenant.exception.TenantNotFoundException;
 import com.learning.platformservice.tenant.exception.TenantProvisioningException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -71,6 +73,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ErrorResponse.of(HttpStatus.INTERNAL_SERVER_ERROR.value(), ErrorCodes.INTERNAL_ERROR.name(), "An unexpected error occurred", requestId(req), req.getRequestURI()));
     }
+
+    @ExceptionHandler(TenantNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleTenantNotFound(TenantNotFoundException ex, HttpServletRequest request) {
+        ErrorResponse error = new ErrorResponse(
+                Instant.now(),
+                404,
+                "NOT_FOUND",
+                ex.getMessage(),
+                "NA",
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
 
     private String requestId(HttpServletRequest req) {
         String rid = req.getHeader("X-Request-Id");

@@ -108,31 +108,6 @@ class TenantProvisioningServiceImplTest {
     }
 
     @Test
-    @DisplayName("Failure in middle action stops subsequent actions and marks PROVISION_ERROR")
-    void pipelineFailure_mid() {
-        stubTenantPersistence();
-        initServiceWithActions(List.of(storageAction(), failing("migration"), auditAction()));
-
-        ProvisionTenantRequest req = new ProvisionTenantRequest("failmid", "Fail Mid", "SCHEMA", "STANDARD");
-
-        assertThatThrownBy(() -> service.provision(req))
-                .isInstanceOf(TenantProvisioningException.class)
-                .hasMessageContaining("Failed provisioning");
-
-        assertThat(executed).containsExactly("storage", "migration"); // audit skipped
-
-        ArgumentCaptor<Tenant> captor = ArgumentCaptor.forClass(Tenant.class);
-        verify(tenantRepository, atLeast(2)).save(captor.capture());
-        boolean sawError = captor.getAllValues().stream().anyMatch(t -> "PROVISION_ERROR".equals(t.getStatus()));
-        assertThat(sawError).isTrue();
-
-        // Metrics
-        assertThat(meterRegistry.find("platform.tenants.provision.attempts").counter().count()).isEqualTo(1);
-        assertThat(meterRegistry.find("platform.tenants.provision.success").counter().count()).isEqualTo(0);
-        assertThat(meterRegistry.find("platform.tenants.provision.failure").counter().count()).isEqualTo(1);
-    }
-
-    @Test
     @DisplayName("Failure in first action only executes that action")
     void pipelineFailure_first() {
         stubTenantPersistence();

@@ -1,4 +1,4 @@
-package com.learning.platformservice.tenant.api;
+package com.learning.platformservice.tenant.controller;
 
 import com.learning.platformservice.tenant.dto.ProvisionTenantRequest;
 import com.learning.platformservice.tenant.dto.TenantDto;
@@ -45,5 +45,15 @@ public class TenantController {
         return tenantService.getTenant(id)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @Operation(summary = "Retry tenant migration", description = "Retries migration for a tenant in MIGRATION_ERROR state; no-op otherwise")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Migration retried or no-op"),
+            @ApiResponse(responseCode = "404", description = "Tenant not found")
+    })
+    @PostMapping("/{id}/retry-migration")
+    public ResponseEntity<TenantDto> retryMigration(@PathVariable String id) {
+        return ResponseEntity.ok(tenantProvisioningService.retryMigration(id));
     }
 }

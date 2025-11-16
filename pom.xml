@@ -40,6 +40,7 @@
         <aws.sdk.version>2.36.3</aws.sdk.version>
         <logstash-logback.version>7.4</logstash-logback.version>
         <aws.springcloud.parameter.store.version>3.4.0</aws.springcloud.parameter.store.version>
+        <wiremock.version>3.4.2</wiremock.version>
     </properties>
 
     <dependencyManagement>
@@ -77,6 +78,12 @@
                 <groupId>io.awspring.cloud</groupId>
                 <artifactId>spring-cloud-aws-starter-parameter-store</artifactId>
                 <version>${aws.springcloud.parameter.store.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.wiremock</groupId>
+                <artifactId>wiremock-standalone</artifactId>
+                <version>${wiremock.version}</version>
             </dependency>
 
             <!-- Common test dependencies -->

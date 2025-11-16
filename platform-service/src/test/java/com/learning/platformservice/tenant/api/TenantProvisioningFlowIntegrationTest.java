@@ -1,15 +1,11 @@
 package com.learning.platformservice.tenant.api;
 
-import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.client.WireMock;
 import com.learning.common.util.SimpleCryptoUtil;
 import com.learning.platformservice.tenant.entity.Tenant;
 import com.learning.platformservice.tenant.provision.TenantProvisioner;
 import com.learning.platformservice.tenant.repo.TenantRepository;
 import com.learning.platformservice.test.BaseIntegrationTest;
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +20,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.configureFor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -35,8 +30,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @Slf4j
 class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
-
-    protected static WireMockServer wireMockServer;
 
     @Autowired
     MockMvc mockMvc;
@@ -51,29 +44,6 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
     private TenantProvisioner tenantProvisioner;
 
     private static final String CONTEXT_PATH = "/platform";
-
-    @BeforeAll
-    static void setupWireMock() {
-        log.info("Starting WireMock server...");
-        int port = 9999;
-        wireMockServer = new WireMockServer(port);
-        wireMockServer.start();
-        log.info("Started WireMock server at {}", wireMockServer.baseUrl());
-        configureFor("localhost", port);
-        WireMock.stubFor(WireMock.post(WireMock.urlMatching("/internal/tenants/.*/migrate"))
-                .willReturn(WireMock.aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody("{\"lastVersion\":\"v1.0.0\"}")));
-    }
-
-    @AfterAll
-    static void stopWireMock() {
-        log.info("Stopping WireMock server...");
-        if (wireMockServer != null) {
-            wireMockServer.stop();
-        }
-    }
 
     @Test
     @DisplayName("Provision tenant successfully - SCHEMA mode")
@@ -284,11 +254,11 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
     /**
      * Verifies that the tenant DB user exists, can connect, and has expected permissions.
      * Checks:
-     *  - User exists in pg_roles
-     *  - Can connect with decrypted password
-     *  - Can set search_path to schema
-     *  - CREATE TABLE fails (not owner)
-     *  - SELECT 1 succeeds
+     * - User exists in pg_roles
+     * - Can connect with decrypted password
+     * - Can set search_path to schema
+     * - CREATE TABLE fails (not owner)
+     * - SELECT 1 succeeds
      */
     private void verifyTenantDbUserAndPermissions(String tenantId) throws Exception {
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow();
@@ -329,7 +299,6 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
             assertThat(stmt.execute("SELECT 1")).isTrue();
         }
     }
-
 
 
     @Test

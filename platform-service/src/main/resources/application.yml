@@ -156,8 +156,6 @@ platform:
   tenantDbPort: 5432
   adminDatabase: postgres
   jdbcDriver: org.postgresql.Driver
-  backend:
-    base-url: ${PLATFORM_BACKEND_BASE_URL:http://localhost:8082}
 
 logging:
   level:

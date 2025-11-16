@@ -1,4 +1,4 @@
-package com.learning.backendservice.tenant.api;
+package com.learning.backendservice.controller;
 
 import com.learning.backendservice.dto.MigrationResult;
 import com.learning.backendservice.tenant.migration.TenantMigrationService;

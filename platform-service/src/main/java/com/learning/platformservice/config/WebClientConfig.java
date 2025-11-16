@@ -1,4 +1,4 @@
-package com.learning.backendservice.config;
+package com.learning.platformservice.config;
 
 import com.learning.common.http.HttpClientFactory;
 import com.learning.common.log.ExchangeLoggingFilter;
@@ -13,39 +13,36 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class WebClientConfig {
 
     /**
-     * Internal WebClient.Builder for calling other microservices
-     * via Eureka/Kubernetes with load balancing.
+     * Internal WebClient.Builder for service discovery + load balancing.
      */
     @Bean(name = "internalWebClientBuilder")
     @LoadBalanced
     public WebClient.Builder internalWebClientBuilder() {
         return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(HttpClientFactory.httpClient()))
-                .codecs(cfg -> cfg.defaultCodecs().maxInMemorySize(4 * 1024 * 1024));
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(4 * 1024 * 1024));
     }
 
     /**
-     * External WebClient.Builder for third-party HTTP APIs.
-     * No load balancing, no discovery.
+     * External WebClient.Builder for third-party calls.
      */
     @Bean(name = "externalWebClientBuilder")
     public WebClient.Builder externalWebClientBuilder() {
         return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(HttpClientFactory.httpClient()))
-                .codecs(cfg -> cfg.defaultCodecs().maxInMemorySize(4 * 1024 * 1024));
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(4 * 1024 * 1024));
     }
 
     /**
-     * Platform-service WebClient (internal service-to-service call).
-     * Uses the load-balanced internal builder.
+     * Backend-Service WebClient (internal S2S)
      */
     @Bean
-    public WebClient platformWebClient(
+    public WebClient backendWebClient(
             @Qualifier("internalWebClientBuilder") WebClient.Builder builder,
             ServicesProperties props
     ) {
         return builder
-                .baseUrl(props.getPlatform().getBaseUrl())
+                .baseUrl(props.getBackend().getBaseUrl())
                 .filter(ExchangeLoggingFilter.logRequest())
                 .filter(ExchangeLoggingFilter.logResponse())
                 .build();

@@ -2,6 +2,9 @@ spring:
   application:
     name: platform-service-test
 
+  main:
+    allow-bean-definition-overriding: true
+
   cloud:
     discovery:
       enabled: false
@@ -50,15 +53,12 @@ platform:
     database-mode:
       enabled: false
 
-  backend:
-    # WireMock in tests will bind to port 9999
-    base-url: http://localhost:9999
-
 logging:
   level:
     root: WARN
     com.learning.platformservice: DEBUG
 
+# Eureka disabled in tests
 eureka:
   client:
     enabled: false
@@ -66,3 +66,7 @@ eureka:
     fetch-registry: false
   instance:
     prefer-ip-address: false
+
+services:
+  backend:
+    base-url: http://localhost

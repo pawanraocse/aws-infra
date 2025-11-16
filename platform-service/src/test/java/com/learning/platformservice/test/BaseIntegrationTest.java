@@ -1,5 +1,7 @@
 package com.learning.platformservice.test;
 
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.learning.platformservice.PlatformServiceApplication;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -15,9 +17,13 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.time.Duration;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.*;
 
-@SpringBootTest(classes = PlatformServiceApplication.class)
-@AutoConfigureMockMvc
+
+@SpringBootTest(classes = {
+        PlatformServiceApplication.class,
+        TestWebClientOverrideConfig.class
+})@AutoConfigureMockMvc
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
 @Testcontainers
@@ -38,6 +44,27 @@ public abstract class BaseIntegrationTest {
                                     .withStartupTimeout(Duration.ofSeconds(30))
                     );
 
+     // -------------------------------
+    // WireMock: runs once per test suite
+    // -------------------------------
+    protected static final WireMockServer wireMockServer =
+            new WireMockServer(WireMockConfiguration.options().dynamicPort());
+
+    static {
+        wireMockServer.start();
+
+        configureFor("localhost", wireMockServer.port());
+
+        wireMockServer.stubFor(
+                post(urlPathMatching("/internal/tenants/.*/migrate"))
+                        .willReturn(aResponse()
+                                .withStatus(200)
+                                .withHeader("Content-Type", "application/json")
+                                .withBody("{\"lastVersion\":\"1.0.0\"}")
+                        )
+        );
+    }
+
     @DynamicPropertySource
     static void configureDataSource(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
@@ -50,5 +77,8 @@ public abstract class BaseIntegrationTest {
 
         registry.add("spring.datasource.hikari.maximum-pool-size", () -> "5");
         registry.add("spring.datasource.hikari.minimum-idle", () -> "1");
+        registry.add("services.backend.base-url",
+                () -> "http://localhost:" + wireMockServer.port());
     }
+
 }

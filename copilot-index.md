@@ -264,6 +264,16 @@ Safeguards:
 - Dynamic `AbstractRoutingDataSource` keyed by tenant ID
 - Lazy creation + bounded pool (max 5 connections per tenant) with eviction policy
 
+### Per-Tenant DB User & Credential Management (2025-11-16)
+- Platform-service now creates a unique DB user per tenant (convention: tenant_<id>_user) with a random password.
+- Password is encrypted using AES and stored in the `tenant` table (`db_user_password_enc`).
+- Internal API `/internal/tenants/{tenantId}/db-info` returns JDBC URL, username, and encrypted password (backend-service decrypts using shared utility).
+- Integration tests verify:
+  - User is created in PostgreSQL (`pg_roles`)
+  - User can connect to the tenant DB
+  - User has correct permissions (can SELECT, cannot CREATE TABLE)
+- Caching of tenant DB info in backend-service for performance (Caffeine, 5 min TTL).
+
 ---
 
 <a id="configuration-management"></a>
@@ -305,6 +315,7 @@ Safeguards:
 | Action chain order | ✅ (Ordered actions enforced by @Order) |
 | Failure rollback | ⚠️ Pending simulation test |
 | DB-per-tenant flag disabled | ⚠️ Pending feature flag test |
+| Per-tenant DB user/permissions | ✅ (integration test: verifyTenantDbUserAndPermissions) |
 
 ---
 

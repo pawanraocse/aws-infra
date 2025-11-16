@@ -8,6 +8,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
+
 /**
  * Invokes downstream service migrations (phase 2 of provisioning) after storage is created.
  * Currently only backend-service; future services can be added by composing calls.
@@ -18,7 +20,7 @@ import reactor.core.publisher.Mono;
 @Order(50) // After StorageProvisionAction, before AuditLogAction, etc.
 public class MigrationInvokeAction implements TenantProvisionAction {
 
-    private final WebClient backendWebClient; // configured bean pointing at backend-service base URL
+    private final WebClient backendWebClient;
 
     @Override
     public void execute(TenantProvisionContext context) throws TenantProvisioningException {
@@ -29,7 +31,7 @@ public class MigrationInvokeAction implements TenantProvisionAction {
                     .uri("/internal/tenants/{tenantId}/migrate", tenantId)
                     .retrieve()
                     .bodyToMono(MigrationResult.class)
-                    .timeout(java.time.Duration.ofSeconds(30))
+                    .timeout(Duration.ofSeconds(30))
                     .onErrorResume(e -> {
                         log.error("tenant_migration_backend_failed tenantId={} error={}", tenantId, e.getMessage());
                         return Mono.error(new TenantProvisioningException(tenantId, "Backend migration failed: " + e.getMessage(), e));

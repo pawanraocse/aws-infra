@@ -9,15 +9,18 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
+import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 @Component
 @Slf4j
 public class TenantProvisioner {
+    public static final String DB_NAME_PREFIX = "t_";
     private final JdbcTemplate jdbcTemplate;
     private final boolean databaseModeFeatureEnabled; // legacy flag (storageMode request validation)
     private final boolean dbPerTenantEnabled; // explicit db-per-tenant capability flag
@@ -54,12 +57,10 @@ public class TenantProvisioner {
      * Provision storage for tenant based on requested mode.
      * Returns JDBC URL pointing to tenant isolated storage (schema or database).
      */
-    public String provisionTenantStorage(String tenantId, String storageMode) {
-        String normalizedMode = storageMode == null ? "" : storageMode.toUpperCase(Locale.ROOT);
-        return switch (normalizedMode) {
-            case "SCHEMA" -> createSchemaPath(tenantId);
-            case "DATABASE" -> createDatabasePath(tenantId);
-            default -> throw new IllegalArgumentException("Unknown storage mode: " + storageMode);
+    public String provisionTenantStorage(String tenantId, TenantStorageEnum storageMode) {
+        return switch (storageMode) {
+            case SCHEMA -> createSchemaPath(tenantId);
+            case DATABASE -> createDatabasePath(tenantId);
         };
     }
 
@@ -112,7 +113,11 @@ public class TenantProvisioner {
                     long backoff = BASE_BACKOFF_MS * attempt;
                     log.warn("db_create_retry tenantId={} dbName={} attempt={} sqlState={} error={} backoffMs={}",
                             tenantId, dbName, attempt, sqlEx.getSQLState(), sqlEx.getMessage(), backoff);
-                    try { TimeUnit.MILLISECONDS.sleep(backoff); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    try {
+                        TimeUnit.MILLISECONDS.sleep(backoff);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
                     continue;
                 }
                 dbCreateFailure.increment();
@@ -124,7 +129,11 @@ public class TenantProvisioner {
                     long backoff = BASE_BACKOFF_MS * attempt;
                     log.warn("db_create_retry_non_sql tenantId={} dbName={} attempt={} error={} backoffMs={}",
                             tenantId, dbName, attempt, ex.getMessage(), backoff);
-                    try { TimeUnit.MILLISECONDS.sleep(backoff); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    try {
+                        TimeUnit.MILLISECONDS.sleep(backoff);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
                     continue;
                 }
                 dbCreateFailure.increment();
@@ -159,14 +168,13 @@ public class TenantProvisioner {
     }
 
     private String buildSchemaName(String tenantId) {
-        String sanitized = sanitize(tenantId);
-        return "tenant_" + sanitized;
+        return buildDatabaseName(tenantId);
     }
 
-    private String buildDatabaseName(String tenantId) {
+    public String buildDatabaseName(String tenantId) {
         String sanitized = sanitize(tenantId);
         // PostgreSQL identifier length limit 63 chars
-        String candidate = ("tenant_" + sanitized);
+        String candidate = (DB_NAME_PREFIX + sanitized);
         if (candidate.length() > 63) {
             candidate = candidate.substring(0, 63);
         }
@@ -218,5 +226,98 @@ public class TenantProvisioner {
         } catch (Exception e) {
             log.warn("db_drop_failure tenantId={} dbName={} error={}", tenantId, dbName, e.getMessage(), e);
         }
+    }
+
+    public String createTenantDbUser(String tenantIdentifier, String username, TenantStorageEnum mode) {
+
+        validateIdentifier(username, "username");
+        validateIdentifier(tenantIdentifier, "tenantIdentifier");
+
+        String password = generateRandomPassword(16);
+        DataSource ds = jdbcTemplate.getDataSource();
+
+        if (ds == null) {
+            throw new IllegalStateException("DataSource unavailable");
+        }
+
+        try (var conn = ds.getConnection();
+             var stmt = conn.createStatement()) {
+
+            conn.setAutoCommit(true);
+
+            createOrRotateUser(stmt, username, password);
+
+            String grantSql = buildGrantSql(mode, tenantIdentifier, username);
+
+            stmt.execute(grantSql);
+
+            logPrivilegeSuccess(mode, username, tenantIdentifier);
+
+            return password;
+
+        } catch (SQLException e) {
+            log.error("db_user_create_failure username={} tenantIdentifier={} error={}",
+                    username, tenantIdentifier, e.getMessage(), e);
+
+            throw new IllegalStateException(
+                    "Failed to create/configure DB user '" + username + "'", e
+            );
+        }
+    }
+
+    private void createOrRotateUser(Statement stmt, String username, String password) throws SQLException {
+        try {
+            stmt.execute("CREATE USER %s WITH PASSWORD '%s';".formatted(quote(username), password));
+        } catch (SQLException ex) {
+            if (ex.getMessage() != null && ex.getMessage().contains("already exists")) {
+                stmt.execute("ALTER USER %s WITH PASSWORD '%s';".formatted(quote(username), password));
+            } else {
+                throw ex;
+            }
+        }
+    }
+
+    private String buildGrantSql(TenantStorageEnum mode, String tenantIdentifier, String username) {
+
+        return switch (mode) {
+            case DATABASE -> "GRANT ALL PRIVILEGES ON DATABASE %s TO %s;"
+                    .formatted(quote(tenantIdentifier), quote(username));
+
+            case SCHEMA -> """
+                    GRANT USAGE ON SCHEMA %1$s TO %2$s;
+                    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %1$s TO %2$s;
+                    ALTER DEFAULT PRIVILEGES IN SCHEMA %1$s 
+                    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %2$s;
+                    """
+                    .formatted(quote(tenantIdentifier), quote(username));
+        };
+    }
+
+    private void logPrivilegeSuccess(TenantStorageEnum mode, String username, String tenantIdentifier) {
+        switch (mode) {
+            case DATABASE ->
+                    log.info("db_user_granted_database_privileges username={} db={}", username, tenantIdentifier);
+
+            case SCHEMA ->
+                    log.info("db_user_granted_schema_privileges username={} schema={}", username, tenantIdentifier);
+        }
+    }
+
+    private void validateIdentifier(String value, String field) {
+        if (value == null || !value.matches("[a-zA-Z0-9_]+")) {
+            throw new IllegalArgumentException("Invalid identifier for " + field + ": " + value);
+        }
+    }
+
+    private String quote(String identifier) {
+        return "\"" + identifier + "\"";
+    }
+
+
+    private String generateRandomPassword(int length) {
+        SecureRandom random = new SecureRandom();
+        byte[] bytes = new byte[length];
+        random.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes).substring(0, length);
     }
 }

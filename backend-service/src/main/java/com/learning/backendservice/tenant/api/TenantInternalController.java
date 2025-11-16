@@ -1,8 +1,10 @@
 package com.learning.backendservice.tenant.api;
 
+import com.learning.backendservice.dto.MigrationResult;
 import com.learning.backendservice.tenant.migration.TenantMigrationService;
+import com.learning.backendservice.tenant.registry.PlatformServiceTenantRegistry;
+import com.learning.common.dto.TenantDbInfo;
 import lombok.RequiredArgsConstructor;
-import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,30 +19,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class TenantInternalController {
 
     private final TenantMigrationService migrationService;
-    private final TenantRegistryService tenantRegistryService; // Placeholder, will implement or integrate.
+    private final PlatformServiceTenantRegistry tenantRegistryService;
 
     @PostMapping("/{tenantId}/migrate")
     public ResponseEntity<MigrationResult> migrateTenant(@PathVariable String tenantId) {
         TenantDbInfo dbInfo = tenantRegistryService.load(tenantId);
-        String lastVersion = migrationService.migrateTenant(dbInfo.jdbcUrl, dbInfo.username, dbInfo.password);
+        String lastVersion = migrationService.migrateTenant(dbInfo.jdbcUrl(), dbInfo.username(), dbInfo.password());
         return ResponseEntity.ok(new MigrationResult(lastVersion));
-    }
-
-    // Placeholder DTOs and service interface for compilation; to be implemented with platform client.
-    public interface TenantRegistryService {
-        TenantDbInfo load(String tenantId);
-    }
-
-    @Value
-    public static class TenantDbInfo {
-        String jdbcUrl;
-        String username;
-        String password;
-    }
-
-    @Value
-    public static class MigrationResult {
-        String lastVersion;
     }
 }
 

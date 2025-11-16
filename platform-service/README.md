@@ -32,6 +32,29 @@ The Platform Service is the control-plane for tenant lifecycle management in a m
 
 ---
 
+## Configuration
+All configuration is via `application.yml` or environment variables. Key properties:
+
+```yaml
+platform:
+  dbPerTenantEnabled: false
+  tenantDatabaseModeEnabled: false
+  dropOnFailure: false
+  tenantDbHost: localhost
+  tenantDbPort: 5432
+  adminDatabase: postgres
+  jdbcDriver: org.postgresql.Driver
+  backend:
+    base-url: ${PLATFORM_BACKEND_BASE_URL:http://localhost:8082}
+```
+
+- **dbPerTenantEnabled**: Enable/disable db-per-tenant pattern.
+- **tenantDatabaseModeEnabled**: Enable/disable DATABASE storage mode.
+- **dropOnFailure**: Drop tenant DB on provisioning failure (DATABASE mode).
+- **backend.base-url**: URL for backend-service (used for migration orchestration).
+
+---
+
 ## Code Flow (Provisioning)
 1. **API Call:** `POST /api/tenants` with tenant details.
 2. **Validation:** Request is validated for ID, name, storage mode, and SLA tier.
@@ -95,4 +118,3 @@ The Platform Service is the control-plane for tenant lifecycle management in a m
 
 ## Changelog
 - 2025-11-16: Major cleanup and documentation rewrite. Service now focused solely on tenant metadata, storage orchestration, and migration coordination.
-

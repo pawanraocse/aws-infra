@@ -27,6 +27,8 @@ public class Tenant {
     private String jdbcUrl;
     @Column(name = "db_user_secret_ref")
     private String dbUserSecretRef;
+    @Column(name = "db_user_password_enc")
+    private String dbUserPasswordEnc;
     @Column(name = "sla_tier", nullable = false)
     private String slaTier;
     @Column(name = "last_migration_version")

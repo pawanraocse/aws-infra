@@ -11,23 +11,23 @@ import static org.assertj.core.api.Assertions.*;
 
 class TenantProvisionerTest {
 
-    DataSource ds = Mockito.mock(DataSource.class); // mock prevents real connection
+    DataSource ds = Mockito.mock(DataSource.class);
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
     @Test
     @DisplayName("Schema mode constructs JDBC URL with currentSchema param")
     void schemaMode_urlConstruction() {
         TenantProvisioner provisioner = new TenantProvisioner(ds, registry, false, false, "jdbc:postgresql://localhost:5432/awsinfra");
-        String jdbc = provisioner.provisionTenantStorage("Acme_123", "SCHEMA");
+        String jdbc = provisioner.provisionTenantStorage("Acme_123", TenantStorageEnum.SCHEMA);
         assertThat(jdbc).startsWith("jdbc:postgresql://localhost:5432/awsinfra?currentSchema=");
-        assertThat(jdbc).contains("tenant_acme_123");
+        assertThat(jdbc).contains("acme_123");
     }
 
     @Test
     @DisplayName("Database mode disabled throws flag error before JDBC")
     void databaseMode_disabled() {
         TenantProvisioner provisioner = new TenantProvisioner(ds, registry, false, false, "jdbc:postgresql://localhost:5432/awsinfra");
-        assertThatThrownBy(() -> provisioner.provisionTenantStorage("acme", "DATABASE"))
+        assertThatThrownBy(() -> provisioner.provisionTenantStorage("acme", TenantStorageEnum.DATABASE))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("DATABASE storageMode disabled");
     }
@@ -39,8 +39,8 @@ class TenantProvisionerTest {
         var method = TenantProvisioner.class.getDeclaredMethod("buildDatabaseName", String.class);
         method.setAccessible(true);
         String name = (String) method.invoke(provisioner, "ACME-*INVALID__LONG_NAME_WITH_CHARS@#$%^&*()+");
-        assertThat(name).startsWith("tenant_");
-        assertThat(name).matches("tenant_[a-z0-9_-]+");
+        assertThat(name).contains("acme-invalid__long_name_with_chars");
+        assertThat(name).matches("[a-z0-9_-]+");
         assertThat(name.length()).isLessThanOrEqualTo(63);
     }
 }

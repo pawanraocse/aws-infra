@@ -1,6 +1,7 @@
 spring:
   application:
     name: platform-service
+
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/awsinfra}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
@@ -12,6 +13,7 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+
   jpa:
     hibernate:
       ddl-auto: none
@@ -25,13 +27,17 @@ spring:
           batch_size: 20
         order_inserts: true
         order_updates: true
+        lob:
+          non_contextual_creation: true
+
   flyway:
     enabled: true
     baseline-on-migrate: true
+    validate-on-migrate: true
     locations: classpath:db/migration
     schemas: public
     table: flyway_platform_service
-    validate-on-migrate: true
+
   security:
     oauth2:
       resourceserver:
@@ -54,6 +60,10 @@ spring:
       #     cognito:
       #       issuer-uri: ${COGNITO_ISSUER_URI:}
       #       user-name-attribute: username
+    webclient:
+      connect-timeout: 5000
+      read-timeout: 10000
+      write-timeout: 10000
 
 server:
   port: ${SERVER_PORT:8083}
@@ -65,6 +75,11 @@ server:
       min-spare: 10
     max-connections: 10000
     accept-count: 100
+
+reactor:
+  netty:
+    ioWorkerCount: 4
+    ioSelectCount: 2
 
 management:
   endpoints:
@@ -78,6 +93,11 @@ management:
       show-details: when-authorized
       probes:
         enabled: true
+      group:
+        readiness:
+          include: readinessState
+        liveness:
+          include: livenessState
 
   metrics:
     tags:
@@ -102,8 +122,6 @@ management:
     tracing:
       endpoint: ${ZIPKIN_URL:http://localhost:9411}/api/v2/spans
 
-
-# Eureka Client
 eureka:
   client:
     service-url:
@@ -123,24 +141,21 @@ eureka:
 springdoc:
   api-docs:
     path: /v3/api-docs
+    enabled: ${SPRINGDOC_ENABLED:false}   # secured for production
   swagger-ui:
     path: /swagger-ui.html
-    enabled: true
+    enabled: ${SWAGGER_ENABLED:false}
     operations-sorter: method
     tags-sorter: alpha
 
 platform:
-  db-per-tenant:
-    enabled: false
-  tenant:
-    provisioning:
-      enabled: true
-    database-mode:
-      enabled: false # feature flag for DATABASE storage mode
-  audit:
-    enabled: false # placeholder for future Kafka/SNS publishing
-  internal-token:
-    enabled: false # future PS-13
+  dbPerTenantEnabled: false
+  tenantDatabaseModeEnabled: false
+  dropOnFailure: false
+  tenantDbHost: localhost
+  tenantDbPort: 5432
+  adminDatabase: postgres
+  jdbcDriver: org.postgresql.Driver
   backend:
     base-url: ${PLATFORM_BACKEND_BASE_URL:http://localhost:8082}
 
@@ -162,3 +177,16 @@ cognito:
 metrics:
   tenant:
     enabled: true
+
+resilience4j:
+  retry:
+    instances:
+      backendMigration:
+        max-attempts: 3
+        wait-duration: 2s
+
+  circuitbreaker:
+    instances:
+      backendMigration:
+        sliding-window-size: 10
+        failure-rate-threshold: 50

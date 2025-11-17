@@ -1,18 +1,17 @@
-package com.learning.common.error;
+package com.learning.common.infra.util;
 
 import com.learning.common.constants.HeaderNames;
+import com.learning.common.error.ErrorResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 
-/**
- * Utility to write canonical ErrorResponse for reactive and servlet contexts (NT-22)
- */
+
 public final class JsonResponseWriter {
     private JsonResponseWriter() {}
 

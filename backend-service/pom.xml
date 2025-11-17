@@ -20,6 +20,11 @@
             <groupId>com.learning</groupId>
             <artifactId>common-dto</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.learning</groupId>
+            <artifactId>common-infra</artifactId>
+        </dependency>
         <!-- Eureka Client -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>

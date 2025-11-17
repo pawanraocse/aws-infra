@@ -23,6 +23,7 @@
         <module>gateway-service</module>
         <module>common-dto</module>
         <module>platform-service</module>
+        <module>common-infra</module>
     </modules>
 
     <properties>
@@ -56,6 +57,12 @@
             <dependency>
                 <groupId>com.learning</groupId>
                 <artifactId>common-dto</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.learning</groupId>
+                <artifactId>common-infra</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

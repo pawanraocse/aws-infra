@@ -1,4 +1,4 @@
-package com.learning.common.http;
+package com.learning.common.infra.http;
 
 import io.netty.channel.ChannelOption;
 import io.netty.handler.timeout.ReadTimeoutHandler;

@@ -1,7 +1,7 @@
 package com.learning.backendservice.config;
 
-import com.learning.common.http.HttpClientFactory;
-import com.learning.common.log.ExchangeLoggingFilter;
+import com.learning.common.infra.http.HttpClientFactory;
+import com.learning.common.infra.log.ExchangeLoggingFilter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;

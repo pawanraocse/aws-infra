@@ -21,15 +21,16 @@
         <module>backend-service</module>
         <module>eureka-server</module>
         <module>gateway-service</module>
-        <module>common-module</module>
+        <module>common-dto</module>
         <module>platform-service</module>
     </modules>
 
     <properties>
-        <project.version>0.0.1-SNAPSHOT</project.version>
         <java.version>21</java.version>
         <spring-cloud.version>2025.0.0</spring-cloud.version>
-        <springdoc.version>2.8.13</springdoc.version>
+        <aws.sdk.version>2.36.3</aws.sdk.version>
+        <aws.springcloud.parameter.store.version>3.4.0</aws.springcloud.parameter.store.version>
+
         <testcontainers.version>1.21.3</testcontainers.version>
         <mockito.version>5.20.0</mockito.version>
         <assertj.version>3.26.3</assertj.version>
@@ -37,16 +38,56 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <springboot.version>3.5.6</springboot.version>
-        <aws.sdk.version>2.36.3</aws.sdk.version>
+
+
         <logstash-logback.version>7.4</logstash-logback.version>
-        <aws.springcloud.parameter.store.version>3.4.0</aws.springcloud.parameter.store.version>
         <wiremock.version>3.4.2</wiremock.version>
         <caffeine.version>3.1.8</caffeine.version>
         <reactor.netty.version>1.3.0</reactor.netty.version>
+        <springdoc.version>2.8.13</springdoc.version>
+
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+
+            <!-- Internal modules -->
+            <dependency>
+                <groupId>com.learning</groupId>
+                <artifactId>common-dto</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.learning</groupId>
+                <artifactId>auth-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.learning</groupId>
+                <artifactId>backend-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.learning</groupId>
+                <artifactId>gateway-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.learning</groupId>
+                <artifactId>eureka-server</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.learning</groupId>
+                <artifactId>platform-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Spring Cloud BOM -->
             <dependency>

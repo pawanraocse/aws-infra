@@ -18,8 +18,7 @@
     <dependencies>
         <dependency>
             <groupId>com.learning</groupId>
-            <artifactId>common-module</artifactId>
-            <version>${project.version}</version>
+            <artifactId>common-dto</artifactId>
         </dependency>
         <!-- Eureka Client -->
         <dependency>

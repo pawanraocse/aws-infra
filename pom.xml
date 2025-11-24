@@ -24,6 +24,7 @@
         <module>common-dto</module>
         <module>platform-service</module>
         <module>common-infra</module>
+        <module>system-tests</module>
     </modules>
 
     <properties>
@@ -37,6 +38,8 @@
         <assertj.version>3.26.3</assertj.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
+        <!-- Skip system tests by default -->
+        <skipSystemTests>true</skipSystemTests>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <springboot.version>3.5.6</springboot.version>
 
@@ -301,6 +304,15 @@
             <id>prod</id>
             <properties>
                 <spring.profiles.active>prod</spring.profiles.active>
+            </properties>
+        </profile>
+
+        <!-- Profile to run system (E2E) integration tests -->
+        <profile>
+            <id>system-tests</id>
+            <properties>
+                <!-- Enable system tests when this profile is active -->
+                <skipSystemTests>false</skipSystemTests>
             </properties>
         </profile>
     </profiles>

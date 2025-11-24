@@ -1,493 +1,159 @@
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           EXTERNAL LAYER                                     │
-│  ┌──────────────┐                                                            │
-│  │   Angular    │  User Interface (Port 4200)                               │
-│  │   Frontend   │  - Login/Signup UI                                        │
-│  └──────┬───────┘  - Dashboard & CRUD Operations                            │
-│         │          - HTTP Client with JWT Bearer Token                      │
-└─────────┼──────────────────────────────────────────────────────────────────┘
-│
-│ HTTP + JWT Token
-▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         API GATEWAY LAYER (Port 8080)                        │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │  Spring Cloud Gateway                                               │    │
-│  │  ┌──────────────────────────────────────────────────────────────┐  │    │
-│  │  │  1. JWT Validation (Cognito JWKS)                            │  │    │
-│  │  │  2. Extract tenant_id from cognito:groups                    │  │    │
-│  │  │  3. Add Headers: X-Tenant-Id, X-User-Id, X-Authorities       │  │    │
-│  │  │  4. Circuit Breaker & Retry Logic                            │  │    │
-│  │  │  5. CORS Configuration                                        │  │    │
-│  │  └──────────────────────────────────────────────────────────────┘  │    │
-│  │                                                                     │    │
-│  │  Routes:                                                            │    │
-│  │  • /auth/**  → lb://auth-service                                   │    │
-│  │  • /api/**   → lb://backend-service                                │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-└─────────┬───────────────────────────────────┬───────────────────────────────┘
-│                                   │
-│                                   │
-┌─────────▼─────────────┐          ┌──────────▼────────────────────────────────┐
-│  SERVICE REGISTRY     │          │     MICROSERVICES LAYER                   │
-│  (Port 8761)          │          │                                           │
-│  ┌─────────────────┐  │          │  ┌────────────────────────────────────┐  │
-│  │ Eureka Server   │◄─┼──────────┼──┤  All services register here        │  │
-│  │                 │  │          │  │  with heartbeat every 30s           │  │
-│  │ - Service       │  │          │  └────────────────────────────────────┘  │
-│  │   Discovery     │  │          │                                           │
-│  │ - Health Checks │  │          │  ┌────────────────────────────────────┐  │
-│  │ - Load Balancer │  │          │  │  Auth-Service (Port 8081)          │  │
-│  └─────────────────┘  │          │  │  ┌──────────────────────────────┐  │  │
-└───────────────────────┘          │  │  │ • OAuth2 Client (Cognito)    │  │  │
-│  │  │ • Login/Signup/Logout        │  │  │
-│  │  │ • JWT Token Management       │  │  │
-│  │  │ • User Registration          │  │  │
-│  │  │ • Tenant Provisioning Trigger│  │  │
-│  │  └──────────────────────────────┘  │  │
-│  └──────────┬─────────────────────────┘  │
-│             │                             │
-│  ┌──────────▼─────────────────────────┐  │
-│  │  Backend-Service (Port 8082)       │  │
-│  │  ┌──────────────────────────────┐  │  │
-│  │  │ • Multi-Tenant Data Access   │  │  │
-│  │  │ • Schema-per-Tenant          │  │  │
-│  │  │ • CRUD APIs                  │  │  │
-│  │  │ • Business Logic             │  │  │
-│  │  │ • Admin Tenant Provisioning  │  │  │
-│  │  └──────────┬───────────────────┘  │  │
-│  └─────────────┼──────────────────────┘  │
-└────────────────┼─────────────────────────┘
-│
-┌───────────────────────────────────────────────────┼─────────────────────────┐
-│                         DATA LAYER                │                          │
-│                                                   │                          │
-│  ┌────────────────────────────────────────────────▼──────────────────────┐  │
-│  │  PostgreSQL Database (Port 5432)                                      │  │
-│  │  ┌─────────────────────────────────────────────────────────────────┐  │  │
-│  │  │  Database: awsinfra                                             │  │  │
-│  │  │  ┌──────────────────────────────────────────────────────────┐  │  │  │
-│  │  │  │  public schema (System Tables)                           │  │  │  │
-│  │  │  │  • tenants (tenant registry)                             │  │  │  │
-│  │  │  │  • tenant_audit_log                                      │  │  │  │
-│  │  │  └──────────────────────────────────────────────────────────┘  │  │  │
-│  │  │  ┌──────────────────────────────────────────────────────────┐  │  │  │
-│  │  │  │  tenant_acme schema (Tenant ACME data)                   │  │  │  │
-│  │  │  │  • entries                                               │  │  │  │
-│  │  │  │  • notes                                                 │  │  │  │
-│  │  │  │  • ... (all business tables)                            │  │  │  │
-│  │  │  └──────────────────────────────────────────────────────────┘  │  │  │
-│  │  │  ┌──────────────────────────────────────────────────────────┐  │  │  │
-│  │  │  │  tenant_xyz schema (Tenant XYZ data)                     │  │  │  │
-│  │  │  │  • entries                                               │  │  │  │
-│  │  │  │  • notes                                                 │  │  │  │
-│  │  │  └──────────────────────────────────────────────────────────┘  │  │  │
-│  │  └─────────────────────────────────────────────────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
+# High-Level Design (HLD) & Architecture
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        EXTERNAL SERVICES                                     │
-│  ┌────────────────────────────────────────────────────────────────────┐     │
-│  │  AWS Cognito                                                       │     │
-│  │  • User Pool (Authentication)                                      │     │
-│  │  • User Groups (tenant_acme, tenant_xyz)                          │     │
-│  │  • JWKS Endpoint (JWT validation)                                 │     │
-│  │  • OAuth2 Authorization Server                                    │     │
-│  └────────────────────────────────────────────────────────────────────┘     │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+**Version:** 2.0
+**Last Updated:** 2025-11-24
 
 ---
 
-## 🔄 Complete End-to-End Flows
+## 1. Executive Summary
 
-### **Flow 1: New Tenant Signup** (One-time setup)
-```
-┌──────────┐    ┌─────────┐    ┌──────────┐    ┌─────────┐    ┌──────────┐
-│ Angular  │    │ Gateway │    │   Auth   │    │ Cognito │    │ Backend  │
-│ Frontend │    │ Service │    │ Service  │    │         │    │ Service  │
-└────┬─────┘    └────┬────┘    └────┬─────┘    └────┬────┘    └────┬─────┘
-│               │              │               │               │
-│ 1. POST /auth/signup         │               │               │
-│ {email, password,            │               │               │
-│  companyName: "Acme Corp"}   │               │               │
-├──────────────►│              │               │               │
-│               │              │               │               │
-│               │ 2. Route to auth-service     │               │
-│               ├─────────────►│               │               │
-│               │              │               │               │
-│               │              │ 3. Create user in Cognito     │
-│               │              ├──────────────►│               │
-│               │              │               │               │
-│               │              │ 4. User created (user-uuid)   │
-│               │              │◄──────────────┤               │
-│               │              │               │               │
-│               │              │ 5. POST /api/admin/tenants   │
-│               │              │ {tenantId: "acme",           │
-│               │              │  tenantName: "Acme Corp"}    │
-│               │              ├──────────────────────────────►│
-│               │              │               │               │
-│               │              │               │ 6. Create tenant record
-│               │              │               │    in public.tenants
-│               │              │               │               │
-│               │              │               │ 7. CREATE SCHEMA
-│               │              │               │    tenant_acme
-│               │              │               │               │
-│               │              │               │ 8. Run Flyway migrations
-│               │              │               │    in tenant_acme schema
-│               │              │               │    (creates entries table)
-│               │              │               │               │
-│               │              │ 9. Tenant provisioned         │
-│               │              │◄──────────────────────────────┤
-│               │              │               │               │
-│               │              │ 10. Create Cognito group      │
-│               │              │     "tenant_acme"             │
-│               │              ├──────────────►│               │
-│               │              │               │               │
-│               │              │ 11. Add user to group         │
-│               │              │     "tenant_acme"             │
-│               │              ├──────────────►│               │
-│               │              │               │               │
-│               │ 12. Signup successful        │               │
-│               │◄─────────────┤               │               │
-│               │              │               │               │
-│ 13. Success  │               │               │               │
-│◄──────────────┤              │               │               │
-│               │              │               │               │
-```
+This document serves as the primary architectural blueprint for the AWS-Infra project. It details the system design, service responsibilities, security flows, multi-tenancy model, and infrastructure specifications.
+
+**Project Goal:** Build a production-ready, scalable, multi-tenant SaaS platform using Spring Boot microservices, Angular frontend, and AWS infrastructure.
 
 ---
 
-### **Flow 2: User Login** (Existing tenant)
-```
-┌──────────┐    ┌─────────┐    ┌──────────┐    ┌─────────┐
-│ Angular  │    │ Gateway │    │   Auth   │    │ Cognito │
-│ Frontend │    │ Service │    │ Service  │    │         │
-└────┬─────┘    └────┬────┘    └────┬─────┘    └────┬────┘
-│               │              │               │
-│ 1. POST /auth/login          │               │
-│ {email, password}            │               │
-├──────────────►│              │               │
-│               │              │               │
-│               │ 2. Route to auth-service     │
-│               ├─────────────►│               │
-│               │              │               │
-│               │              │ 3. Authenticate user
-│               │              ├──────────────►│
-│               │              │               │
-│               │              │ 4. Return JWT token
-│               │              │    Claims:    │
-│               │              │    - sub: user-uuid
-│               │              │    - cognito:groups:
-│               │              │      ["tenant_acme"]
-│               │              │    - email    │
-│               │              │◄──────────────┤
-│               │              │               │
-│               │ 5. Return JWT to gateway     │
-│               │◄─────────────┤               │
-│               │              │               │
-│ 6. JWT Token │               │               │
-│◄──────────────┤              │               │
-│               │              │               │
-│ 7. Store JWT in localStorage │               │
-│               │              │               │
-```
+## 2. System Requirements
+
+### 2.1 Functional Requirements
+*   **Multi-Tenancy:** Complete data isolation per tenant. Support for "Database-per-Tenant" (preferred) and "Schema-per-Tenant" (legacy/fallback).
+*   **Authentication:** Centralized OAuth2/OIDC authentication via AWS Cognito.
+*   **Authorization:** Role-Based Access Control (RBAC) enforced at the Gateway and Service layers.
+*   **Tenant Management:** Automated provisioning, suspension, and lifecycle management of tenants.
+*   **Entry Management:** CRUD operations for business entities ("Entries") with tenant isolation.
+
+### 2.2 Non-Functional Requirements
+*   **Scalability:** Horizontal scaling of microservices on AWS EKS/ECS.
+*   **Security:** Zero-trust principles. All internal traffic authenticated. Secrets managed via AWS SSM/Secrets Manager.
+*   **Observability:** Centralized logging (JSON), distributed tracing (OpenTelemetry), and metrics (Prometheus).
+*   **Infrastructure:** Infrastructure as Code (Terraform) for reproducible environments.
 
 ---
 
-### **Flow 3: CRUD Operation** (Authenticated request)
+## 3. High-Level Architecture
+
+### 3.1 Context Diagram
+```mermaid
+graph TD
+    User[User / Client] -->|HTTPS + JWT| ALB[AWS Load Balancer]
+    ALB -->|Traffic| Gateway[API Gateway Service]
+    
+    subgraph "AWS Cloud (VPC)"
+        Gateway -->|Auth & Token Exchange| Auth[Auth Service]
+        Gateway -->|Tenant Lifecycle| Platform[Platform Service]
+        Gateway -->|Business Logic| Backend[Backend Service]
+        
+        Auth -->|Identity Provider| Cognito[AWS Cognito]
+        
+        Platform -->|Metadata| MasterDB[(Master DB)]
+        Platform -->|Provisioning| TenantDBs[(Tenant DBs)]
+        Backend -->|Data Access| TenantDBs
+        
+        Registry[Eureka Server]
+        Gateway -.-> Registry
+        Auth -.-> Registry
+        Platform -.-> Registry
+        Backend -.-> Registry
+    end
 ```
-┌──────────┐    ┌─────────┐    ┌──────────┐    ┌──────────┐
-│ Angular  │    │ Gateway │    │ Backend  │    │PostgreSQL│
-│ Frontend │    │ Service │    │ Service  │    │          │
-└────┬─────┘    └────┬────┘    └────┬─────┘    └────┬─────┘
-│               │              │               │
-│ 1. POST /api/entries         │               │
-│ Authorization: Bearer <JWT>  │               │
-│ {key: "api_key",             │               │
-│  value: "sk-123"}            │               │
-├──────────────►│              │               │
-│               │              │               │
-│               │ 2. Validate JWT signature    │
-│               │    using Cognito JWKS        │
-│               │              │               │
-│               │ 3. Extract from JWT:         │
-│               │    - tenant_id: "acme"       │
-│               │    - user_id: "user-uuid"    │
-│               │    - email: "user@acme.com"  │
-│               │              │               │
-│               │ 4. Add headers & route       │
-│               │    X-Tenant-Id: acme         │
-│               │    X-User-Id: user-uuid      │
-│               │    X-Email: user@acme.com    │
-│               ├─────────────►│               │
-│               │              │               │
-│               │              │ 5. TenantContextFilter
-│               │              │    reads headers
-│               │              │    TenantContext.setTenantId("acme")
-│               │              │               │
-│               │              │ 6. Hibernate resolves
-│               │              │    schema: tenant_acme
-│               │              │               │
-│               │              │ 7. INSERT INTO
-│               │              │    tenant_acme.entries
-│               │              │    (key, value, ...)
-│               │              ├──────────────►│
-│               │              │               │
-│               │              │ 8. Row inserted
-│               │              │◄──────────────┤
-│               │              │               │
-│               │ 9. EntryResponseDto          │
-│               │◄─────────────┤               │
-│               │              │               │
-│ 10. Success  │               │               │
-│◄──────────────┤              │               │
-│               │              │               │
-```
+
+### 3.2 Service Responsibilities
+
+| Service | Port | Responsibility |
+| :--- | :--- | :--- |
+| **Gateway Service** | 8080 | **Security Boundary**. JWT validation, Tenant ID extraction, Header enrichment (`X-Tenant-Id`, `X-User-Id`), Routing, Rate Limiting. |
+| **Auth Service** | 8081 | **Identity**. OAuth2/OIDC flows, User Session management, Token issuance (Internal Tokens), User Profile management. |
+| **Backend Service** | 8082 | **Domain Logic**. Tenant-scoped business operations (Entries). Enforces tenant context from headers. |
+| **Platform Service** | 8083 | **Control Plane**. Tenant Lifecycle (Provisioning, Suspension), Policy Management, Internal Token Issuance, System Audit. |
+| **Eureka Server** | 8761 | **Discovery**. Service registration and discovery. |
 
 ---
 
-## 📂 Complete Backend-Service Structure (From Scratch)
-```
-backend-service/
-├── pom.xml
-├── Dockerfile
-├── spotbugs-exclude.xml
-└── src/
-├── main/
-│   ├── java/
-│   │   └── com/
-│   │       └── learning/
-│   │           └── backendservice/
-│   │               ├── BackendServiceApplication.java
-│   │               │
-│   │               ├── config/
-│   │               │   ├── JpaAuditConfig.java
-│   │               │   ├── MultiTenantDataSourceConfig.java
-│   │               │   ├── OpenApiConfig.java
-│   │               │   ├── SecurityConfig.java
-│   │               │   └── TenantContextFilter.java
-│   │               │
-│   │               ├── controller/
-│   │               │   ├── EntryController.java
-│   │               │   └── TenantAdminController.java
-│   │               │
-│   │               ├── dto/
-│   │               │   ├── EntryRequestDto.java
-│   │               │   ├── EntryResponseDto.java
-│   │               │   ├── ErrorResponse.java
-│   │               │   ├── TenantRequestDto.java
-│   │               │   └── TenantResponseDto.java
-│   │               │
-│   │               ├── entity/
-│   │               │   ├── Entry.java
-│   │               │   └── Tenant.java
-│   │               │
-│   │               ├── exception/
-│   │               │   ├── GlobalExceptionHandler.java
-│   │               │   ├── ResourceNotFoundException.java
-│   │               │   └── TenantProvisioningException.java
-│   │               │
-│   │               ├── repository/
-│   │               │   ├── EntryRepository.java
-│   │               │   └── TenantRepository.java
-│   │               │
-│   │               ├── security/
-│   │               │   └── TenantContext.java
-│   │               │
-│   │               └── service/
-│   │                   ├── EntryService.java
-│   │                   ├── EntryServiceImpl.java
-│   │                   ├── TenantService.java
-│   │                   └── TenantServiceImpl.java
-│   │
-│   └── resources/
-│       ├── application.yml
-│       ├── application-dev.yml
-│       ├── application-prod.yml
-│       └── db/
-│           ├── migration/
-│           │   └── V1__create_tenant_registry.sql
-│           └── tenant-template/
-│               └── V1__tenant_initial_schema.sql
-│
-└── test/
-└── java/
-└── com/
-└── learning/
-└── backendservice/
-├── BackendServiceApplicationTests.java
-├── controller/
-│   └── EntryControllerTest.java
-├── service/
-│   └── EntryServiceTest.java
-└── repository/
-└── EntryRepositoryTest.java
+## 4. Security Architecture
 
+### 4.1 Identity & Authentication Flow
+1.  **Login:** Client redirects to AWS Cognito Hosted UI via Auth Service.
+2.  **Token:** Cognito issues ID/Access Tokens.
+3.  **Session:** Auth Service establishes a session and provides tokens to the Frontend.
+4.  **Request:** Frontend sends requests with `Authorization: Bearer <JWT>`.
 
-## PS-10 Tenant Provisioning Architecture – Detailed Implementation Plan (Temporary Appendix)
+### 4.2 Gateway Enforcement (The "Gatekeeper")
+The Gateway Service acts as the primary Policy Enforcement Point (PEP):
+1.  **Validate:** Verifies JWT signature against Cognito JWKS.
+2.  **Extract:** Decodes claims to identify `sub` (User ID) and `cognito:groups` (Tenant).
+3.  **Enforce:**
+    *   **Fail-Closed:** Rejects requests without valid Tenant ID.
+    *   **Sanitize:** Strips incoming `X-*` headers to prevent spoofing.
+4.  **Enrich:** Adds trusted headers for downstream services:
+    *   `X-Tenant-Id`: The resolved tenant identifier.
+    *   `X-User-Id`: The authenticated user ID.
+    *   `X-Authorities`: User roles/permissions.
 
-(This appendix will be merged into `HLD.md` once file edit mapping issue is resolved.)
-
-### 1. Ownership & Boundary
-- `platform-service` = sole authority for tenant lifecycle (provision, suspend, archive, delete).
-- Other services consume metadata only; never create tenants.
-- Backend legacy provisioning disabled: `backend.tenant.provision.enabled=false`.
-
-### 2. Provisioning Modes
-| Mode | Action | Intended Tenants | Status |
-|------|--------|------------------|--------|
-| SCHEMA | Create schema `tenant_<id>` in shared DB | Default path | ENABLED |
-| DATABASE | Create dedicated DB & user | Large / regulated | FLAGGED OFF (enable later) |
-
-Feature flag: `platform.storage.database.enabled`.
-
-### 3. Registry Data Model (`public.tenant`)
-| Field | Purpose |
-|-------|---------|
-| id | Slug identifier (unique) |
-| name | Display/legal name |
-| status | PROVISIONING / ACTIVE / SUSPENDED / ARCHIVED / PROVISION_ERROR |
-| storage_mode | SCHEMA or DATABASE |
-| jdbc_url | Tenant data JDBC URL |
-| db_user_secret_ref | Secret ref (DATABASE mode) |
-| sla_tier | STANDARD / PREMIUM / ENTERPRISE |
-| last_migration_version | Highest migration applied |
-| created_at / updated_at | Audit timestamps |
-
-### 4. Components
-| Component | Responsibility |
-|-----------|---------------|
-| TenantController | Validate + delegate |
-| TenantProvisioningService | Orchestrate workflow |
-| TenantProvisioner | Physical schema/database creation |
-| FlywayTenantMigrator | Run tenant migrations |
-| TenantRepository | Registry persistence |
-| TenantMigrationHistoryRepository | Track migrations |
-| AuditPublisher | Emit lifecycle events |
-| PlatformClient | Read-only retrieval from other services |
-
-### 5. SCHEMA Provisioning Workflow
-1. Validate request (pattern, uniqueness, mode).
-2. Insert row `status=PROVISIONING`.
-3. Create schema `tenant_<id>`.
-4. Build JDBC URL with `currentSchema`.
-5. Run Flyway domain migrations in new schema.
-6. Update row: set `jdbc_url`, `last_migration_version`, `status=ACTIVE`.
-7. Publish audit event.
-8. Return `TenantDto`.
-
-### 6. Error & Rollback
-| Failure | Result | Recovery |
-|---------|--------|----------|
-| Validation | 400 | Fix request |
-| Schema creation | PROVISION_ERROR | Retry endpoint (future) |
-| Migration failure | PROVISION_ERROR | Investigate + retry |
-| Final update concurrency | PROVISION_ERROR | Manual retry |
-
-### 7. Concurrency & Idempotency
-- Unique `id` enforces idempotency.
-- Parallel attempts produce one success + one 409 conflict.
-- `PROVISIONING` interim status visible for monitoring.
-
-### 8. DATABASE Mode (Deferred)
-- `CREATE DATABASE tenant_<id>`; create role & password.
-- Store credentials in SSM/Secrets Manager.
-- Dedicated JDBC URL; migrations run directly.
-
-### 9. Security
-- Regex validation on `id`: `^[a-zA-Z0-9_-]{3,64}$`.
-- Protected by resource server & `ROLE_PLATFORM_ADMIN`.
-- Sanitized schema/db names (lowercase slug).
-- Limited DDL—only controlled create statements.
-
-### 10. Observability
-Metrics:
-- `platform.tenants.provision.attempts`
-- `platform.tenants.provision.success`
-- `platform.tenants.provision.failure`
-- `platform.tenants.migration.duration`
-- `platform.tenants.active`
-
-Audit events: `TENANT_PROVISIONED`, `TENANT_PROVISION_FAILED`.
-
-### 11. API Contracts
-POST `/platform/api/tenants` → creates tenant.
-GET `/platform/api/tenants/{id}` → fetch metadata.
-Errors: 400 INVALID_ID, 409 TENANT_EXISTS, 422 MODE_DISABLED, 500 PROVISION_ERROR.
-
-### 12. Core Pseudocode
-```java
-public TenantDto provisionTenant(ProvisionTenantRequest r) {
-  validate(r);
-  Tenant t = insert(r, PROVISIONING);
-  try {
-    String url = provisioner.provisionTenantStorage(r.id(), r.storageMode());
-    String version = migrator.applyMigrations(r.id(), url);
-    finalize(t.getId(), url, version, ACTIVE);
-    audit.publishProvisioned(t.getId());
-    return mapper.toDto(repository.findById(t.getId()).orElseThrow());
-  } catch (Exception e) {
-    markProvisionError(t.getId(), e.getMessage());
-    audit.publishFailed(t.getId(), e);
-    throw new TenantProvisioningException("Failed to provision tenant", e);
-  }
-}
-```
-
-### 13. Backend Cleanup
-- Remove `TenantAdminController`.
-- Delete schema creation utilities.
-- Introduce `PlatformClient`.
-- Ensure flag disables legacy endpoints before removal.
-
-### 14. Testing Matrix
-| Test | Goal |
-|------|------|
-| Unit | Validate rules, transitions |
-| Integration | End-to-end provisioning (Testcontainers) |
-| Concurrency | Ensure 409 on duplicate race |
-| Migration | Idempotent baseline |
-| Security | Unauthorized returns 403 |
-| Metrics | Counters increment |
-| Error | Simulate migration failure → PROVISION_ERROR |
-
-### 15. Rollout Phases
-P1 SCHEMA + tests → P2 Cleanup + Client → P3 Metrics + Audit → P4 DATABASE mode flag → P5 Retry endpoint / tooling.
-
-### 16. Performance
-- Schema creation trivial; migrations must remain lightweight.
-- Monitor pool saturation as tenant count grows.
-- Future: shard by tier or region.
-
-### 17. Future Hardening
-- Internal signed service tokens.
-- Credential rotation (DATABASE mode).
-- KMS key mapping per tenant for encryption.
-
-### 18. Risks & Mitigations
-| Risk | Mitigation |
-|------|-----------|
-| DDL privilege misuse | Restrict admin role + audit |
-| Orphaned schemas | Sweeper for PROVISION_ERROR aged rows |
-| Migration drift | Review + Flyway checksum |
-| Spike provisioning | Queue + async worker (future) |
-
-### 19. Acceptance Criteria
-- Active tenant returned with JDBC URL.
-- Duplicate id → 409.
-- Invalid id → 400.
-- Migration history recorded.
-- Metrics emitted.
-- Backend provisioning disabled.
-- HLD & `copilot-index.md` updated.
-
-### 20. Future Enhancements
-- Retry provisioning endpoint.
-- Policy decision API integration.
-- Internal token issuance & JWK.
-- Quota enforcement.
+### 4.3 Internal Trust (Planned)
+*   **Current:** Downstream services trust `X-Tenant-Id` headers from the Gateway (Network isolation required).
+*   **Future:** Gateway exchanges external Cognito Token for a short-lived **Internal Service Token** signed by the Platform Service. Downstream services validate this internal token.
 
 ---
 
+## 5. Multi-Tenancy Model
+
+### 5.1 Isolation Strategy
+We support two modes, controlled by the `platform.storage.mode` feature flag:
+
+1.  **Database-per-Tenant (Target State):**
+    *   **Isolation:** Maximum. Each tenant has a dedicated PostgreSQL database (e.g., `tenant_acme`).
+    *   **Security:** Distinct DB credentials per tenant.
+    *   **Scalability:** Tenants can be moved to different RDS instances.
+    *   **Provisioning:** Platform Service creates DB and runs baseline migrations.
+
+2.  **Schema-per-Tenant (Legacy/Fallback):**
+    *   **Isolation:** Logical. Shared database, separate schemas (e.g., `schema_acme`).
+    *   **Pros:** Lower cost for free-tier/dev.
+
+### 5.2 Tenant Provisioning Workflow
+1.  **Request:** Admin calls `POST /platform/api/tenants`.
+2.  **Validation:** Platform Service validates uniqueness and plan limits.
+3.  **Resource Allocation:**
+    *   Creates Database (or Schema).
+    *   Creates DB User (if DB-per-tenant).
+4.  **Migration:** Triggers Flyway migrations to initialize the tenant's schema.
+5.  **Registration:** Records metadata (JDBC URL, State) in the Master DB `tenants` table.
+6.  **Identity:** Creates a Tenant Group in Cognito (e.g., `tenant_<id>`).
+
+---
+
+## 6. Data Model
+
+### 6.1 Master Database (Platform)
+*   `tenants`: Registry of all tenants.
+    *   `id` (PK), `name`, `status` (ACTIVE, SUSPENDED), `storage_mode`, `jdbc_url`, `tier`.
+*   `policies`: RBAC definitions (Roles, Permissions).
+
+### 6.2 Tenant Database (Domain)
+*   `entries`: Business data.
+    *   `id` (UUID), `title`, `content`, `created_by`, `created_at`.
+*   *Note: No tenant_id column needed in tables as the DB/Schema itself is the isolation boundary.*
+
+---
+
+## 7. Infrastructure & Deployment
+
+### 7.1 Tech Stack
+*   **Backend:** Java 21, Spring Boot 3.x
+*   **Frontend:** Angular 18+
+*   **Database:** PostgreSQL 15+ (RDS)
+*   **Container:** Docker, ECR
+*   **Orchestration:** AWS EKS (Kubernetes) or ECS Fargate
+*   **IaC:** Terraform
+
+### 7.2 CI/CD Pipeline
+1.  **Build:** Maven build, Unit Tests.
+2.  **Package:** Docker build, Push to ECR.
+3.  **Deploy:** Terraform apply (Infra), Helm Upgrade (App).
+
+---
+
+## 8. Future Roadmap (From Plans)
+*   **Internal Token System:** Replace header trust with signed internal tokens.
+*   **Policy Engine:** Move authorization logic from code to a data-driven policy engine in Platform Service.
+*   **Advanced Provisioning:** Async provisioning with retry queues.

@@ -53,6 +53,9 @@ terraform/cognito-config.env
 terraform/*.env
 terraform/.terraform.lock.hcl
 
+### Lambda Generated Files ###
+terraform/lambda/*.zip
+
 ### Environment Variables ###
 .env
 .env.local

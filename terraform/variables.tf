@@ -9,6 +9,18 @@ variable "aws_region" {
   }
 }
 
+variable "aws_profile" {
+  description = "AWS CLI profile to use for deployments"
+  type        = string
+  default     = "personal"
+}
+
+variable "platform_service_url" {
+  description = "Platform service URL for Lambda to call tenant provisioning API"
+  type        = string
+  default     = "http://platform-service:8083/platform"
+}
+
 variable "project_name" {
   description = "Project name used in resource naming"
   type        = string

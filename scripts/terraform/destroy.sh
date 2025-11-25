@@ -9,6 +9,11 @@
 
 set -euo pipefail
 
+# Change to terraform directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TERRAFORM_DIR="$SCRIPT_DIR/../../terraform"
+cd "$TERRAFORM_DIR"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -43,8 +48,8 @@ else
     log_warn "No .env file found, using defaults"
 fi
 
-# Set AWS profile
-export AWS_PROFILE=${AWS_PROFILE:-default}
+# Set AWS profile (hardcoded to 'personal' for safety)
+export AWS_PROFILE=${AWS_PROFILE:-personal}
 log_info "Using AWS Profile: $AWS_PROFILE"
 
 # Verify AWS credentials

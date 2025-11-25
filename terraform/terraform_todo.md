@@ -1,97 +1,133 @@
-# 🚧 Terraform TODO: Production-Ready Cognito Pre Token Generation Lambda Trigger & Robustness
+# Terraform TODO: Add Cognito Pre-Token Generation Lambda Trigger
 
-This document tracks all remaining and recommended steps to make the Terraform infrastructure robust, secure, and production-ready, with a focus on adding a Cognito pre token generation Lambda trigger for tenant ID injection.
-
----
-
-## 1. Cognito Pre Token Generation Lambda Trigger (Tenant ID)
-
-- [ ] **Create Lambda Function**
-  - Store handler code in `terraform/lambda/pre-token-generation/handler.mjs` (Node.js 18+, ES module syntax).
-  - Ensure code uses the V2 event format for compatibility with Cognito's V2_0 trigger.
-  - Add robust error handling, logging, and input validation.
-
-- [ ] **Terraform Lambda Deployment**
-  - Use Terraform to package and deploy the Lambda (archive or S3 source).
-  - Parameterize environment variables if needed.
-  - Enable Lambda versioning and aliasing for safe updates.
-
-- [ ] **IAM Policy and Role**
-  - Create a specific IAM policy with least-privilege permissions (CloudWatch logging, etc.).
-  - Attach the policy to a dedicated Lambda execution role.
-  - Allow Cognito to invoke the Lambda via `lambda:InvokeFunction`.
-
-- [ ] **Cognito User Pool Integration**
-  - Attach the Lambda as a pre token generation trigger using the V2 event format.
-  - Explicitly set the trigger version to "V2_0 (Basic features + access token customization)" in Terraform.
-  - Add Terraform dependencies to ensure the Lambda is created before the user pool.
-
-- [ ] **Configuration and Secrets Management**
-  - Store sensitive Lambda environment variables (if any) in AWS SSM Parameter Store or Secrets Manager.
-  - Reference these securely in Terraform.
-
-- [ ] **Observability and Monitoring**
-  - Enable detailed CloudWatch logging for the Lambda.
-  - Set up CloudWatch Alarms for Lambda errors or throttling.
-  - Optionally, add X-Ray tracing for debugging.
-
-- [ ] **Documentation and Automation**
-  - Document the trigger, event version, and claims in the README.
-  - Add deployment and rollback instructions.
-  - Automate packaging and deployment (e.g., via CI/CD or scripts).
+**Goal:** Add a Lambda function that injects `tenantId` into JWT tokens during Cognito authentication.
 
 ---
 
-## 2. General Production Readiness Improvements
+## Implementation Checklist
 
-- [ ] **S3 Backend for State**
-  - Move Terraform state to S3 with DynamoDB state locking (see `main.tf` and `REVIEW.md`).
+### 1. Lambda Function Code
+- [ ] **Create Lambda handler file**
+  - Path: `terraform/lambda/pre-token-generation/index.mjs`
+  - Runtime: Node.js 20.x (free tier)
+  - Use ES module syntax (`export const handler`)
+  - Extract `custom:tenantId` from user attributes
+  - Inject into both access token and ID token using V2 event format
+  - Add error handling and CloudWatch logging
 
-- [ ] **Multi-Environment Support**
-  - Separate dev/staging/prod using different `terraform.tfvars` and state files.
+### 2. IAM Role for Lambda
+- [ ] **Create Lambda execution role**
+  - Resource: `aws_iam_role.lambda_pre_token`
+  - Trust policy: Allow Lambda service to assume role
+  - Attach AWS managed policy: `AWSLambdaBasicExecutionRole` (CloudWatch logs)
 
-- [ ] **Monitoring & Alerting**
-  - Add CloudWatch alarms for key resources (Cognito, Lambda, etc.).
+### 3. Lambda Function Resource
+- [ ] **Create Lambda function**
+  - Resource: `aws_lambda_function.pre_token_generation`
+  - Runtime: `nodejs20.x`
+  - Handler: `index.handler`
+  - Source: Archive of `lambda/pre-token-generation/` directory
+  - Environment: None needed (reads from event)
+  - Timeout: 3 seconds (sufficient for token manipulation)
+  - Memory: 128 MB (minimum, keeps costs low)
 
-- [ ] **Backup & Disaster Recovery**
-  - Automate user export and backup strategies for Cognito.
+### 4. Lambda Permission for Cognito
+- [ ] **Allow Cognito to invoke Lambda**
+  - Resource: `aws_lambda_permission.cognito_invoke`
+  - Principal: `cognito-idp.amazonaws.com`
+  - Source ARN: User pool ARN
+  - Action: `lambda:InvokeFunction`
 
-- [ ] **Security Hardening**
-  - Review and minimize IAM permissions for all resources.
-  - Store all secrets in SSM or Secrets Manager.
+### 5. Attach Trigger to Cognito User Pool
+- [ ] **Update Cognito User Pool**
+  - Modify existing `aws_cognito_user_pool.main` resource
+  - Add `lambda_config` block:
+    ```hcl
+    lambda_config {
+      pre_token_generation = aws_lambda_function.pre_token_generation.arn
+      lambda_version       = "V2_0"  # Required for access token customization
+    }
+    ```
+  - Add `depends_on` to ensure Lambda is created first
 
-- [ ] **Testing & Validation**
-  - Add automated tests for Lambda (unit/integration).
-  - Validate token claims in downstream services.
-
-- [ ] **Documentation**
-  - Update README and SUMMARY.md with new trigger, IAM, and monitoring details.
+### 6. Terraform Cleanup
+- [ ] **Ensure clean destroy**
+  - Verify no `prevent_destroy = true` on Lambda resources
+  - Test `terraform destroy` removes all resources
+  - Lambda logs in CloudWatch will persist (manual cleanup if needed)
 
 ---
 
-## 3. Optional Advanced Enhancements
+## Free Tier Compliance
 
-- [ ] **Lambda Deployment Optimization**
-  - Use S3 for large Lambda packages.
-  - Enable canary deployments or blue/green for Lambda updates.
-
-- [ ] **CI/CD Integration**
-  - Automate Terraform and Lambda deployments via CI/CD pipeline.
-
-- [ ] **CloudWatch Dashboards**
-  - Create dashboards for real-time monitoring.
-
-- [ ] **Custom Domain & SSL**
-  - Set up custom domain for Cognito Hosted UI with ACM SSL.
+✅ **Lambda:** 1M requests/month free (typical auth usage: <10K/month)
+✅ **CloudWatch Logs:** 5GB ingestion free (Lambda logs are minimal)
+✅ **No additional costs** expected
 
 ---
 
-## 4. Tracking & Ownership
+## Testing Plan
 
-- [ ] Assign responsible owners and target dates for each item (optional).
-- [ ] Integrate this TODO with project management tools if needed.
+1. **Deploy:** `terraform apply`
+2. **Create test user** with `custom:tenantId` attribute
+3. **Login** via Cognito Hosted UI or API
+4. **Decode JWT** access token (use jwt.io)
+5. **Verify** `tenantId` claim exists in token
+6. **Check logs** in CloudWatch for Lambda execution
 
 ---
 
-**Last updated:** 2025-11-24
+## Lambda Code Structure
 
+```javascript
+export const handler = async (event) => {
+  console.log('Pre Token Generation V2 Event:', JSON.stringify(event, null, 2));
+  
+  try {
+      const userAttributes = event.request.userAttributes;
+      const tenantId = userAttributes['custom:tenantId'] || 'default';
+      
+      console.log('Found tenantId:', tenantId);
+      
+      if (!event.response) {
+          event.response = {};
+      }
+      
+      // V2 Response Format
+      event.response.claimsAndScopeOverrideDetails = {
+          accessTokenGeneration: {
+              claimsToAddOrOverride: {
+                  'tenantId': tenantId,
+                  'custom:tenantId': tenantId
+              }
+          },
+          idTokenGeneration: {
+              claimsToAddOrOverride: {
+                  'tenantId': tenantId
+              }
+          }
+      };
+      
+      console.log('V2 Response:', JSON.stringify(event.response, null, 2));
+      return event;
+      
+  } catch (error) {
+      console.error('Error in Pre Token Generation V2:', error);
+      return event;
+  }
+};
+```
+
+---
+
+## Files to Create/Modify
+
+### New Files:
+- `terraform/lambda/pre-token-generation/index.mjs` (Lambda handler)
+
+### Modified Files:
+- `terraform/main.tf` (add Lambda resources + update Cognito user pool)
+
+---
+
+**Last Updated:** 2025-11-24

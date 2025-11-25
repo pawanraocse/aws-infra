@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
+    }
   }
 
   # IMPORTANT: Uncomment and configure backend for production
@@ -135,10 +139,11 @@ resource "aws_cognito_user_pool" "main" {
   #   advanced_security_mode = "ENFORCED" # may incur additional costs
   # }
 
-  # Lambda triggers (commented - add if needed and if you accept possible Lambda costs)
-  # lambda_config {
-  #   pre_sign_up = aws_lambda_function.pre_signup.arn
-  # }
+  # Lambda triggers (V2_0 is configured in the Lambda function itself)
+  lambda_config {
+    pre_token_generation = aws_lambda_function.pre_token_generation.arn
+    post_confirmation    = aws_lambda_function.post_confirmation.arn
+  }
 
   lifecycle {
     prevent_destroy = false
@@ -308,7 +313,7 @@ resource "aws_ssm_parameter" "user_pool_id" {
   }
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
@@ -325,7 +330,7 @@ resource "aws_ssm_parameter" "client_id" {
     ManagedBy   = "Terraform"
   }
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
@@ -344,7 +349,7 @@ resource "aws_ssm_parameter" "client_secret" {
     ManagedBy   = "Terraform"
   }
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 
   # Optional: specify key_id to use customer-managed CMK (PAID - may incur KMS costs)
@@ -364,7 +369,7 @@ resource "aws_ssm_parameter" "issuer_uri" {
     ManagedBy   = "Terraform"
   }
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
@@ -381,7 +386,7 @@ resource "aws_ssm_parameter" "domain" {
     ManagedBy   = "Terraform"
   }
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
@@ -398,7 +403,7 @@ resource "aws_ssm_parameter" "callback_url" {
     ManagedBy   = "Terraform"
   }
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
@@ -415,7 +420,7 @@ resource "aws_ssm_parameter" "logout_redirect_url" {
     ManagedBy   = "Terraform"
   }
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
@@ -431,7 +436,7 @@ resource "aws_ssm_parameter" "jwks_uri" {
     ManagedBy   = "Terraform"
   }
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
@@ -447,7 +452,7 @@ resource "aws_ssm_parameter" "hosted_ui_url" {
     ManagedBy   = "Terraform"
   }
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
@@ -463,7 +468,7 @@ resource "aws_ssm_parameter" "branding_id" {
     ManagedBy   = "Terraform"
   }
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
@@ -479,6 +484,6 @@ resource "aws_ssm_parameter" "aws_region" {
     ManagedBy   = "Terraform"
   }
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }

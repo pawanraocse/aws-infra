@@ -1,7 +1,7 @@
 package com.learning.backendservice.tenant.registry;
 
 import com.learning.backendservice.cache.LocalCache;
-import com.learning.common.dto.TenantDbInfo;
+import com.learning.common.dto.TenantDbConfig;
 import com.learning.common.util.SimpleCryptoUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,7 +16,7 @@ public class PlatformServiceTenantRegistry implements TenantRegistryService {
     private final LocalCache localCache;
 
     @Override
-    public TenantDbInfo load(String tenantId) {
+    public TenantDbConfig load(String tenantId) {
         if (tenantId == null || tenantId.isBlank()) {
             throw new IllegalArgumentException("Invalid tenant id");
         }
@@ -24,11 +24,11 @@ public class PlatformServiceTenantRegistry implements TenantRegistryService {
         return localCache.get(tenantId, () -> fetchTenantDbInfo(tenantId));
     }
 
-    private TenantDbInfo fetchTenantDbInfo(String tenantId) {
+    private TenantDbConfig fetchTenantDbInfo(String tenantId) {
         return platformWebClient.get()
                 .uri("/internal/tenants/{tenantId}/db-info", tenantId)
                 .retrieve()
-                .bodyToMono(TenantDbInfo.class)
+                .bodyToMono(TenantDbConfig.class)
                 .timeout(java.time.Duration.ofSeconds(5))
                 .retryWhen(reactor.util.retry.Retry.backoff(3, java.time.Duration.ofMillis(300)))
                 .switchIfEmpty(Mono.error(() ->
@@ -37,7 +37,7 @@ public class PlatformServiceTenantRegistry implements TenantRegistryService {
                     String decryptedPassword = info.password() != null
                             ? SimpleCryptoUtil.decrypt(info.password())
                             : null;
-                    return new TenantDbInfo(info.jdbcUrl(), info.username(), decryptedPassword);
+                    return new TenantDbConfig(info.jdbcUrl(), info.username(), decryptedPassword);
                 })
                 .blockOptional()
                 .orElseThrow(() -> new IllegalArgumentException("Tenant not found: " + tenantId));

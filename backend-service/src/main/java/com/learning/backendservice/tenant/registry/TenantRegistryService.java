@@ -1,7 +1,7 @@
 package com.learning.backendservice.tenant.registry;
 
-import com.learning.common.dto.TenantDbInfo;
+import com.learning.common.dto.TenantDbConfig;
 
 public interface TenantRegistryService {
-    TenantDbInfo load(String tenantId);
+    TenantDbConfig load(String tenantId);
 }

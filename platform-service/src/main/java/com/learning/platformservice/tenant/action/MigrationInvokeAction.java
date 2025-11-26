@@ -1,5 +1,7 @@
 package com.learning.platformservice.tenant.action;
 
+import com.learning.common.dto.MigrationResult;
+import com.learning.common.dto.TenantDbConfig;
 import com.learning.common.util.SimpleCryptoUtil;
 import com.learning.platformservice.tenant.entity.Tenant;
 import com.learning.platformservice.tenant.exception.TenantProvisioningException;
@@ -121,12 +123,5 @@ public class MigrationInvokeAction implements TenantProvisionAction {
                     .timeout(Duration.ofSeconds(30))
                     .block();
         }
-    }
-
-    // Shared DTOs
-    public record TenantDbConfig(String jdbcUrl, String username, String password) {
-    }
-
-    public record MigrationResult(String lastVersion) {
     }
 }

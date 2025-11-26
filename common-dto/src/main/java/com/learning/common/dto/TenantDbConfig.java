@@ -1,6 +1,6 @@
 package com.learning.common.dto;
 
-public record TenantDbInfo(
+public record TenantDbConfig(
         String jdbcUrl,
         String username,
         String password

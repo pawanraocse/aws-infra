@@ -1,6 +1,6 @@
 package com.learning.platformservice.tenant.api;
 
-import com.learning.common.dto.TenantDbInfo;
+import com.learning.common.dto.TenantDbConfig;
 import com.learning.platformservice.tenant.repo.TenantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -16,9 +16,9 @@ public class TenantRegistryController {
     private final TenantRepository tenantRepository;
 
     @GetMapping("/{tenantId}/db-info")
-    public ResponseEntity<TenantDbInfo> getTenantDbInfo(@PathVariable String tenantId) {
+    public ResponseEntity<TenantDbConfig> getTenantDbInfo(@PathVariable String tenantId) {
         return tenantRepository.findById(tenantId)
-                .map(t -> ResponseEntity.ok(new TenantDbInfo(
+                .map(t -> ResponseEntity.ok(new TenantDbConfig(
                         t.getJdbcUrl(),
                         t.getDbUserSecretRef(),
                         t.getDbUserPasswordEnc())))

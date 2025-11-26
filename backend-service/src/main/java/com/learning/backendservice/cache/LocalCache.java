@@ -1,6 +1,6 @@
 package com.learning.backendservice.cache;
 
-import com.learning.common.dto.TenantDbInfo;
+import com.learning.common.dto.TenantDbConfig;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.stereotype.Component;
@@ -12,12 +12,12 @@ import java.util.function.Supplier;
 public class LocalCache {
     public static final int MAX_EXPIRE_TIME_IN_MIN = 30;
     public static final int MAXIMUM_SIZE = 1000;
-    private final Cache<String, TenantDbInfo> cache = Caffeine.newBuilder()
+    private final Cache<String, TenantDbConfig> cache = Caffeine.newBuilder()
             .expireAfterWrite(Duration.ofMinutes(MAX_EXPIRE_TIME_IN_MIN))
             .maximumSize(MAXIMUM_SIZE)
             .build();
 
-    public TenantDbInfo get(String tenantId, Supplier<TenantDbInfo> loader) {
+    public TenantDbConfig get(String tenantId, Supplier<TenantDbConfig> loader) {
         return cache.get(tenantId, t -> loader.get());
     }
 

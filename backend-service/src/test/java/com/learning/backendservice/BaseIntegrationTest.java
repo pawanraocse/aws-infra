@@ -13,20 +13,18 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-@SpringBootTest(
-    properties = {
+@SpringBootTest(properties = {
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.jpa.show-sql=true"
-    }
-)
-@Import({TestConfig.class, TestAuditConfig.class})
+})
+@Import({ TestConfig.class, TestAuditConfig.class })
 @Testcontainers
 @ActiveProfiles("test")
 public abstract class BaseIntegrationTest {
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName.parse("postgres:16.4-alpine");
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(POSTGRES_IMAGE)
+    protected static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(POSTGRES_IMAGE)
             .withDatabaseName("test")
             .withUsername("test")
             .withPassword("test");

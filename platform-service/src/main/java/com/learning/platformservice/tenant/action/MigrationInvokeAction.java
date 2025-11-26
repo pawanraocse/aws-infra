@@ -3,6 +3,9 @@ package com.learning.platformservice.tenant.action;
 import com.learning.common.dto.MigrationResult;
 import com.learning.common.dto.TenantDbConfig;
 import com.learning.common.util.SimpleCryptoUtil;
+import com.learning.platformservice.tenant.action.migration.AuthServiceMigration;
+import com.learning.platformservice.tenant.action.migration.BackendServiceMigration;
+import com.learning.platformservice.tenant.action.migration.ServiceMigrationStrategy;
 import com.learning.platformservice.tenant.entity.Tenant;
 import com.learning.platformservice.tenant.exception.TenantProvisioningException;
 import lombok.RequiredArgsConstructor;
@@ -11,7 +14,6 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import java.time.Duration;
 import java.util.List;
 
 /**
@@ -74,54 +76,9 @@ public class MigrationInvokeAction implements TenantProvisionAction {
                 decryptedPassword);
     }
 
-    // Strategy interface
-    private interface ServiceMigrationStrategy {
-        String serviceName();
-
-        MigrationResult migrate(String tenantId, TenantDbConfig config);
-    }
-
     // Backend service strategy
-    @RequiredArgsConstructor
-    private static class BackendServiceMigration implements ServiceMigrationStrategy {
-        private final WebClient webClient;
 
-        @Override
-        public String serviceName() {
-            return "backend-service";
-        }
-
-        @Override
-        public MigrationResult migrate(String tenantId, TenantDbConfig config) {
-            return webClient.post()
-                    .uri("/internal/tenants/{tenantId}/migrate", tenantId)
-                    .bodyValue(config)
-                    .retrieve()
-                    .bodyToMono(MigrationResult.class)
-                    .timeout(Duration.ofSeconds(30))
-                    .block();
-        }
-    }
 
     // Auth service strategy
-    @RequiredArgsConstructor
-    private static class AuthServiceMigration implements ServiceMigrationStrategy {
-        private final WebClient webClient;
 
-        @Override
-        public String serviceName() {
-            return "auth-service";
-        }
-
-        @Override
-        public MigrationResult migrate(String tenantId, TenantDbConfig config) {
-            return webClient.post()
-                    .uri("/internal/tenants/{tenantId}/migrate", tenantId)
-                    .bodyValue(config)
-                    .retrieve()
-                    .bodyToMono(MigrationResult.class)
-                    .timeout(Duration.ofSeconds(30))
-                    .block();
-        }
-    }
 }

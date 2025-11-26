@@ -1,8 +1,8 @@
 package com.learning.platformservice.tenant.service;
 
+import com.learning.common.dto.ProvisionTenantRequest;
 import com.learning.platformservice.tenant.action.TenantProvisionAction;
 import com.learning.platformservice.tenant.config.PlatformTenantProperties;
-import com.learning.platformservice.tenant.dto.ProvisionTenantRequest;
 import com.learning.platformservice.tenant.dto.TenantDto;
 import com.learning.platformservice.tenant.entity.Tenant;
 import com.learning.platformservice.tenant.exception.TenantAlreadyExistsException;

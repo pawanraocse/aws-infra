@@ -65,6 +65,13 @@ spring:
       read-timeout: 10000
       write-timeout: 10000
 
+# Service discovery - Eureka service names for load-balanced WebClient
+services:
+  backend:
+    base-url: http://backend-service
+  auth:
+    base-url: http://auth-service
+
 server:
   port: ${SERVER_PORT:8083}
   servlet:

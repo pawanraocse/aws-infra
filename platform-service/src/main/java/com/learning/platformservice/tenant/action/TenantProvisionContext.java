@@ -1,6 +1,6 @@
 package com.learning.platformservice.tenant.action;
 
-import com.learning.platformservice.tenant.dto.ProvisionTenantRequest;
+import com.learning.common.dto.ProvisionTenantRequest;
 import com.learning.platformservice.tenant.entity.Tenant;
 import lombok.Getter;
 import lombok.Setter;

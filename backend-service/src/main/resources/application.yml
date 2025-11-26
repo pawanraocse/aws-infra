@@ -114,10 +114,6 @@ management:
     tracing:
       endpoint: ${ZIPKIN_URL:http://localhost:9411}/api/v2/spans
 
-platform:
-  service:
-    base-url: ${PLATFORM_SERVICE_BASE_URL:http://localhost:8083}
-
 # OpenAPI Documentation
 
 springdoc:

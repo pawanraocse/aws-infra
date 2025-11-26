@@ -1,5 +1,6 @@
 package com.learning.platformservice.tenant.entity;
 
+import com.learning.common.dto.TenantType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

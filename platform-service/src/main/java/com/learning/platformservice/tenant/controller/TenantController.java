@@ -1,6 +1,6 @@
 package com.learning.platformservice.tenant.controller;
 
-import com.learning.platformservice.tenant.dto.ProvisionTenantRequest;
+import com.learning.common.dto.ProvisionTenantRequest;
 import com.learning.platformservice.tenant.dto.TenantDto;
 import com.learning.platformservice.tenant.service.TenantProvisioningService;
 import com.learning.platformservice.tenant.service.TenantService;

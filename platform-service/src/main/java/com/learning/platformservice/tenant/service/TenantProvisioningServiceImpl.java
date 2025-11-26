@@ -2,8 +2,9 @@ package com.learning.platformservice.tenant.service;
 
 import com.learning.platformservice.tenant.action.TenantProvisionAction;
 import com.learning.platformservice.tenant.action.TenantProvisionContext;
+import com.learning.common.dto.ProvisionTenantRequest;
+import com.learning.common.dto.TenantType;
 import com.learning.platformservice.tenant.config.PlatformTenantProperties;
-import com.learning.platformservice.tenant.dto.ProvisionTenantRequest;
 import com.learning.platformservice.tenant.dto.TenantDto;
 import com.learning.platformservice.tenant.entity.Tenant;
 import com.learning.platformservice.tenant.entity.TenantStatus;
@@ -77,7 +78,7 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         tenant.setMaxUsers(request.maxUsers());
 
         // NEW: Set trial period for organization tenants
-        if (request.tenantType() == com.learning.platformservice.tenant.entity.TenantType.ORGANIZATION) {
+        if (request.tenantType() == TenantType.ORGANIZATION) {
             tenant.setTrialEndsAt(OffsetDateTime.now().plusDays(30));
             tenant.setSubscriptionStatus(com.learning.platformservice.tenant.entity.SubscriptionStatus.TRIAL);
         }
@@ -140,7 +141,7 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
                     tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
         }
         TenantProvisionContext ctx = new TenantProvisionContext(
-                new ProvisionTenantRequest(
+                new com.learning.common.dto.ProvisionTenantRequest(
                         tenant.getId(),
                         tenant.getName(),
                         tenant.getStorageMode(),

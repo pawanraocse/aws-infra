@@ -21,6 +21,18 @@
             <groupId>com.learning</groupId>
             <artifactId>common-dto</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.learning</groupId>
+            <artifactId>common-infra</artifactId>
+        </dependency>
+
+        <!-- WebFlux for WebClient -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
         <!-- Eureka Client -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>

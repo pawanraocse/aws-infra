@@ -1,8 +1,8 @@
 package com.learning.platformservice.tenant.service;
 
+import com.learning.common.dto.ProvisionTenantRequest;
 import com.learning.platformservice.tenant.action.TenantProvisionAction;
 import com.learning.platformservice.tenant.config.PlatformTenantProperties;
-import com.learning.platformservice.tenant.dto.ProvisionTenantRequest;
 import com.learning.platformservice.tenant.dto.TenantDto;
 import com.learning.platformservice.tenant.entity.Tenant;
 import com.learning.platformservice.tenant.exception.TenantProvisioningException;
@@ -12,7 +12,6 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 

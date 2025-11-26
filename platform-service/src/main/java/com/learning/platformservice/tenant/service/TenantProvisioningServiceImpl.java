@@ -23,7 +23,8 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
- * Orchestrates tenant provisioning: persist tenant row, create storage (via actions), invoke downstream migrations, manage status transitions.
+ * Orchestrates tenant provisioning: persist tenant row, create storage (via
+ * actions), invoke downstream migrations, manage status transitions.
  */
 @Service
 @Primary
@@ -40,14 +41,17 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
 
     @Autowired
     public TenantProvisioningServiceImpl(TenantRepository tenantRepository,
-                                          MeterRegistry meterRegistry,
-                                          List<TenantProvisionAction> actions,
-                                          PlatformTenantProperties tenantProperties,
-                                          TenantProvisioner tenantProvisioner) {
+            MeterRegistry meterRegistry,
+            List<TenantProvisionAction> actions,
+            PlatformTenantProperties tenantProperties,
+            TenantProvisioner tenantProvisioner) {
         this.tenantRepository = tenantRepository;
-        this.attemptsCounter = Counter.builder("platform.tenants.provision.attempts").description("Tenant provision attempts").register(meterRegistry);
-        this.successCounter = Counter.builder("platform.tenants.provision.success").description("Successful tenant provisions").register(meterRegistry);
-        this.failureCounter = Counter.builder("platform.tenants.provision.failure").description("Failed tenant provisions").register(meterRegistry);
+        this.attemptsCounter = Counter.builder("platform.tenants.provision.attempts")
+                .description("Tenant provision attempts").register(meterRegistry);
+        this.successCounter = Counter.builder("platform.tenants.provision.success")
+                .description("Successful tenant provisions").register(meterRegistry);
+        this.failureCounter = Counter.builder("platform.tenants.provision.failure")
+                .description("Failed tenant provisions").register(meterRegistry);
         this.actions = actions;
         this.tenantProperties = tenantProperties;
         this.tenantProvisioner = tenantProvisioner;
@@ -92,8 +96,14 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
             tenant.setUpdatedAt(OffsetDateTime.now());
             tenantRepository.save(tenant);
             if ("DATABASE".equalsIgnoreCase(request.storageMode()) && tenantProperties.isDropOnFailure()) {
-                try { tenantProvisioner.dropTenantDatabase(tenantId); } catch (Exception dropEx) { log.warn("tenant_db_drop_failed tenantId={} error={}", tenantId, dropEx.getMessage(), dropEx);} }
-            log.error("tenant_provision_failed tenantId={} phase={} error={}", tenantId, tenant.getStatus(), e.getMessage(), e);
+                try {
+                    tenantProvisioner.dropTenantDatabase(tenantId);
+                } catch (Exception dropEx) {
+                    log.warn("tenant_db_drop_failed tenantId={} error={}", tenantId, dropEx.getMessage(), dropEx);
+                }
+            }
+            log.error("tenant_provision_failed tenantId={} phase={} error={}", tenantId, tenant.getStatus(),
+                    e.getMessage(), e);
             throw new TenantProvisioningException(tenantId, "Failed provisioning: " + e.getMessage(), e);
         }
         tenant.setJdbcUrl(ctx.getJdbcUrl());
@@ -102,7 +112,8 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         tenant.setUpdatedAt(OffsetDateTime.now());
         tenantRepository.save(tenant);
         successCounter.increment();
-        log.info("tenant_provisioned tenantId={} storageMode={} durationMs={}", tenantId, request.storageMode(), System.currentTimeMillis() - start);
+        log.info("tenant_provisioned tenantId={} storageMode={} durationMs={}", tenantId, request.storageMode(),
+                System.currentTimeMillis() - start);
         return new TenantDto(tenant.getId(), tenant.getName(), tenant.getStatus(), tenant.getStorageMode(),
                 tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
     }
@@ -112,15 +123,31 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new TenantNotFoundException(tenantId));
         if (!TenantStatus.MIGRATION_ERROR.name().equals(tenant.getStatus())) {
             log.info("tenant_retry_migration_noop tenantId={} status={}", tenantId, tenant.getStatus());
-            return new TenantDto(tenant.getId(), tenant.getName(), tenant.getStatus(), tenant.getStorageMode(), tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
+            return new TenantDto(tenant.getId(), tenant.getName(), tenant.getStatus(), tenant.getStorageMode(),
+                    tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
         }
-        TenantProvisionContext ctx = new TenantProvisionContext(new ProvisionTenantRequest(tenant.getId(), tenant.getName(), tenant.getStorageMode(), tenant.getSlaTier()), tenant);
+        TenantProvisionContext ctx = new TenantProvisionContext(
+                new ProvisionTenantRequest(
+                        tenant.getId(),
+                        tenant.getName(),
+                        tenant.getStorageMode(),
+                        tenant.getSlaTier(),
+                        tenant.getTenantType(),
+                        tenant.getOwnerEmail(),
+                        tenant.getMaxUsers()),
+                tenant);
         try {
-            // Execute only migration-related actions (currently MigrationInvokeAction identified by class name)
+            // Execute only migration-related actions (currently MigrationInvokeAction
+            // identified by class name)
             actions.stream()
                     .filter(a -> a.getClass().getSimpleName().equals(MIGRATION_ACTION_CLASS))
                     .forEach(a -> {
-                        try { a.execute(ctx); } catch (Exception e) { throw new TenantProvisioningException(tenantId, "Migration retry failed: " + e.getMessage(), e); }
+                        try {
+                            a.execute(ctx);
+                        } catch (Exception e) {
+                            throw new TenantProvisioningException(tenantId, "Migration retry failed: " + e.getMessage(),
+                                    e);
+                        }
                     });
         } catch (TenantProvisioningException e) {
             tenant.setStatus(TenantStatus.MIGRATION_ERROR.name());
@@ -134,6 +161,7 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         tenant.setUpdatedAt(OffsetDateTime.now());
         tenantRepository.save(tenant);
         log.info("tenant_retry_migration_success tenantId={} version={}", tenantId, tenant.getLastMigrationVersion());
-        return new TenantDto(tenant.getId(), tenant.getName(), tenant.getStatus(), tenant.getStorageMode(), tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
+        return new TenantDto(tenant.getId(), tenant.getName(), tenant.getStatus(), tenant.getStorageMode(),
+                tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
     }
 }

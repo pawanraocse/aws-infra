@@ -49,14 +49,14 @@ class TenantProvisioningServiceTest {
                 meterRegistry,
                 List.of(storageAction, migrationAction, auditAction),
                 tenantProperties,
-                tenantProvisioner
-        );
+                tenantProvisioner);
     }
 
     @Test
     @DisplayName("Should provision tenant successfully and invoke actions in order")
     void provisionTenant_success() {
-        ProvisionTenantRequest req = new ProvisionTenantRequest("acme", "Acme Corp", "SCHEMA", "STANDARD");
+        ProvisionTenantRequest req = ProvisionTenantRequest.forOrganization("acme", "Acme Corp", "admin@acme.com",
+                "STANDARD");
         when(tenantRepository.findById("acme")).thenReturn(Optional.empty());
         when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -77,7 +77,8 @@ class TenantProvisioningServiceTest {
     @Test
     @DisplayName("Should throw conflict when tenant already exists")
     void provisionTenant_conflict() {
-        ProvisionTenantRequest req = new ProvisionTenantRequest("acme", "Acme Corp", "SCHEMA", "STANDARD");
+        ProvisionTenantRequest req = ProvisionTenantRequest.forOrganization("acme", "Acme Corp", "admin@acme.com",
+                "STANDARD");
         when(tenantRepository.findById("acme")).thenReturn(Optional.of(new Tenant()));
 
         assertThatThrownBy(() -> service.provision(req))
@@ -89,7 +90,8 @@ class TenantProvisioningServiceTest {
     @Test
     @DisplayName("Should mark tenant PROVISION_ERROR when an action fails")
     void provisionTenant_actionFailure() {
-        ProvisionTenantRequest req = new ProvisionTenantRequest("failco", "Fail Co", "SCHEMA", "STANDARD");
+        ProvisionTenantRequest req = ProvisionTenantRequest.forOrganization("failco", "Fail Co", "admin@failco.com",
+                "STANDARD");
         when(tenantRepository.findById("failco")).thenReturn(Optional.empty());
         when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> inv.getArgument(0));
         doThrow(new RuntimeException("boom")).when(migrationAction).execute(any());
@@ -113,7 +115,8 @@ class TenantProvisioningServiceTest {
         tenantProperties.setDropOnFailure(true);
         tenantProperties.setTenantDatabaseModeEnabled(true);
         tenantProperties.setDbPerTenantEnabled(true);
-        ProvisionTenantRequest req = new ProvisionTenantRequest("dbfail", "DB Fail Co", "DATABASE", "STANDARD");
+        ProvisionTenantRequest req = ProvisionTenantRequest.forOrganization("dbfail", "DB Fail Co", "admin@dbfail.com",
+                "STANDARD");
         when(tenantRepository.findById("dbfail")).thenReturn(Optional.empty());
         when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> inv.getArgument(0));
         doThrow(new RuntimeException("boom")).when(migrationAction).execute(any());

@@ -93,7 +93,8 @@ class TenantProvisioningServiceImplTest {
         stubTenantPersistence();
         initServiceWithActions(List.of(storageAction(), migrationAction(), auditAction()));
 
-        ProvisionTenantRequest req = new ProvisionTenantRequest("acme", "Acme", "SCHEMA", "STANDARD");
+        ProvisionTenantRequest req = ProvisionTenantRequest.forOrganization("acme", "Acme", "admin@acme.com",
+                "STANDARD");
         TenantDto dto = service.provision(req);
 
         assertThat(executed).containsExactly("storage", "migration", "audit");
@@ -113,7 +114,8 @@ class TenantProvisioningServiceImplTest {
         stubTenantPersistence();
         initServiceWithActions(List.of(failing("storage"), migrationAction(), auditAction()));
 
-        ProvisionTenantRequest req = new ProvisionTenantRequest("failfirst", "Fail First", "SCHEMA", "STANDARD");
+        ProvisionTenantRequest req = ProvisionTenantRequest.forOrganization("failfirst", "Fail First",
+                "admin@failfirst.com", "STANDARD");
 
         assertThatThrownBy(() -> service.provision(req))
                 .isInstanceOf(TenantProvisioningException.class);
@@ -131,7 +133,8 @@ class TenantProvisioningServiceImplTest {
         stubTenantPersistence();
         initServiceWithActions(List.of(storageAction(), migrationAction(), failing("audit")));
 
-        ProvisionTenantRequest req = new ProvisionTenantRequest("faillast", "Fail Last", "SCHEMA", "STANDARD");
+        ProvisionTenantRequest req = ProvisionTenantRequest.forOrganization("faillast", "Fail Last",
+                "admin@faillast.com", "STANDARD");
 
         assertThatThrownBy(() -> service.provision(req))
                 .isInstanceOf(TenantProvisioningException.class);
@@ -152,7 +155,8 @@ class TenantProvisioningServiceImplTest {
         when(platformTenantProperties.isTenantDatabaseModeEnabled()).thenReturn(true);
         when(platformTenantProperties.isDropOnFailure()).thenReturn(false);
 
-        ProvisionTenantRequest req = new ProvisionTenantRequest("dbsuccess", "DB Success", "DATABASE", "STANDARD");
+        ProvisionTenantRequest req = ProvisionTenantRequest.forOrganization("dbsuccess", "DB Success",
+                "admin@dbsuccess.com", "STANDARD");
         TenantDto dto = service.provision(req);
 
         assertThat(dto.status()).isEqualTo("ACTIVE");
@@ -168,12 +172,13 @@ class TenantProvisioningServiceImplTest {
         when(platformTenantProperties.isTenantDatabaseModeEnabled()).thenReturn(true);
         when(platformTenantProperties.isDropOnFailure()).thenReturn(true);
 
-        ProvisionTenantRequest req = new ProvisionTenantRequest("dbfail", "DB Fail", "DATABASE", "STANDARD");
+        ProvisionTenantRequest req = ProvisionTenantRequest.forOrganization("test", "Test Corp", "admin@test.com",
+                "STANDARD");
         assertThatThrownBy(() -> service.provision(req))
                 .isInstanceOf(TenantProvisioningException.class)
                 .hasMessageContaining("Failed provisioning");
 
-        verify(tenantProvisioner, times(1)).dropTenantDatabase("dbfail");
+        verify(tenantProvisioner, times(1)).dropTenantDatabase("test");
     }
 
     @Test
@@ -185,7 +190,8 @@ class TenantProvisioningServiceImplTest {
         when(platformTenantProperties.isTenantDatabaseModeEnabled()).thenReturn(true);
         when(platformTenantProperties.isDropOnFailure()).thenReturn(false);
 
-        ProvisionTenantRequest req = new ProvisionTenantRequest("dbfailnodelete", "DB Fail No Delete", "DATABASE", "STANDARD");
+        ProvisionTenantRequest req = ProvisionTenantRequest.forOrganization("dbfailnodelete", "DB Fail No Delete",
+                "admin@dbfailnodelete.com", "STANDARD");
         assertThatThrownBy(() -> service.provision(req))
                 .isInstanceOf(TenantProvisioningException.class);
 
@@ -201,7 +207,8 @@ class TenantProvisioningServiceImplTest {
         when(platformTenantProperties.isTenantDatabaseModeEnabled()).thenReturn(false);
         when(platformTenantProperties.isDropOnFailure()).thenReturn(true);
 
-        ProvisionTenantRequest req = new ProvisionTenantRequest("dbdisabled", "DB Disabled", "DATABASE", "STANDARD");
+        ProvisionTenantRequest req = ProvisionTenantRequest.forOrganization("dbdisabled", "DB Disabled",
+                "admin@dbdisabled.com", "STANDARD");
         assertThatThrownBy(() -> service.provision(req))
                 .isInstanceOf(TenantProvisioningException.class);
 
@@ -210,4 +217,3 @@ class TenantProvisioningServiceImplTest {
     }
 
 }
-

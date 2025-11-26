@@ -48,7 +48,7 @@ resource "aws_lambda_function" "pre_token_generation" {
   role             = aws_iam_role.lambda_pre_token.arn
   handler          = "index.handler"
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   timeout          = 3
   memory_size      = 128
 
@@ -125,7 +125,7 @@ resource "aws_lambda_function" "post_confirmation" {
   role             = aws_iam_role.lambda_pre_token.arn # Reuse same role
   handler          = "index.handler"
   source_code_hash = data.archive_file.post_confirmation_zip.output_base64sha256
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   timeout          = 10 # Longer timeout for API call
   memory_size      = 128
 

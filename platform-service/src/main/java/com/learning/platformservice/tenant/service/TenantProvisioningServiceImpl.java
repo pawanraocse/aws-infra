@@ -70,6 +70,18 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         tenant.setStatus(TenantStatus.PROVISIONING.name());
         tenant.setStorageMode(request.storageMode());
         tenant.setSlaTier(request.slaTier());
+
+        // NEW: Set tenant type and limits
+        tenant.setTenantType(request.tenantType());
+        tenant.setOwnerEmail(request.ownerEmail());
+        tenant.setMaxUsers(request.maxUsers());
+
+        // NEW: Set trial period for organization tenants
+        if (request.tenantType() == com.learning.platformservice.tenant.entity.TenantType.ORGANIZATION) {
+            tenant.setTrialEndsAt(OffsetDateTime.now().plusDays(30));
+            tenant.setSubscriptionStatus(com.learning.platformservice.tenant.entity.SubscriptionStatus.TRIAL);
+        }
+
         tenant.setCreatedAt(OffsetDateTime.now());
         tenant.setUpdatedAt(OffsetDateTime.now());
         tenantRepository.save(tenant);
@@ -112,8 +124,9 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         tenant.setUpdatedAt(OffsetDateTime.now());
         tenantRepository.save(tenant);
         successCounter.increment();
-        log.info("tenant_provisioned tenantId={} storageMode={} durationMs={}", tenantId, request.storageMode(),
-                System.currentTimeMillis() - start);
+        log.info("tenant_provisioned tenantId={} type={} owner={} maxUsers={} storageMode={} durationMs={}",
+                tenantId, request.tenantType(), request.ownerEmail(), request.maxUsers(),
+                request.storageMode(), System.currentTimeMillis() - start);
         return new TenantDto(tenant.getId(), tenant.getName(), tenant.getStatus(), tenant.getStorageMode(),
                 tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
     }

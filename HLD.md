@@ -13,6 +13,8 @@ This is a **template system** for building multi-tenant SaaS applications. It pr
 ### Key Philosophy
 - **Backend-Service is a Mimic** - Replace it with your real service (work-service, inventory-service, etc.)
 - **Auth, Platform, Gateway are Reusable** - These supporting services work for any domain
+- **Angular Frontend Included** - Pre-built UI with AWS Amplify for client-side auth, ready to customize
+- **B2B & B2C Support** - Handle both individual users and organizations with tenant isolation
 - **Complete Multi-Tenancy** - Database-per-tenant isolation, automated provisioning, AWS Cognito integration
 - **Production-Ready** - Security, observability, IaC with Terraform included
 
@@ -23,7 +25,8 @@ This is a **template system** for building multi-tenant SaaS applications. It pr
 ```mermaid
 graph TB
     subgraph "Client Layer"
-        User[👤 End Users]
+        WebApp[🌐 Angular Web App<br/>AWS Amplify<br/><b>Template Frontend</b>]
+        User[👤 End Users<br/>B2C + B2B]
         Admin[🔧 System Admin]
     end
     
@@ -40,10 +43,11 @@ graph TB
     end
     
     subgraph "AWS Services"
-        Cognito[AWS Cognito<br/>User Pools & Identity]
+        Cognito[AWS Cognito<br/>User Pools & Identity<br/>B2C + B2B Auth]
         RDS[PostgreSQL RDS<br/>Master + Tenant DBs]
         SecretsManager[AWS Secrets Manager]
         SSM[AWS SSM Parameter Store]
+        Amplify[AWS Amplify Hosting<br/>CI/CD for Frontend]
     end
     
     subgraph "Infrastructure (Optional)"
@@ -51,8 +55,10 @@ graph TB
         DocumentDB[DocumentDB/MongoDB]
     end
     
-    User --> ALB
-    Admin --> ALB
+    User --> WebApp
+    Admin --> WebApp
+    WebApp --> Cognito
+    WebApp --> ALB
     ALB --> Gateway
     
     Gateway --> Auth
@@ -76,6 +82,7 @@ graph TB
     style Gateway fill:#e6f3ff,stroke:#0066cc
     style Auth fill:#fff3e6,stroke:#ff9900
     style Platform fill:#e6ffe6,stroke:#00cc44
+    style WebApp fill:#f0e6ff,stroke:#9900cc
 ```
 
 ---
@@ -332,9 +339,27 @@ CREATE TABLE entries (
 - **Migrations:** Flyway
 - **Build:** Maven
 
-### Frontend (Optional)
+
+### Frontend (Template Included)
 - **Framework:** Angular 18+
-- **Auth:** OAuth2 PKCE flow
+- **Auth Integration:** AWS Amplify Auth SDK
+  - Client-side login/signup with Cognito
+  - OAuth2 PKCE flow for security
+  - MFA support
+  - Social login integration (Google, Facebook, etc.)
+- **API Client:** Angular HttpClient with interceptors
+  - Auto-inject JWT tokens in Authorization header
+  - Tenant context from Cognito custom attributes
+- **Hosting:** AWS Amplify Hosting
+  - Automatic CI/CD from Git repository
+  - CloudFront CDN distribution
+  - HTTPS by default
+- **State Management:** RxJS + Angular Signals
+- **UI Components:** Angular Material or PrimeNG
+- **Multi-Tenant Support:** Tenant-aware routing and branding
+
+**Key Feature:** The frontend is part of the template - it handles B2B and B2C signup/login flows using AWS Amplify, making it easy to deploy and customize for your domain.
+
 
 ### AWS Services
 - **Cognito:** User authentication, MFA, SSO integration

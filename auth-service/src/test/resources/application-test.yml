@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: auth-service-test
+  
+
+    
+  security:
+    oauth2:
+      client:
+        registration:
+          cognito:
+            client-id: test-client-id
+            client-secret: test-client-secret
+            scope: openid,email
+            redirect-uri: http://localhost:8081/login/oauth2/code/cognito
+            authorization-grant-type: authorization_code
+        provider:
+          cognito:
+            issuer-uri: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_test
+            
+cognito:
+  user-pool-id: us-east-1_test
+  client-id: test-client-id
+  domain: test-domain
+  region: us-east-1
+  logout-redirect-url: http://localhost:8081/logout
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+auth:
+  cognito:
+    singleton:
+      enabled: true

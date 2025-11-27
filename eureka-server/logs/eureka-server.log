@@ -1,0 +1,113 @@
+2025-10-28 21:05:18 [main] INFO  c.l.eureka.EurekaServerApplication - Starting EurekaServerApplication v0.0.1-SNAPSHOT using Java 21.0.7 with PID 43303 (/Users/pawan.yadav/prototype/AWS-Infra/eureka-server/target/eureka-server-0.0.1-SNAPSHOT.jar started by pawan.yadav in /Users/pawan.yadav/prototype/AWS-Infra/eureka-server)
+2025-10-28 21:05:18 [main] DEBUG c.l.eureka.EurekaServerApplication - Running with Spring Boot v3.5.6, Spring v6.2.11
+2025-10-28 21:05:18 [main] INFO  c.l.eureka.EurekaServerApplication - The following 1 profile is active: "dev"
+2025-10-28 21:05:18 [main] INFO  o.s.cloud.context.scope.GenericScope - BeanFactory id=4819fede-b728-31d1-b1fd-abd198a4aa7f
+2025-10-28 21:05:18 [main] WARN  o.s.c.s.PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.cloud.client.loadbalancer.LoadBalancerAutoConfiguration$DeferringLoadBalancerInterceptorConfig' of type [org.springframework.cloud.client.loadbalancer.LoadBalancerAutoConfiguration$DeferringLoadBalancerInterceptorConfig] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). The currently created BeanPostProcessor [lbRestClientPostProcessor] is declared through a non-static factory method on that class; consider declaring it as static instead.
+2025-10-28 21:05:18 [main] WARN  o.s.c.s.PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'deferringLoadBalancerInterceptor' of type [org.springframework.cloud.client.loadbalancer.DeferringLoadBalancerInterceptor] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [lbRestClientPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+2025-10-28 21:05:18 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8761 (http)
+2025-10-28 21:05:18 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-10-28 21:05:18 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.46]
+2025-10-28 21:05:18 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-10-28 21:05:18 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 490 ms
+2025-10-28 21:05:19 [main] INFO  c.n.d.p.DiscoveryJerseyProvider - Using JSON encoding codec LegacyJacksonJson
+2025-10-28 21:05:19 [main] INFO  c.n.d.p.DiscoveryJerseyProvider - Using JSON decoding codec LegacyJacksonJson
+2025-10-28 21:05:19 [main] INFO  c.n.d.p.DiscoveryJerseyProvider - Using XML encoding codec XStreamXml
+2025-10-28 21:05:19 [main] INFO  c.n.d.p.DiscoveryJerseyProvider - Using XML decoding codec XStreamXml
+2025-10-28 21:05:19 [main] INFO  o.s.v.b.OptionalValidatorFactoryBean - Failed to set up a Bean Validation provider: jakarta.validation.NoProviderFoundException: Unable to create a Configuration, because no Jakarta Bean Validation provider could be found. Add a provider like Hibernate Validator (RI) to your classpath.
+2025-10-28 21:05:19 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'compositeCompatibilityVerifier' defined in class path resource [org/springframework/cloud/configuration/CompatibilityVerifierAutoConfiguration.class]: Failed to instantiate [org.springframework.cloud.configuration.CompositeCompatibilityVerifier]: Factory method 'compositeCompatibilityVerifier' threw exception with message: Spring Cloud/ Spring Boot version compatibility checks have failed: [[VerificationResult@3cb376a3 description = 'Spring Boot [3.5.6] is not compatible with this Spring Cloud release train', action = 'Change Spring Boot version to one of the following versions [3.2.x, 3.3.x] .
+You can find the latest Spring Boot versions here [https://spring.io/projects/spring-boot#learn]. 
+If you want to learn more about the Spring Cloud Release train compatibility, you can visit this page [https://spring.io/projects/spring-cloud#overview] and check the [Release Trains] section.
+If you want to disable this check, just set the property [spring.cloud.compatibility-verifier.enabled=false]']]
+2025-10-28 21:05:19 [main] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2025-10-28 21:05:19 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2025-10-28 21:05:19 [main] ERROR o.s.b.d.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Your project setup is incompatible with our requirements due to following reasons:
+
+- Spring Boot [3.5.6] is not compatible with this Spring Cloud release train
+
+
+Action:
+
+Consider applying the following actions:
+
+- Change Spring Boot version to one of the following versions [3.2.x, 3.3.x] .
+You can find the latest Spring Boot versions here [https://spring.io/projects/spring-boot#learn]. 
+If you want to learn more about the Spring Cloud Release train compatibility, you can visit this page [https://spring.io/projects/spring-cloud#overview] and check the [Release Trains] section.
+If you want to disable this check, just set the property [spring.cloud.compatibility-verifier.enabled=false]
+
+
+2025-10-28 21:07:19 [main] INFO  c.l.eureka.EurekaServerApplication - Starting EurekaServerApplication v0.0.1-SNAPSHOT using Java 21.0.7 with PID 43487 (/Users/pawan.yadav/prototype/AWS-Infra/eureka-server/target/eureka-server-0.0.1-SNAPSHOT.jar started by pawan.yadav in /Users/pawan.yadav/prototype/AWS-Infra/eureka-server)
+2025-10-28 21:07:19 [main] DEBUG c.l.eureka.EurekaServerApplication - Running with Spring Boot v3.5.6, Spring v6.2.11
+2025-10-28 21:07:19 [main] INFO  c.l.eureka.EurekaServerApplication - The following 1 profile is active: "dev"
+2025-10-28 21:07:19 [main] INFO  o.s.cloud.context.scope.GenericScope - BeanFactory id=b6a1c86c-ab24-396e-b990-4d50bfdb27d5
+2025-10-28 21:07:19 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8761 (http)
+2025-10-28 21:07:19 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2025-10-28 21:07:19 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.46]
+2025-10-28 21:07:19 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2025-10-28 21:07:19 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 482 ms
+2025-10-28 21:07:19 [main] INFO  c.n.d.p.DiscoveryJerseyProvider - Using JSON encoding codec LegacyJacksonJson
+2025-10-28 21:07:19 [main] INFO  c.n.d.p.DiscoveryJerseyProvider - Using JSON decoding codec LegacyJacksonJson
+2025-10-28 21:07:19 [main] INFO  c.n.d.p.DiscoveryJerseyProvider - Using XML encoding codec XStreamXml
+2025-10-28 21:07:19 [main] INFO  c.n.d.p.DiscoveryJerseyProvider - Using XML decoding codec XStreamXml
+2025-10-28 21:07:19 [main] INFO  o.s.v.b.OptionalValidatorFactoryBean - Failed to set up a Bean Validation provider: jakarta.validation.NoProviderFoundException: Unable to create a Configuration, because no Jakarta Bean Validation provider could be found. Add a provider like Hibernate Validator (RI) to your classpath.
+2025-10-28 21:07:20 [main] WARN  o.s.c.l.c.LoadBalancerCacheAutoConfiguration$LoadBalancerCaffeineWarnLogger - Spring Cloud LoadBalancer is currently working with the default cache. While this cache implementation is useful for development and tests, it's recommended to use Caffeine cache in production.You can switch to using Caffeine cache, by adding it and org.springframework.cache.caffeine.CaffeineCacheManager to the classpath.
+2025-10-28 21:07:20 [main] INFO  o.s.c.n.eureka.InstanceInfoFactory - Setting initial instance status as: STARTING
+2025-10-28 21:07:20 [main] INFO  c.netflix.discovery.DiscoveryClient - Initializing Eureka in region us-east-1
+2025-10-28 21:07:20 [main] INFO  c.netflix.discovery.DiscoveryClient - Client configured to neither register nor query for data.
+2025-10-28 21:07:20 [main] INFO  c.netflix.discovery.DiscoveryClient - Discovery Client initialized at timestamp 1761665840270 with initial instances count: 0
+2025-10-28 21:07:20 [main] INFO  c.n.e.DefaultEurekaServerContext - Initializing ...
+2025-10-28 21:07:20 [main] DEBUG c.n.discovery.endpoint.EndpointUtils - The availability zone for the given region us-east-1 are [defaultZone]
+2025-10-28 21:07:20 [main] WARN  c.n.eureka.cluster.PeerEurekaNodes - The replica size seems to be empty. Check the route 53 DNS Registry
+2025-10-28 21:07:20 [main] INFO  c.n.e.r.AbstractInstanceRegistry - Finished initializing remote region registries. All known remote regions: []
+2025-10-28 21:07:20 [main] INFO  c.n.e.DefaultEurekaServerContext - Initialized
+2025-10-28 21:07:20 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 5 endpoints beneath base path '/actuator'
+2025-10-28 21:07:20 [main] INFO  o.s.c.n.e.s.EurekaServiceRegistry - Registering application EUREKA-SERVER with eureka with status UP
+2025-10-28 21:07:20 [Thread-9] INFO  o.s.c.n.e.s.EurekaServerBootstrap - isAws returned false
+2025-10-28 21:07:20 [Thread-9] INFO  o.s.c.n.e.s.EurekaServerBootstrap - Initialized server context
+2025-10-28 21:07:20 [Thread-9] INFO  c.n.e.r.PeerAwareInstanceRegistryImpl - Got 1 instances from neighboring DS node
+2025-10-28 21:07:20 [Thread-9] INFO  c.n.e.r.PeerAwareInstanceRegistryImpl - Renew threshold is: 1
+2025-10-28 21:07:20 [Thread-9] INFO  c.n.e.r.PeerAwareInstanceRegistryImpl - Changing status to UP
+2025-10-28 21:07:20 [Thread-9] INFO  o.s.c.n.e.s.EurekaServerInitializerConfiguration - Started Eureka Server
+2025-10-28 21:07:20 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8761 (http) with context path '/'
+2025-10-28 21:07:20 [main] INFO  o.s.c.n.e.s.EurekaAutoServiceRegistration - Updating port to 8761
+2025-10-28 21:07:20 [main] INFO  c.l.eureka.EurekaServerApplication - Started EurekaServerApplication in 1.748 seconds (process running for 1.96)
+2025-10-28 21:07:20 [main] INFO  c.l.eureka.EurekaServerApplication - Eureka Server started successfully
+2025-10-28 21:07:25 [Eureka-EvictionTimer] INFO  c.n.e.r.AbstractInstanceRegistry - Running the evict task with compensationTime 0ms
+2025-10-28 21:07:25 [Eureka-EvictionTimer] DEBUG c.n.e.r.AbstractInstanceRegistry - Running the evict task
+2025-10-28 21:07:30 [Eureka-CacheFillTimer] DEBUG c.n.e.registry.ResponseCacheImpl - Updating the client cache from response cache
+2025-10-28 21:07:30 [Eureka-EvictionTimer] INFO  c.n.e.r.AbstractInstanceRegistry - Running the evict task with compensationTime 5ms
+2025-10-28 21:07:30 [Eureka-EvictionTimer] DEBUG c.n.e.r.AbstractInstanceRegistry - Running the evict task
+2025-10-28 21:07:35 [Eureka-EvictionTimer] INFO  c.n.e.r.AbstractInstanceRegistry - Running the evict task with compensationTime 5ms
+2025-10-28 21:07:35 [Eureka-EvictionTimer] DEBUG c.n.e.r.AbstractInstanceRegistry - Running the evict task
+2025-10-28 21:07:40 [Eureka-EvictionTimer] INFO  c.n.e.r.AbstractInstanceRegistry - Running the evict task with compensationTime 3ms
+2025-10-28 21:07:40 [Eureka-EvictionTimer] DEBUG c.n.e.r.AbstractInstanceRegistry - Running the evict task
+2025-10-28 21:07:44 [http-nio-8761-exec-1] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-10-28 21:07:44 [http-nio-8761-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2025-10-28 21:07:44 [http-nio-8761-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 0 ms
+2025-10-28 21:07:44 [http-nio-8761-exec-1] DEBUG c.n.e.r.AbstractInstanceRegistry - Fetching applications registry with remote regions: false, Regions argument []
+2025-10-28 21:07:45 [Eureka-EvictionTimer] INFO  c.n.e.r.AbstractInstanceRegistry - Running the evict task with compensationTime 4ms
+2025-10-28 21:07:45 [Eureka-EvictionTimer] DEBUG c.n.e.r.AbstractInstanceRegistry - Running the evict task
+2025-10-28 21:07:50 [Eureka-EvictionTimer] INFO  c.n.e.r.AbstractInstanceRegistry - Running the evict task with compensationTime 1ms
+2025-10-28 21:07:50 [Eureka-EvictionTimer] DEBUG c.n.e.r.AbstractInstanceRegistry - Running the evict task
+2025-10-28 21:07:55 [Eureka-EvictionTimer] INFO  c.n.e.r.AbstractInstanceRegistry - Running the evict task with compensationTime 5ms
+2025-10-28 21:07:55 [Eureka-EvictionTimer] DEBUG c.n.e.r.AbstractInstanceRegistry - Running the evict task
+2025-10-28 21:07:59 [SpringApplicationShutdownHook] INFO  o.s.c.n.e.s.EurekaServiceRegistry - Unregistering application EUREKA-SERVER with eureka with status DOWN
+2025-10-28 21:07:59 [SpringApplicationShutdownHook] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2025-10-28 21:07:59 [tomcat-shutdown] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete
+2025-10-28 21:07:59 [SpringApplicationShutdownHook] INFO  o.s.c.n.e.s.EurekaServerBootstrap - Shutting down Eureka Server..
+2025-10-28 21:07:59 [SpringApplicationShutdownHook] INFO  c.n.e.DefaultEurekaServerContext - Shutting down ...
+2025-10-28 21:07:59 [SpringApplicationShutdownHook] INFO  c.n.e.DefaultEurekaServerContext - Shut down
+2025-10-28 21:07:59 [SpringApplicationShutdownHook] INFO  o.s.c.n.e.s.EurekaServerBootstrap - Eureka Service is now shutdown...
+2025-10-28 21:07:59 [SpringApplicationShutdownHook] INFO  c.n.e.DefaultEurekaServerContext - Shutting down ...
+2025-10-28 21:07:59 [SpringApplicationShutdownHook] INFO  c.n.e.DefaultEurekaServerContext - Shut down
+2025-10-28 21:07:59 [SpringApplicationShutdownHook] INFO  c.netflix.discovery.DiscoveryClient - Shutting down DiscoveryClient ...
+2025-10-28 21:07:59 [SpringApplicationShutdownHook] INFO  c.netflix.discovery.DiscoveryClient - Completed shut down of DiscoveryClient

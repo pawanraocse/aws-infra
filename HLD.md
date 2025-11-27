@@ -77,12 +77,13 @@ graph TB
     
     Platform --> SecretsManager
     Platform --> SSM
-    
-    style Backend fill:#ffe6e6,stroke:#ff4444
-    style Gateway fill:#e6f3ff,stroke:#0066cc
-    style Auth fill:#fff3e6,stroke:#ff9900
-    style Platform fill:#e6ffe6,stroke:#00cc44
-    style WebApp fill:#f0e6ff,stroke:#9900cc
+
+    style Backend fill:#2b1f1f,stroke:#ff5c5c,stroke-width:2px
+    style Gateway fill:#1f2a3d,stroke:#4da3ff,stroke-width:2px
+    style Auth fill:#3a2d1f,stroke:#ffb84d,stroke-width:2px
+    style Platform fill:#1f3a29,stroke:#33dd77,stroke-width:2px
+    style WebApp fill:#261f3a,stroke:#bb66ff,stroke-width:2px
+
 ```
 
 ---

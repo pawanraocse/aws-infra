@@ -85,6 +85,7 @@ log_info "Extracting Terraform outputs..."
 
 USER_POOL_ID=$(terraform output -raw user_pool_id 2>/dev/null)
 CLIENT_ID=$(terraform output -raw client_id 2>/dev/null)
+SPA_CLIENT_ID=$(terraform output -raw spa_client_id 2>/dev/null)
 CLIENT_SECRET=$(terraform output -raw client_secret 2>/dev/null)
 ISSUER_URI=$(terraform output -raw issuer_uri 2>/dev/null)
 DOMAIN=$(terraform output -raw cognito_domain 2>/dev/null)
@@ -142,6 +143,42 @@ SSM_DOMAIN_PATH=/\${TF_VAR_project_name:-awsinfra}/\${TF_VAR_environment:-dev}/c
 EOF
 
 log_info "Configuration saved to $OUTPUT_FILE"
+
+# Update Frontend Environment Files
+FRONTEND_DIR="$SCRIPT_DIR/../../frontend"
+if [ -d "$FRONTEND_DIR/src/environments" ]; then
+    log_info "Updating frontend environment files..."
+    
+    # Update development environment
+    cat > "$FRONTEND_DIR/src/environments/environment.development.ts" <<EOF
+export const environment = {
+  production: false,
+  apiUrl: 'http://localhost:8080', // Gateway URL
+  cognito: {
+    userPoolId: '$USER_POOL_ID',
+    userPoolWebClientId: '$SPA_CLIENT_ID',
+    region: '$AWS_REGION'
+  }
+};
+EOF
+
+    # Update production environment
+    cat > "$FRONTEND_DIR/src/environments/environment.ts" <<EOF
+export const environment = {
+  production: true,
+  apiUrl: 'http://localhost:8080', // Gateway URL (update for production)
+  cognito: {
+    userPoolId: '$USER_POOL_ID',
+    userPoolWebClientId: '$SPA_CLIENT_ID',
+    region: '$AWS_REGION'
+  }
+};
+EOF
+
+    log_info "Frontend environment files updated successfully"
+else
+    log_warn "Frontend directory not found, skipping environment file updates"
+fi
 
 # Verify SSM parameters
 log_info "Verifying SSM parameters in AWS..."

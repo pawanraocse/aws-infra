@@ -24,7 +24,10 @@ Deploys AWS Cognito User Pool with Lambda pre-token generation trigger.
    - Lambda function for token customization
    - User groups (admin, tenant-admin, user)
    - SSM parameters for configuration
-5. Exports configuration to `terraform/cognito-config.env`
+5. **Saves Configuration Locally**: Creates `cognito-config.env` with all Cognito details
+6. **Updates Frontend Environment Files**: Automatically updates `frontend/src/environments/environment*.ts` with Cognito configuration
+7. **Verifies SSM Parameters**: Confirms all parameters are stored in AWS Parameter Store
+8. **Displays Next Steps**: Shows you what to do next
 
 **Resources Created:**
 - User Pool: `cloud-infra-dev-user-pool`

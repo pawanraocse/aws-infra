@@ -1,16 +1,19 @@
-<!-- Layout shell: add header/footer/sidebar as needed -->
-<div class="layout-container">
-  <!-- Example header -->
-  <header class="layout-header" aria-label="Main header">
-    <span class="logo">MyApp</span>
-  </header>
-
-  <main class="layout-main" aria-label="Main content">
-    <ng-content></ng-content>
-  </main>
-
-  <!-- Example footer -->
-  <footer class="layout-footer" aria-label="Footer">
-    <span>&copy; {{ currentYear }} MyApp</span>
-  </footer>
+<div class="layout-wrapper">
+  <div class="layout-topbar">
+    <p-menubar [model]="items">
+      <ng-template pTemplate="start">
+        <span class="font-bold text-xl mr-4">SaaS Template</span>
+      </ng-template>
+      <ng-template pTemplate="end">
+        <div class="flex align-items-center gap-2" *ngIf="authService.user() as user">
+          <span class="text-sm">{{ user.email }} ({{ user.tenantId }})</span>
+          <p-avatar icon="pi pi-user" shape="circle"></p-avatar>
+          <p-button icon="pi pi-power-off" (click)="logout()" styleClass="p-button-text p-button-rounded p-button-danger"></p-button>
+        </div>
+      </ng-template>
+    </p-menubar>
+  </div>
+  <div class="layout-content p-4">
+    <router-outlet></router-outlet>
+  </div>
 </div>

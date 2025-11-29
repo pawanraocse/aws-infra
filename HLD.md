@@ -502,24 +502,70 @@ INSERT INTO role_permissions (role_id, permission_id)
 
 
 ### Frontend (Template Included)
-- **Framework:** Angular 18+
-- **Auth Integration:** AWS Amplify Auth SDK
+- **Framework:** Angular 20+ (latest)
+- **Auth Integration:** AWS Amplify Auth SDK (v6)
   - Client-side login/signup with Cognito
-  - OAuth2 PKCE flow for security
-  - MFA support
-  - Social login integration (Google, Facebook, etc.)
-- **API Client:** Angular HttpClient with interceptors
+  - **Public Client (SPA):** Uses `generate_secret = false` for secure browser auth
+  - Direct username/password authentication
+  - Extract custom attributes from ID token (`custom:tenantId`, `custom:role`, `custom:tenantType`)
+  - Session management with Angular Signals
+- **API Client:** Angular HttpClient with functional interceptors
   - Auto-inject JWT tokens in Authorization header
+  - Async token retrieval via `fetchAuthSession()`
   - Tenant context from Cognito custom attributes
-- **Hosting:** AWS Amplify Hosting
-  - Automatic CI/CD from Git repository
-  - CloudFront CDN distribution
-  - HTTPS by default
-- **State Management:** RxJS + Angular Signals
-- **UI Components:** Angular Material or PrimeNG
-- **Multi-Tenant Support:** Tenant-aware routing and branding
+- **UI Components:** PrimeNG (v20)
+  - **Theme:** Aura (Premium Modern Theme)
+  - **Design System:** CSS Variables, Glassmorphism, Inter Font
+  - **Layout:** PrimeFlex Grid System
+  - Card, Table, Dialog, Button, Input components
+  - Responsive design with flex layout
+  - Form validation with Reactive Forms
+- **Routing:** 
+  - AuthGuard for protected routes (`/app/*`)
+  - GuestGuard for public routes (`/auth/*`)
+  - Layout wrapper with navigation menu
+- **State Management:** Angular Signals (built-in)
+- **Build Tool:** Angular CLI with esbuild
+- **Deployment:** 
+  - Development: `npm start` (localhost:4200)
+  - Production: Static build to `dist/` for AWS Amplify Hosting or S3+CloudFront
 
-**Key Feature:** The frontend is part of the template - it handles B2B and B2C signup/login flows using AWS Amplify, making it easy to deploy and customize for your domain.
+**Key Features:**
+- ✅ **B2C Signup:** Personal account creation via `POST /api/signup/personal`
+- ✅ **B2B Signup:** Organization creation via `POST /api/signup/organization`
+- ✅ **Dashboard:** User info display with tenant ID and role badges
+- ✅ **CRUD Interface:** PrimeNG Table for entries with pagination and lazy loading
+- ✅ **Multi-Tenant UI:** Shows user's tenant context in header
+- ✅ **Auto-Configuration:** Environment files updated automatically by Terraform deploy script
+
+**Frontend Structure:**
+```
+frontend/
+├── src/
+│   ├── app/
+│   │   ├── core/
+│   │   │   ├── auth.service.ts          # AWS Amplify wrapper
+│   │   │   ├── guards/
+│   │   │   │   ├── auth.guard.ts        # Protected route guard
+│   │   │   │   └── guest.guard.ts       # Public route guard
+│   │   │   ├── interceptors/
+│   │   │   │   └── auth.interceptor.ts  # JWT injector
+│   │   │   └── services/
+│   │   │       └── entry.service.ts     # API client
+│   │   ├── features/
+│   │   │   ├── auth/
+│   │   │   │   ├── login.component.ts
+│   │   │   │   ├── signup-personal.component.ts
+│   │   │   │   └── signup-organization.component.ts
+│   │   │   └── dashboard/
+│   │   │       └── dashboard.component.ts  # Main app view
+│   │   ├── layout/
+│   │   │   └── app-layout.component.ts  # Navigation wrapper
+│   │   └── app.routes.ts                # Route configuration
+│   └── environments/
+│       ├── environment.ts               # Production config (auto-updated)
+│       └── environment.development.ts   # Dev config (auto-updated)
+```
 
 
 ### AWS Services
@@ -595,6 +641,190 @@ CDN: CloudFront
    - Update `application.yml` with your AWS credentials
    - Run Terraform to create infrastructure
    - Deploy services to ECS/EKS
+
+---
+
+## 🛠️ Deployment & Configuration Flow
+
+### Automated Infrastructure Deployment
+
+The project includes automated deployment scripts that handle infrastructure provisioning and application configuration in a single workflow.
+
+#### Terraform Deployment Script
+
+**Location:** `scripts/terraform/deploy.sh`
+
+**What it does:**
+1. **Deploys AWS Infrastructure** via Terraform:
+   - Cognito User Pool with custom attributes (`tenantId`, `role`, `tenantType`)
+   - User Pool Client with OAuth2 configuration
+   - Lambda triggers for token customization
+   - User groups (admin, tenant-admin, user)
+   - SSM Parameter Store entries for all configuration
+
+2. **Stores Configuration in SSM:**
+   - `/cloud-infra/dev/cognito/user_pool_id`
+   - `/cloud-infra/dev/cognito/client_id`
+   - `/cloud-infra/dev/cognito/client_secret` (SecureString)
+   - `/cloud-infra/dev/cognito/issuer_uri`
+   - `/cloud-infra/dev/cognito/jwks_uri`
+   - `/cloud-infra/dev/cognito/domain`
+   - Additional metadata (branding, callbacks, etc.)
+
+3. **Auto-Updates Frontend Environment Files:**
+   - Fetches Cognito configuration from Terraform outputs
+   - Writes `frontend/src/environments/environment.development.ts`
+   - Writes `frontend/src/environments/environment.ts`
+   - Frontend gets User Pool ID and Client ID automatically
+
+4. **Creates Local Reference File:**
+   - Generates `terraform/cognito-config.env` for manual reference
+   - Contains all Cognito configuration values
+   - **Note:** Do not commit this file (already in `.gitignore`)
+
+**Usage:**
+```bash
+cd /path/to/AWS-Infra
+./scripts/terraform/deploy.sh
+```
+
+**Prerequisites:**
+- AWS CLI configured with appropriate credentials
+- Terraform installed
+- AWS profile set (default: `personal`)
+
+#### Configuration Flow Diagram
+
+```mermaid
+graph LR
+    A[Run deploy.sh] --> B[Terraform Apply]
+    B --> C[Create Cognito Resources]
+    C --> D[Store in SSM Parameter Store]
+    B --> E[Extract Terraform Outputs]
+    E --> F[Update Frontend Environment Files]
+    E --> G[Generate cognito-config.env]
+    
+    D -.->|Source of Truth| H[Backend Services]
+    F -.->|Auto-configured| I[Angular Frontend]
+    
+    style D fill:#33dd77,stroke:#1f3a29,stroke-width:2px
+    style F fill:#bb66ff,stroke:#261f3a,stroke-width:2px
+    style H fill:#ffb84d,stroke:#3a2d1f,stroke-width:2px
+    style I fill:#bb66ff,stroke:#261f3a,stroke-width:2px
+```
+
+### Frontend Configuration
+
+The Angular frontend requires Cognito credentials to authenticate users. These are automatically configured by the Terraform deployment script.
+
+#### Automatic Configuration (Recommended)
+
+When you run `./scripts/terraform/deploy.sh`, the frontend environment files are automatically updated with:
+- User Pool ID
+- Client ID
+- AWS Region
+
+**Generated Files:**
+- `frontend/src/environments/environment.development.ts` - Used for `npm start`
+- `frontend/src/environments/environment.ts` - Used for `npm run build`
+
+**Example Generated Configuration:**
+```typescript
+export const environment = {
+  production: false,
+  apiUrl: 'http://localhost:8080',
+  cognito: {
+    userPoolId: 'us-east-1_jjRFRnxGA',
+    userPoolWebClientId: '4apvlvee4rsmnb06ntd49ljvp5',
+    region: 'us-east-1'
+  }
+};
+```
+
+#### Manual Configuration (Alternative)
+
+If needed, you can fetch configuration from SSM manually:
+
+```bash
+# Get User Pool ID
+aws ssm get-parameter \
+  --name "/cloud-infra/dev/cognito/user_pool_id" \
+  --query 'Parameter.Value' \
+  --output text
+
+# Get Client ID
+aws ssm get-parameter \
+  --name "/cloud-infra/dev/cognito/client_id" \
+  --query 'Parameter.Value' \
+  --output text
+```
+
+Then manually update `frontend/src/environments/environment.development.ts`.
+
+### Backend Services Configuration
+
+Backend services (Auth, Platform, Backend) read configuration from SSM Parameter Store at runtime.
+
+**Spring Boot Integration:**
+```yaml
+spring:
+  cloud:
+    aws:
+      paramstore:
+        enabled: true
+        prefix: /cloud-infra
+        profile-separator: /
+        fail-fast: true
+```
+
+**How it works:**
+1. Service starts up
+2. Reads `/cloud-infra/dev/cognito/*` parameters from SSM
+3. Populates Spring environment properties
+4. Configures OAuth2 client and resource server
+
+**Key Benefits:**
+- ✅ No hardcoded credentials in code
+- ✅ Centralized configuration management
+- ✅ Easy to update without redeployment
+- ✅ Secure storage (SecureString for secrets)
+- ✅ IAM-based access control
+
+### Complete Deployment Workflow
+
+```bash
+# 1. Deploy AWS Infrastructure (includes frontend config)
+./scripts/terraform/deploy.sh
+
+# 2. Start Backend Services
+./scripts/start-all.sh
+
+# 3. Start Frontend (in separate terminal)
+cd frontend
+npm start
+
+# 4. Access Application
+# Frontend: http://localhost:4200
+# Gateway: http://localhost:8080
+```
+
+**First-Time Setup:**
+```bash
+# Install dependencies
+cd frontend && npm install
+
+# Build all services
+cd .. && mvn clean install -DskipTests
+
+# Deploy infrastructure
+./scripts/terraform/deploy.sh
+
+# Start services
+./scripts/start-all.sh
+
+# Start frontend
+cd frontend && npm start
+```
 
 ---
 

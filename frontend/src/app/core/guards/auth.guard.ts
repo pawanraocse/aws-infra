@@ -1,32 +1,19 @@
 import { inject } from '@angular/core';
-import { Router, CanActivateFn, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
+import { Router, CanActivateFn } from '@angular/router';
 import { AuthService } from '../auth.service';
 
-/**
- * Auth Guard - Protects routes that require authentication
- *
- * Usage in routes:
- * {
- *   path: 'dashboard',
- *   component: DashboardComponent,
- *   canActivate: [authGuard]
- * }
- */
-export const authGuard: CanActivateFn = (
-  route: ActivatedRouteSnapshot,
-  state: RouterStateSnapshot
-) => {
+export const authGuard: CanActivateFn = async (route, state) => {
   const authService = inject(AuthService);
   const router = inject(Router);
 
-  if (authService.isUserAuthenticated()) {
+  // Check auth status (this will also load user info if session exists)
+  const isAuthenticated = await authService.checkAuth();
+
+  if (isAuthenticated) {
     return true;
   }
 
-  // User is not authenticated, redirect to login
-  // Preserve the attempted URL for redirecting after login
-  return router.createUrlTree(['login'], {
+  return router.createUrlTree(['/auth/login'], {
     queryParams: { returnUrl: state.url }
   });
 };
-

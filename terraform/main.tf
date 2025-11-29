@@ -261,20 +261,56 @@ resource "aws_cognito_user_pool_client" "native" {
   ]
 }
 
-# OPTIONAL: Public client for SPAs (no client secret). Useful for browser apps.
-# Commented out to avoid exposing flows you may not want in free-tier testing.
-# resource "aws_cognito_user_pool_client" "spa" {
-#   name                       = "${var.project_name}-${var.environment}-spa-client"
-# #  user_pool_id               = aws_cognito_user_pool.main.id
-# #  generate_secret            = false
-# #  allowed_oauth_flows        = ["code"]
-# #  allowed_oauth_flows_user_pool_client = false
-# #  allowed_oauth_scopes       = ["openid", "email", "profile"]
-# #  callback_urls              = var.callback_urls
-# #  logout_urls                = var.logout_urls
-# #  supported_identity_providers = ["COGNITO"]
-# #  explicit_auth_flows        = ["ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_SRP_AUTH"]
-# }
+
+# User Pool Client - SPA/Web Application (public client, no secret)
+# Used by Angular frontend for direct username/password authentication
+resource "aws_cognito_user_pool_client" "spa" {
+  name         = "${var.project_name}-${var.environment}-spa-client"
+  user_pool_id = aws_cognito_user_pool.main.id
+
+  generate_secret = false
+
+  # Auth flows for browser-based apps
+  explicit_auth_flows = [
+    "ALLOW_USER_SRP_AUTH",      # Secure Remote Password (recommended)
+    "ALLOW_REFRESH_TOKEN_AUTH", # Refresh token flow
+    "ALLOW_USER_PASSWORD_AUTH"  # Direct username/password (for Amplify signIn)
+  ]
+
+  # No OAuth flows - using direct authentication
+  allowed_oauth_flows_user_pool_client = false
+
+  supported_identity_providers = ["COGNITO"]
+
+  # Token validity
+  access_token_validity  = var.access_token_validity
+  id_token_validity      = var.id_token_validity
+  refresh_token_validity = var.refresh_token_validity
+
+  token_validity_units {
+    access_token  = "minutes"
+    id_token      = "minutes"
+    refresh_token = "days"
+  }
+
+  # Security settings
+  prevent_user_existence_errors                 = "ENABLED"
+  enable_token_revocation                       = true
+  enable_propagate_additional_user_context_data = false
+
+  # Read attributes - what the app can read from user profile
+  read_attributes = [
+    "email",
+    "email_verified",
+    "custom:tenantId",
+    "custom:role"
+  ]
+
+  # Write attributes - what the app can update
+  write_attributes = [
+    "email"
+  ]
+}
 
 # User Groups
 resource "aws_cognito_user_group" "admin" {

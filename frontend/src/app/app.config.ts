@@ -3,7 +3,11 @@ import { provideRouter, withHashLocation } from '@angular/router';
 import { routes } from './app.routes';
 import { provideClientHydration, withEventReplay } from '@angular/platform-browser';
 import { provideHttpClient, withInterceptors, withFetch } from '@angular/common/http';
+import { provideAnimations } from '@angular/platform-browser/animations';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
+
+import { providePrimeNG } from 'primeng/config';
+import Aura from '@primeng/themes/aura';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -11,9 +15,15 @@ export const appConfig: ApplicationConfig = {
     provideZonelessChangeDetection(),
     provideRouter(routes, withHashLocation()),
     provideClientHydration(withEventReplay()),
+    provideAnimations(),
     provideHttpClient(
       withInterceptors([authInterceptor]),
       withFetch()
-    )
+    ),
+    providePrimeNG({
+      theme: {
+        preset: Aura
+      }
+    })
   ]
 };

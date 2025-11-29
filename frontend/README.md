@@ -2,11 +2,77 @@
 
 This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.3.7.
 
+## Configuration
+
+Before running the application, you need to configure AWS Cognito credentials.
+
+### Automatic Configuration (Recommended)
+
+The Cognito configuration is automatically updated when you deploy the Terraform infrastructure:
+
+```bash
+# From the project root
+./scripts/terraform/deploy.sh
+```
+
+This will:
+1. Deploy Cognito infrastructure via Terraform
+2. Store configuration in AWS SSM Parameter Store
+3. **Automatically update frontend environment files** with the correct values
+
+### Manual Configuration
+
+If needed, you can manually edit `src/environments/environment.development.ts`:
+
+```typescript
+export const environment = {
+  production: false,
+  apiUrl: 'http://localhost:8080',
+  cognito: {
+    userPoolId: 'us-east-1_xxxxxxxxx',      // From terraform output or SSM
+    userPoolWebClientId: 'xxxxxxxxxx',      // From terraform output or SSM
+    region: 'us-east-1'
+  }
+};
+```
+
+**Fetching from SSM manually:**
+```bash
+# Get User Pool ID
+aws ssm get-parameter --name "/cloud-infra/dev/cognito/user_pool_id" --query 'Parameter.Value' --output text
+
+# Get Client ID  
+aws ssm get-parameter --name "/cloud-infra/dev/cognito/client_id" --query 'Parameter.Value' --output text
+```
+
+## 🎨 UI/UX & Theming
+
+This application uses a modern design system built on:
+
+- **PrimeNG v20:** UI Component Library
+- **Theme:** `Aura` (Premium Modern Theme)
+- **Grid System:** `PrimeFlex`
+- **Typography:** `Inter` (Google Fonts)
+- **Styling:** SCSS with CSS Variables (see `src/styles.scss`)
+
+### Customizing the Theme
+The theme is configured in `src/app/app.config.ts`. You can change the preset or customize colors in `src/styles.scss`.
+
+```typescript
+providePrimeNG({
+    theme: {
+        preset: Aura
+    }
+})
+```
+
 ## Development server
 
 To start a local development server, run:
 
 ```bash
+npm start
+# or
 ng serve
 ```
 

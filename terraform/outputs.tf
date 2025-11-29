@@ -18,8 +18,13 @@ output "user_pool_endpoint" {
 }
 
 output "client_id" {
-  description = "The ID of the Cognito User Pool Client"
+  description = "The ID of the Cognito User Pool Client (Native - with secret)"
   value       = aws_cognito_user_pool_client.native.id
+}
+
+output "spa_client_id" {
+  description = "The ID of the Cognito User Pool Client (SPA - public, no secret)"
+  value       = aws_cognito_user_pool_client.spa.id
 }
 
 output "client_secret" {

@@ -1,30 +1,61 @@
-<div class="login-container">
-  <div class="login-card">
-    <div class="login-header">
-      <h1>Welcome to AWS Microservices</h1>
-      <p>Sign in to continue</p>
+<div class="flex justify-content-center align-items-center min-h-screen bg-blue-50"
+  style="background: linear-gradient(135deg, var(--surface-50) 0%, var(--primary-50) 100%);">
+
+  <div class="w-full" style="max-width: 450px;">
+    <div class="text-center mb-5">
+      <div class="text-3xl font-bold text-900 mb-2">Welcome Back</div>
+      <div class="text-600 font-medium">Sign in to continue to your dashboard</div>
     </div>
-    <div class="login-body">
-      <button
-        class="btn-cognito"
-        (click)="loginWithCognito()"
-        type="button">
-        <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-          <polyline points="10 17 15 12 10 7"></polyline>
-          <line x1="15" y1="12" x2="3" y2="12"></line>
-        </svg>
-        Login with AWS Cognito
-      </button>
-      <div class="info-text">
-        <p>You will be redirected to AWS Cognito Hosted UI for secure authentication.</p>
-      </div>
-    </div>
-    <div class="login-footer">
-      <p class="text-muted">
-        Powered by AWS Cognito • Spring Boot • Angular
-      </p>
+
+    <p-card styleClass="card-glass shadow-soft p-4">
+      <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="flex flex-column gap-4">
+
+        <div *ngIf="error()" class="mb-2">
+          <p-message severity="error" [text]="error()!" styleClass="w-full"></p-message>
+        </div>
+
+        <div class="flex flex-column gap-2">
+          <label for="username" class="font-medium text-900">Email Address</label>
+          <span class="p-input-icon-left w-full">
+            <i class="pi pi-envelope"></i>
+            <input pInputText id="username" formControlName="username" class="w-full" placeholder="you@example.com" />
+          </span>
+        </div>
+
+        <div class="flex flex-column gap-2">
+          <label for="password" class="font-medium text-900">Password</label>
+          <p-password id="password" formControlName="password" [feedback]="false" [toggleMask]="true"
+            styleClass="w-full" inputStyleClass="w-full" placeholder="••••••••">
+          </p-password>
+          <div class="flex justify-content-end">
+            <a class="text-sm font-medium cursor-pointer text-primary-600 hover:text-primary-800">Forgot password?</a>
+          </div>
+        </div>
+
+        <p-button type="submit" label="Sign In" [loading]="loading()" [disabled]="loginForm.invalid"
+          styleClass="w-full p-button-lg">
+        </p-button>
+
+        <div class="text-center mt-3 text-600">
+          Don't have an account?
+        </div>
+
+        <div class="grid mt-1">
+          <div class="col-6">
+            <p-button label="Personal" icon="pi pi-user" styleClass="w-full p-button-outlined p-button-secondary"
+              routerLink="/auth/signup/personal"></p-button>
+          </div>
+          <div class="col-6">
+            <p-button label="Organization" icon="pi pi-building"
+              styleClass="w-full p-button-outlined p-button-secondary"
+              routerLink="/auth/signup/organization"></p-button>
+          </div>
+        </div>
+      </form>
+    </p-card>
+
+    <div class="text-center mt-4 text-500 text-sm">
+      &copy; 2025 Cloud Infra Template. All rights reserved.
     </div>
   </div>
 </div>
-

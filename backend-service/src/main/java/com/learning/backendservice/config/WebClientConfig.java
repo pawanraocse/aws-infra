@@ -42,10 +42,23 @@ public class WebClientConfig {
     @Bean
     public WebClient platformWebClient(
             @Qualifier("internalWebClientBuilder") WebClient.Builder builder,
-            ServicesProperties props
-    ) {
+            ServicesProperties props) {
         return builder
                 .baseUrl(props.getPlatform().getBaseUrl())
+                .filter(ExchangeLoggingFilter.logRequest())
+                .filter(ExchangeLoggingFilter.logResponse())
+                .build();
+    }
+
+    /**
+     * Auth-service WebClient (internal service-to-service call).
+     */
+    @Bean
+    public WebClient authWebClient(
+            @Qualifier("internalWebClientBuilder") WebClient.Builder builder,
+            ServicesProperties props) {
+        return builder
+                .baseUrl(props.getAuth().getBaseUrl())
                 .filter(ExchangeLoggingFilter.logRequest())
                 .filter(ExchangeLoggingFilter.logResponse())
                 .build();

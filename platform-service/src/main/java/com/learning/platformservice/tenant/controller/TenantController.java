@@ -1,6 +1,7 @@
 package com.learning.platformservice.tenant.controller;
 
 import com.learning.common.dto.ProvisionTenantRequest;
+import com.learning.common.infra.security.RequirePermission;
 import com.learning.platformservice.tenant.dto.TenantDto;
 import com.learning.platformservice.tenant.service.TenantProvisioningService;
 import com.learning.platformservice.tenant.service.TenantService;
@@ -30,6 +31,7 @@ public class TenantController {
             @ApiResponse(responseCode = "400", description = "Validation error")
     })
     @PostMapping
+    @RequirePermission(resource = "tenant", action = "create")
     public ResponseEntity<TenantDto> provision(@Valid @RequestBody ProvisionTenantRequest request) {
         return ResponseEntity.ok(tenantProvisioningService.provision(request));
     }
@@ -41,6 +43,7 @@ public class TenantController {
             @ApiResponse(responseCode = "400", description = "Validation error")
     })
     @GetMapping("/{id}")
+    @RequirePermission(resource = "tenant", action = "read")
     public ResponseEntity<TenantDto> get(@PathVariable String id) {
         return tenantService.getTenant(id)
                 .map(ResponseEntity::ok)
@@ -53,6 +56,7 @@ public class TenantController {
             @ApiResponse(responseCode = "404", description = "Tenant not found")
     })
     @PostMapping("/{id}/retry-migration")
+    @RequirePermission(resource = "tenant", action = "update")
     public ResponseEntity<TenantDto> retryMigration(@PathVariable String id) {
         return ResponseEntity.ok(tenantProvisioningService.retryMigration(id));
     }

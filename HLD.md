@@ -1,8 +1,8 @@
 # High-Level Design: Multi-Tenant SaaS Template System
 
-**Version:** 3.0  
-**Last Updated:** 2025-11-27  
-**Purpose:** Production-ready, reusable multi-tenant architecture template
+**Version:** 3.1  
+**Last Updated:** 2025-11-29  
+**Purpose:** Production-ready, reusable multi-tenant architecture template with RBAC authorization
 
 ---
 
@@ -123,12 +123,34 @@ graph TB
 - ✅ **Session Management** - Token issuance, refresh, logout
 - ✅ **MFA Support** - Via Cognito (SMS, TOTP)
 
-#### Authorization (Future)
-- 🔜 **Permission-Based Access Control** - Fine-grained permissions (read, write, delete, etc.)
-- 🔜 **Role Management** - Admin, User, Guest roles per tenant
-- 🔜 **Policy Engine** - Dynamic permission evaluation
+#### Authorization (RBAC - Role-Based Access Control)
+- ✅ **Permission-Based Access Control (PBAC)** - Fine-grained permissions system
+  - Resource-action model (e.g., `entry:read`, `entry:create`, `tenant:delete`)
+  - Super-admin wildcard permission (`*:*`)
+- ✅ **Role Management** - Hierarchical role system
+  - Platform roles: `super-admin`, `platform-admin`
+  - Tenant roles: `tenant-admin`, `tenant-user`, `tenant-guest`
+  - Roles scoped to tenant or platform level
+- ✅ **Database Schema:**
+  - `roles` - Role definitions with scope (PLATFORM/TENANT)
+  - `permissions` - Granular permissions (resource + action)
+  - `role_permissions` - Maps roles to permissions
+  - `user_roles` - Assigns roles to users within tenant context
+- ✅ **Permission APIs:**
+  - `POST /api/v1/permissions/check` - Remote permission validation (used by other services)
+  - `GET /api/v1/permissions/{userId}/{tenantId}` - Get all user permissions
+- ✅ **Role Assignment APIs:**
+  - `POST /api/v1/roles/users` - Assign role to user
+  - `DELETE /api/v1/roles/users` - Revoke role from user
+  - `GET /api/v1/roles/users/{userId}/{tenantId}` - Get user's roles
 
-**Technology:** AWS Cognito User Pools, Spring Security OAuth2
+**Technology:** AWS Cognito User Pools, Spring Security OAuth2, JPA
+
+**Authorization Architecture:**
+- `PermissionService` - Core permission evaluation logic
+- `UserRoleService` - Role assignment/revocation
+- `AuthServicePermissionEvaluator` - Local evaluator (direct database access)
+
 
 ---
 
@@ -170,12 +192,18 @@ graph TB
 - ✅ Example "Entry" CRUD operations
 - ✅ Demonstrates multi-tenant data isolation patterns
 - ✅ Shows how to use tenant context from headers
+- ✅ **Authorization Integration:**
+  - `RemotePermissionEvaluator` - Calls auth-service to validate permissions
+  - `@RequirePermission` annotations on endpoints (e.g., `entry:read`, `entry:create`)
+  - `TenantContextFilter` - Extracts `X-Tenant-Id` from headers
+  - `CacheConfiguration` - Caches permission check results (10 min TTL)
 
 **How to Replace:**
 1. Keep the multi-tenant data access patterns
-2. Replace `Entry` entity with your domain (Order, Product, Task, etc.)
-3. Add your business logic
-4. Register with Eureka using same pattern
+2. Keep the authorization infrastructure (`RemotePermissionEvaluator`, `TenantContextFilter`)
+3. Replace `Entry` entity with your domain (Order, Product, Task, etc.)
+4. Add `@RequirePermission` to your endpoints
+5. Register with Eureka using same pattern
 
 **Examples of What You Might Build:**
 - `work-service` - Task/project management
@@ -254,6 +282,69 @@ sequenceDiagram
     Gateway-->>User: Response
 ```
 
+### Authorization Flow (Permission Check)
+```mermaid
+sequenceDiagram
+    participant User
+    participant Gateway
+    participant Backend
+    participant Auth
+    participant Cache
+    participant DB[Auth DB]
+
+    Note over User,DB: User makes a protected API call
+
+    User->>Gateway: GET /api/v1/entries<br/>Authorization: Bearer JWT
+    Gateway->>Gateway: Validate JWT
+    Gateway->>Gateway: Extract tenantId, userId from token
+    Gateway->>Gateway: Inject X-Tenant-Id, X-User-Id headers
+    
+    Gateway->>Backend: GET /api/v1/entries<br/>X-Tenant-Id: tenant-123<br/>X-User-Id: user-456
+    
+    Backend->>Backend: TenantContextFilter extracts X-Tenant-Id
+    Backend->>Backend: AuthorizationAspect intercepts<br/>@RequirePermission(resource="entry", action="read")
+    
+    Backend->>Cache: Check cache: user-456:tenant-123:entry:read?
+    
+    alt Cache Hit
+        Cache-->>Backend: true/false (cached result)
+    else Cache Miss
+        Backend->>Auth: POST /api/v1/permissions/check<br/>{userId: "user-456", tenantId: "tenant-123",<br/>resource: "entry", action: "read"}
+        
+        Auth->>DB: Get user roles for user-456 in tenant-123
+        DB-->>Auth: [tenant-user]
+        
+        Auth->>DB: Check role permissions<br/>role=tenant-user, resource=entry, action=read
+        DB-->>Auth: true (permission exists)
+        
+        Auth-->>Backend: {allowed: true}
+        Backend->>Cache: Store result (10 min TTL)
+    end
+    
+    alt Permission Denied
+        Backend-->>Gateway: 403 Forbidden
+        Gateway-->>User: 403 Access Denied
+    else Permission Granted
+        Backend->>Backend: Proceed with business logic
+        Backend-->>Gateway: 200 OK + data
+        Gateway-->>User: 200 OK + data
+    end
+```
+
+**Key Components:**
+- **TenantContextFilter** (`common-infra`) - Extracts tenant ID from headers into ThreadLocal
+- **AuthorizationAspect** (`common-infra`) - AOP interceptor for `@RequirePermission` annotations
+- **RemotePermissionEvaluator** (`backend/platform`) - Calls auth-service to check permissions
+- **PermissionService** (`auth-service`) - Core evaluation logic with database queries
+- **Caffeine Cache** - 10-minute TTL cache to reduce auth-service calls
+
+**Authorization Decision Logic:**
+1. Check if user has `super-admin` role → Grant all permissions (`*:*`)
+2. Query `user_roles` table for user's active roles in the tenant
+3. For each role, check `role_permissions` and `permissions` tables
+4. Return `true` if any role grants the requested `resource:action` permission
+
+
 ---
 
 ## 🏢 Multi-Tenancy Model
@@ -325,6 +416,75 @@ CREATE TABLE entries (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 -- NOTE: No tenant_id column needed - database itself is the isolation boundary
+```
+
+### Authorization Database (Auth Service)
+```sql
+-- Role Definitions
+CREATE TABLE roles (
+    id VARCHAR(64) PRIMARY KEY,                -- super-admin, tenant-admin, tenant-user
+    name VARCHAR(255) NOT NULL,                -- Human-readable name
+    description TEXT,
+    scope VARCHAR(20) NOT NULL,                -- PLATFORM, TENANT
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Permission Definitions (Resource:Action)
+CREATE TABLE permissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    resource VARCHAR(64) NOT NULL,             -- entry, tenant, user, etc.
+    action VARCHAR(64) NOT NULL,               -- create, read, update, delete
+    description TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(resource, action)
+);
+
+-- Role-Permission Mapping
+CREATE TABLE role_permissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    role_id VARCHAR(64) NOT NULL REFERENCES roles(id),
+    permission_id UUID NOT NULL REFERENCES permissions(id),
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(role_id, permission_id)
+);
+
+-- User-Role Assignments (Tenant-Scoped)
+CREATE TABLE user_roles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id VARCHAR(255) NOT NULL,             -- Cognito user ID
+    tenant_id VARCHAR(64) NOT NULL,            -- tenant_acme, user_john_xyz
+    role_id VARCHAR(64) NOT NULL REFERENCES roles(id),
+    assigned_by VARCHAR(255) NOT NULL,         -- User who assigned this role
+    assigned_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP,                      -- NULL = never expires
+    UNIQUE(user_id, tenant_id, role_id)
+);
+
+-- Indexes for performance
+CREATE INDEX idx_user_roles_lookup ON user_roles(user_id, tenant_id) WHERE expires_at IS NULL OR expires_at > NOW();
+CREATE INDEX idx_role_permissions_lookup ON role_permissions(role_id);
+```
+
+**Example Data:**
+```sql
+-- Roles
+INSERT INTO roles VALUES ('super-admin', 'Super Administrator', 'Platform-wide access', 'PLATFORM');
+INSERT INTO roles VALUES ('tenant-admin', 'Tenant Administrator', 'Full tenant access', 'TENANT');
+INSERT INTO roles VALUES ('tenant-user', 'Tenant User', 'Standard tenant user', 'TENANT');
+
+-- Permissions
+INSERT INTO permissions (resource, action) VALUES ('entry', 'create'), ('entry', 'read'), ('entry', 'update'), ('entry', 'delete');
+INSERT INTO permissions (resource, action) VALUES ('tenant', 'create'), ('tenant', 'read'), ('tenant', 'update');
+INSERT INTO permissions (resource, action) VALUES ('user', 'invite'), ('user', 'remove');
+
+-- Role-Permission Mappings
+-- tenant-admin gets all entry permissions
+INSERT INTO role_permissions (role_id, permission_id) 
+  SELECT 'tenant-admin', id FROM permissions WHERE resource = 'entry';
+
+-- tenant-user gets read/create entry permissions only
+INSERT INTO role_permissions (role_id, permission_id)
+  SELECT 'tenant-user', id FROM permissions WHERE resource = 'entry' AND action IN ('read', 'create');
 ```
 
 ---

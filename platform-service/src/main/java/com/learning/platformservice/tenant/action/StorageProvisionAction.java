@@ -10,7 +10,8 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Responsible only for physical storage creation (schema / database) and jdbcUrl assignment.
+ * Responsible only for physical storage creation (schema / database) and
+ * jdbcUrl assignment.
  */
 @Component
 @RequiredArgsConstructor
@@ -29,35 +30,32 @@ public class StorageProvisionAction implements TenantProvisionAction {
         try {
             String jdbcUrl = tenantProvisioner.provisionTenantStorage(tenantId, mode);
             context.setJdbcUrl(jdbcUrl);
+            context.getTenant().setJdbcUrl(jdbcUrl); // Also set on tenant entity for migrations
 
-            String dbUsername = ("%s_user".formatted(tenantId)).toLowerCase();
+            String dbUsername = ("%s_user".formatted(tenantId)).toLowerCase().replace("-", "_");
             String schemaName = tenantProvisioner.buildDatabaseName(tenantId);
 
             var identifiers = resolveIdentifiers(mode, jdbcUrl, schemaName);
             String identifierForGrants = identifiers.identifierForGrants();
 
             String rawPassword = tenantProvisioner.createTenantDbUser(
-                    identifierForGrants, dbUsername, mode
-            );
+                    identifierForGrants, dbUsername, mode);
 
             context.getTenant().setDbUserSecretRef(dbUsername);
             context.getTenant().setDbUserPasswordEnc(
-                    SimpleCryptoUtil.encrypt(rawPassword)
-            );
+                    SimpleCryptoUtil.encrypt(rawPassword));
 
         } catch (Exception e) {
             log.error("storage_provision_failed tenantId={} error={}", tenantId, e.getMessage(), e);
             throw new TenantProvisioningException(
-                    tenantId, "Storage provision failed: " + e.getMessage(), e
-            );
+                    tenantId, "Storage provision failed: " + e.getMessage(), e);
         }
     }
 
     private TenantIdentifiers resolveIdentifiers(
             TenantStorageEnum mode,
             String jdbcUrl,
-            String schemaName
-    ) {
+            String schemaName) {
         return switch (mode) {
             case DATABASE -> new TenantIdentifiers(schemaName, schemaName);
 

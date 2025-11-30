@@ -66,6 +66,7 @@ spring:
 cognito:
   user-pool-id: ${COGNITO_USER_POOL_ID}
   client-id: ${COGNITO_CLIENT_ID}
+  client-secret: ${COGNITO_CLIENT_SECRET:}
   domain: ${COGNITO_DOMAIN}
   region: ${AWS_REGION:us-east-1}
   logout-redirect-url: ${COGNITO_LOGOUT_REDIRECT_URL:http://localhost:8081/auth/logged-out}

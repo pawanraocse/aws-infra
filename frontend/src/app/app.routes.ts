@@ -20,6 +20,10 @@ export const routes: Routes = [
       {
         path: 'signup/organization',
         loadComponent: () => import('./features/auth/signup-organization.component').then(m => m.SignupOrganizationComponent)
+      },
+      {
+        path: 'verify',
+        loadComponent: () => import('./features/auth/verify-email.component').then(m => m.VerifyEmailComponent)
       }
     ]
   },

@@ -140,12 +140,13 @@ export class SignupOrganizationComponent {
     this.loading.set(true);
     this.error.set(null);
 
-    this.http.post(`${environment.apiUrl}/api/signup/organization`, this.signupForm.value)
+    this.http.post(`${environment.apiUrl}/auth/signup/organization`, this.signupForm.value)
       .subscribe({
         next: () => {
           this.loading.set(false);
+          // Email is auto-verified in backend, go straight to login
           this.router.navigate(['/auth/login'], {
-            queryParams: { registered: 'true' }
+            queryParams: { registered: 'true', message: 'Organization created successfully! You can now log in.' }
           });
         },
         error: (err) => {

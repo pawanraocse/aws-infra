@@ -156,8 +156,11 @@ springdoc:
     tags-sorter: alpha
 
 platform:
-  dbPerTenantEnabled: false
-  tenantDatabaseModeEnabled: false
+  db-per-tenant:
+    enabled: true
+  tenant:
+    database-mode:
+      enabled: true
   dropOnFailure: false
   tenantDbHost: localhost
   tenantDbPort: 5432

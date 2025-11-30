@@ -15,27 +15,32 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix = "cognito")
 @Data
 public class CognitoProperties {
-    
+
     /**
      * Cognito User Pool ID
      */
     private String userPoolId;
-    
+
     /**
      * Cognito domain (e.g., "my-app-dev-xyz123")
      */
     private String domain;
-    
+
     /**
      * AWS region where Cognito resources exist
      */
     private String region;
-    
+
     /**
      * OAuth2 client ID from Spring Security configuration
      */
     private String clientId;
-    
+
+    /**
+     * OAuth2 client secret (required for native/confidential clients)
+     */
+    private String clientSecret;
+
     /**
      * Logout redirect URL
      */
@@ -47,10 +52,14 @@ public class CognitoProperties {
     @PostConstruct
     void validate() {
         StringBuilder sb = new StringBuilder();
-        if (isBlank(userPoolId)) sb.append("userPoolId ");
-        if (isBlank(domain)) sb.append("domain ");
-        if (isBlank(region)) sb.append("region ");
-        if (isBlank(clientId)) sb.append("clientId ");
+        if (isBlank(userPoolId))
+            sb.append("userPoolId ");
+        if (isBlank(domain))
+            sb.append("domain ");
+        if (isBlank(region))
+            sb.append("region ");
+        if (isBlank(clientId))
+            sb.append("clientId ");
         if (!sb.isEmpty()) {
             String missing = sb.toString().trim();
             String msg = "Missing required Cognito properties: " + missing;
@@ -66,7 +75,7 @@ public class CognitoProperties {
     public String getDomainUrl() {
         return String.format("https://%s.auth.%s.amazoncognito.com", domain, region);
     }
-    
+
     /**
      * Get the logout URL
      */

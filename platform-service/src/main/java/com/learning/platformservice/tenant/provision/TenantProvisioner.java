@@ -37,20 +37,26 @@ public class TenantProvisioner {
     private static final long BASE_BACKOFF_MS = 100L;
 
     public TenantProvisioner(DataSource dataSource,
-                             MeterRegistry meterRegistry,
-                             @Value("${platform.tenant.database-mode.enabled:false}") boolean databaseModeFeatureEnabled,
-                             @Value("${platform.db-per-tenant.enabled:false}") boolean dbPerTenantEnabled,
-                             @Value("${spring.datasource.url}") String dataSourceUrl) {
+            MeterRegistry meterRegistry,
+            @Value("${platform.tenant.database-mode.enabled:false}") boolean databaseModeFeatureEnabled,
+            @Value("${platform.db-per-tenant.enabled:false}") boolean dbPerTenantEnabled,
+            @Value("${spring.datasource.url}") String dataSourceUrl) {
         this.jdbcTemplate = new JdbcTemplate(dataSource);
         this.databaseModeFeatureEnabled = databaseModeFeatureEnabled;
         this.dbPerTenantEnabled = dbPerTenantEnabled;
         this.dataSourceUrl = dataSourceUrl;
-        this.dbCreateAttempts = Counter.builder("platform.tenants.db.create.attempts").description("Database create attempts").register(meterRegistry);
-        this.dbCreateSuccess = Counter.builder("platform.tenants.db.create.success").description("Successful tenant database creates").register(meterRegistry);
-        this.dbCreateFailure = Counter.builder("platform.tenants.db.create.failure").description("Failed tenant database creates").register(meterRegistry);
-        this.schemaCreateAttempts = Counter.builder("platform.tenants.schema.create.attempts").description("Schema create attempts").register(meterRegistry);
-        this.schemaCreateSuccess = Counter.builder("platform.tenants.schema.create.success").description("Successful tenant schema creates").register(meterRegistry);
-        this.schemaCreateFailure = Counter.builder("platform.tenants.schema.create.failure").description("Failed tenant schema creates").register(meterRegistry);
+        this.dbCreateAttempts = Counter.builder("platform.tenants.db.create.attempts")
+                .description("Database create attempts").register(meterRegistry);
+        this.dbCreateSuccess = Counter.builder("platform.tenants.db.create.success")
+                .description("Successful tenant database creates").register(meterRegistry);
+        this.dbCreateFailure = Counter.builder("platform.tenants.db.create.failure")
+                .description("Failed tenant database creates").register(meterRegistry);
+        this.schemaCreateAttempts = Counter.builder("platform.tenants.schema.create.attempts")
+                .description("Schema create attempts").register(meterRegistry);
+        this.schemaCreateSuccess = Counter.builder("platform.tenants.schema.create.success")
+                .description("Successful tenant schema creates").register(meterRegistry);
+        this.schemaCreateFailure = Counter.builder("platform.tenants.schema.create.failure")
+                .description("Failed tenant schema creates").register(meterRegistry);
     }
 
     /**
@@ -75,7 +81,8 @@ public class TenantProvisioner {
         } catch (CannotGetJdbcConnectionException ex) {
             // Test/unit environment fallback: allow URL formation without physical DDL
             schemaCreateFailure.increment();
-            log.warn("schema_create_connection_unavailable tenantId={} schema={} msg={}", tenantId, schemaName, ex.getMessage());
+            log.warn("schema_create_connection_unavailable tenantId={} schema={} msg={}", tenantId, schemaName,
+                    ex.getMessage());
         } catch (Exception e) {
             schemaCreateFailure.increment();
             log.error("schema_create_failure tenantId={} schema={} error={}", tenantId, schemaName, e.getMessage(), e);
@@ -86,10 +93,12 @@ public class TenantProvisioner {
 
     private String createDatabasePath(String tenantId) {
         if (!databaseModeFeatureEnabled) {
-            throw new IllegalStateException("DATABASE storageMode disabled by feature flag platform.tenant.database-mode.enabled");
+            throw new IllegalStateException(
+                    "DATABASE storageMode disabled by feature flag platform.tenant.database-mode.enabled");
         }
         if (!dbPerTenantEnabled) {
-            throw new IllegalStateException("DB-per-tenant capability disabled by feature flag platform.db-per-tenant.enabled");
+            throw new IllegalStateException(
+                    "DB-per-tenant capability disabled by feature flag platform.db-per-tenant.enabled");
         }
         dbCreateAttempts.increment();
         String dbName = buildDatabaseName(tenantId);
@@ -121,8 +130,10 @@ public class TenantProvisioner {
                     continue;
                 }
                 dbCreateFailure.increment();
-                log.error("db_create_failure tenantId={} dbName={} sqlState={} error={}", tenantId, dbName, sqlEx.getSQLState(), sqlEx.getMessage(), sqlEx);
-                throw new IllegalStateException("Failed to create database '" + dbName + "': " + sqlEx.getMessage(), sqlEx);
+                log.error("db_create_failure tenantId={} dbName={} sqlState={} error={}", tenantId, dbName,
+                        sqlEx.getSQLState(), sqlEx.getMessage(), sqlEx);
+                throw new IllegalStateException("Failed to create database '" + dbName + "': " + sqlEx.getMessage(),
+                        sqlEx);
             } catch (Exception ex) {
                 // Non-SQL exceptions (datasource issues, connection retrieval, etc.)
                 if (attempt < DB_CREATE_MAX_ATTEMPTS) {
@@ -137,7 +148,8 @@ public class TenantProvisioner {
                     continue;
                 }
                 dbCreateFailure.increment();
-                log.error("db_create_failure_non_sql tenantId={} dbName={} error={}", tenantId, dbName, ex.getMessage(), ex);
+                log.error("db_create_failure_non_sql tenantId={} dbName={} error={}", tenantId, dbName, ex.getMessage(),
+                        ex);
                 throw new IllegalStateException("Failed to create database '" + dbName + "': " + ex.getMessage(), ex);
             }
         }
@@ -147,12 +159,15 @@ public class TenantProvisioner {
 
     private void executeCreateDatabase(String dbName) throws SQLException {
         DataSource ds = jdbcTemplate.getDataSource();
-        if (ds == null) throw new IllegalStateException("DataSource unavailable for database creation");
+        if (ds == null)
+            throw new IllegalStateException("DataSource unavailable for database creation");
         try (Connection conn = ds.getConnection(); Statement stmt = conn.createStatement()) {
             boolean originalAuto = conn.getAutoCommit();
-            if (!originalAuto) conn.setAutoCommit(true);
+            if (!originalAuto)
+                conn.setAutoCommit(true);
             stmt.execute("CREATE DATABASE " + dbName);
-            if (!originalAuto) conn.setAutoCommit(false);
+            if (!originalAuto)
+                conn.setAutoCommit(false);
         }
     }
 
@@ -160,8 +175,7 @@ public class TenantProvisioner {
         Integer exists = jdbcTemplate.query(
                 "SELECT 1 FROM pg_database WHERE datname = ?",
                 ps -> ps.setString(1, dbName),
-                rs -> rs.next() ? rs.getInt(1) : null
-        );
+                rs -> rs.next() ? rs.getInt(1) : null);
         if (exists != null) {
             throw new IllegalStateException("Database already exists: " + dbName);
         }
@@ -185,7 +199,10 @@ public class TenantProvisioner {
         if (raw == null || raw.isBlank()) {
             throw new IllegalArgumentException("Tenant id cannot be blank");
         }
-        String cleaned = raw.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "");
+        // Replace hyphens with underscores for PostgreSQL compatibility
+        String cleaned = raw.toLowerCase(Locale.ROOT)
+                .replaceAll("-", "_")
+                .replaceAll("[^a-z0-9_]", "");
         if (cleaned.isBlank()) {
             throw new IllegalArgumentException("Tenant id became empty after sanitization");
         }
@@ -241,7 +258,7 @@ public class TenantProvisioner {
         }
 
         try (var conn = ds.getConnection();
-             var stmt = conn.createStatement()) {
+                var stmt = conn.createStatement()) {
 
             conn.setAutoCommit(true);
 
@@ -260,8 +277,7 @@ public class TenantProvisioner {
                     username, tenantIdentifier, e.getMessage(), e);
 
             throw new IllegalStateException(
-                    "Failed to create/configure DB user '" + username + "'", e
-            );
+                    "Failed to create/configure DB user '" + username + "'", e);
         }
     }
 
@@ -280,13 +296,13 @@ public class TenantProvisioner {
     private String buildGrantSql(TenantStorageEnum mode, String tenantIdentifier, String username) {
 
         return switch (mode) {
-            case DATABASE -> "GRANT ALL PRIVILEGES ON DATABASE %s TO %s;"
+            case DATABASE -> "ALTER DATABASE %s OWNER TO %s;"
                     .formatted(quote(tenantIdentifier), quote(username));
 
             case SCHEMA -> """
-                    GRANT USAGE ON SCHEMA %1$s TO %2$s;
+                    GRANT USAGE, CREATE ON SCHEMA %1$s TO %2$s;
                     GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %1$s TO %2$s;
-                    ALTER DEFAULT PRIVILEGES IN SCHEMA %1$s 
+                    ALTER DEFAULT PRIVILEGES IN SCHEMA %1$s
                     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %2$s;
                     """
                     .formatted(quote(tenantIdentifier), quote(username));
@@ -296,10 +312,10 @@ public class TenantProvisioner {
     private void logPrivilegeSuccess(TenantStorageEnum mode, String username, String tenantIdentifier) {
         switch (mode) {
             case DATABASE ->
-                    log.info("db_user_granted_database_privileges username={} db={}", username, tenantIdentifier);
+                log.info("db_user_granted_database_privileges username={} db={}", username, tenantIdentifier);
 
             case SCHEMA ->
-                    log.info("db_user_granted_schema_privileges username={} schema={}", username, tenantIdentifier);
+                log.info("db_user_granted_schema_privileges username={} schema={}", username, tenantIdentifier);
         }
     }
 
@@ -312,7 +328,6 @@ public class TenantProvisioner {
     private String quote(String identifier) {
         return "\"" + identifier + "\"";
     }
-
 
     private String generateRandomPassword(int length) {
         SecureRandom random = new SecureRandom();

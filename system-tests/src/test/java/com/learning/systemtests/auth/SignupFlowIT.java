@@ -62,7 +62,7 @@ class SignupFlowIT {
                 .contentType(ContentType.JSON)
                 .body(request)
                 .when()
-                .post("/api/signup/personal")
+                .post("/auth/signup/personal")
                 .then()
                 .statusCode(201)
                 .body("success", equalTo(true))
@@ -100,7 +100,7 @@ class SignupFlowIT {
                 .contentType(ContentType.JSON)
                 .body(request)
                 .when()
-                .post("/api/signup/organization")
+                .post("/auth/signup/organization")
                 .then()
                 .statusCode(201)
                 .body("success", equalTo(true))
@@ -130,7 +130,7 @@ class SignupFlowIT {
                 .contentType(ContentType.JSON)
                 .body(request)
                 .when()
-                .post("/api/signup/personal")
+                .post("/auth/signup/personal")
                 .then()
                 .statusCode(201);
 
@@ -139,7 +139,7 @@ class SignupFlowIT {
                 .contentType(ContentType.JSON)
                 .body(request)
                 .when()
-                .post("/api/signup/personal")
+                .post("/auth/signup/personal")
                 .then()
                 .statusCode(anyOf(is(400), is(409)))
                 .body("success", equalTo(false))
@@ -164,7 +164,7 @@ class SignupFlowIT {
                 .contentType(ContentType.JSON)
                 .body(request)
                 .when()
-                .post("/api/signup/personal")
+                .post("/auth/signup/personal")
                 .then()
                 .statusCode(400);
 
@@ -180,7 +180,7 @@ class SignupFlowIT {
                 .contentType(ContentType.JSON)
                 .body("{\"email\":\"test@example.com\",\"name\":\"Test\"}")
                 .when()
-                .post("/api/signup/personal")
+                .post("/auth/signup/personal")
                 .then()
                 .statusCode(400);
 

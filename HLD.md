@@ -238,7 +238,7 @@ sequenceDiagram
     participant Cognito
     participant TenantDB
 
-    User->>Gateway: POST /api/signup/personal
+    User->>Gateway: POST /auth/signup/personal
     Gateway->>Auth: Forward signup request
     Auth->>Auth: Generate tenant ID
     Auth->>Platform: POST /api/tenants<br/>(provision new tenant)
@@ -531,8 +531,8 @@ INSERT INTO role_permissions (role_id, permission_id)
   - Production: Static build to `dist/` for AWS Amplify Hosting or S3+CloudFront
 
 **Key Features:**
-- ✅ **B2C Signup:** Personal account creation via `POST /api/signup/personal`
-- ✅ **B2B Signup:** Organization creation via `POST /api/signup/organization`
+- ✅ **B2C Signup:** Personal account creation via `POST /auth/signup/personal`
+- ✅ **B2B Signup:** Organization creation via `POST /auth/signup/organization`
 - ✅ **Dashboard:** User info display with tenant ID and role badges
 - ✅ **CRUD Interface:** PrimeNG Table for entries with pagination and lazy loading
 - ✅ **Multi-Tenant UI:** Shows user's tenant context in header
@@ -896,21 +896,382 @@ Every request carries tenant context through headers:
 
 - **[Implementation Guide](docs/tenant-onboarding/IMPLEMENTATION_GUIDE.md)** - Step-by-step setup
 - **[API Documentation](docs/api/)** - Service endpoints (future)
+    E --> F[Update Frontend Environment Files]
+    E --> G[Generate cognito-config.env]
+    
+    D -.->|Source of Truth| H[Backend Services]
+    F -.->|Auto-configured| I[Angular Frontend]
+    
+    style D fill:#33dd77,stroke:#1f3a29,stroke-width:2px
+    style F fill:#bb66ff,stroke:#261f3a,stroke-width:2px
+    style H fill:#ffb84d,stroke:#3a2d1f,stroke-width:2px
+    style I fill:#bb66ff,stroke:#261f3a,stroke-width:2px
+```
+
+### Frontend Configuration
+
+The Angular frontend requires Cognito credentials to authenticate users. These are automatically configured by the Terraform deployment script.
+
+#### Automatic Configuration (Recommended)
+
+When you run `./scripts/terraform/deploy.sh`, the frontend environment files are automatically updated with:
+- User Pool ID
+- Client ID
+- AWS Region
+
+**Generated Files:**
+- `frontend/src/environments/environment.development.ts` - Used for `npm start`
+- `frontend/src/environments/environment.ts` - Used for `npm run build`
+
+**Example Generated Configuration:**
+```typescript
+export const environment = {
+  production: false,
+  apiUrl: 'http://localhost:8080',
+  cognito: {
+    userPoolId: 'us-east-1_jjRFRnxGA',
+    userPoolWebClientId: '4apvlvee4rsmnb06ntd49ljvp5',
+    region: 'us-east-1'
+  }
+};
+```
+
+#### Manual Configuration (Alternative)
+
+If needed, you can fetch configuration from SSM manually:
+
+```bash
+# Get User Pool ID
+aws ssm get-parameter \
+  --name "/cloud-infra/dev/cognito/user_pool_id" \
+  --query 'Parameter.Value' \
+  --output text
+
+# Get Client ID
+aws ssm get-parameter \
+  --name "/cloud-infra/dev/cognito/client_id" \
+  --query 'Parameter.Value' \
+  --output text
+```
+
+Then manually update `frontend/src/environments/environment.development.ts`.
+
+### Backend Services Configuration
+
+Backend services (Auth, Platform, Backend) read configuration from SSM Parameter Store at runtime.
+
+**Spring Boot Integration:**
+```yaml
+spring:
+  cloud:
+    aws:
+      paramstore:
+        enabled: true
+        prefix: /cloud-infra
+        profile-separator: /
+        fail-fast: true
+```
+
+**How it works:**
+1. Service starts up
+2. Reads `/cloud-infra/dev/cognito/*` parameters from SSM
+3. Populates Spring environment properties
+4. Configures OAuth2 client and resource server
+
+**Key Benefits:**
+- ✅ No hardcoded credentials in code
+- ✅ Centralized configuration management
+- ✅ Easy to update without redeployment
+- ✅ Secure storage (SecureString for secrets)
+- ✅ IAM-based access control
+
+### Complete Deployment Workflow
+
+```bash
+# 1. Deploy AWS Infrastructure (includes frontend config)
+./scripts/terraform/deploy.sh
+
+# 2. Start Backend Services
+./scripts/start-all.sh
+
+# 3. Start Frontend (in separate terminal)
+cd frontend
+npm start
+
+# 4. Access Application
+# Frontend: http://localhost:4200
+# Gateway: http://localhost:8080
+```
+
+**First-Time Setup:**
+```bash
+# Install dependencies
+cd frontend && npm install
+
+# Build all services
+cd .. && mvn clean install -DskipTests
+
+# Deploy infrastructure
+./scripts/terraform/deploy.sh
+
+# Start services
+./scripts/start-all.sh
+
+# Start frontend
+cd frontend && npm start
+```
+
+---
+
+## 🛣️ Request Flow Example
+
+**User wants to create an Entry in their tenant**
+
+1. **User** sends: `POST /api/entries` with JWT token
+2. **Gateway** validates JWT, extracts `tenantId=acme` from token
+3. **Gateway** adds headers: `X-Tenant-Id: acme`, `X-User-Id: user123`
+4. **Gateway** routes to Backend Service via Eureka
+5. **Backend** reads `X-Tenant-Id: acme` header
+6. **Backend** connects to `tenant_acme` database
+7. **Backend** creates entry, sets `created_by=user123`
+8. **Backend** returns success
+9. **Gateway** forwards response to user
+
+**Security:** No tenant can access another tenant's data - enforced at database level
+
+---
+
+## 📁 Project Structure
+
+```
+AWS-Infra/
+├── auth-service/           # Identity & permission management
+├── platform-service/       # Tenant lifecycle control plane
+├── backend-service/        # REPLACE THIS - domain logic mimic
+├── gateway-service/        # API gateway & security enforcement
+├── eureka-server/          # Service discovery
+├── common-dto/             # Shared DTOs across services
+├── common-infra/           # Shared utilities (JSON writer, etc.)
+├── terraform/              # Infrastructure as Code
+│   ├── modules/
+│   │   ├── vpc/
+│   │   ├── rds/
+│   │   ├── cognito/
+│   │   └── ecs/
+│   └── environments/
+│       ├── dev/
+│       └── prod/
+├── docker-compose.yml      # Local dev environment
+└── HLD.md                  # This document
+```
+
+---
+
+## 🎓 Key Concepts
+
+### Tenant Context Propagation
+Every request carries tenant context through headers:
+- `X-Tenant-Id` - Database to connect to
+- `X-User-Id` - User making the request
+- `X-Authorities` - User permissions/roles
+
+### Fail-Closed Security
+- Gateway rejects requests without valid JWT
+- Gateway rejects requests without tenant context
+- Services trust headers from Gateway (network isolation required)
+
+### Dynamic Tenant Onboarding
+- No code deployment needed to add new tenant
+- Platform Service provisions on-demand
+- Fully automated via signup API
+
+---
+
+## 📚 Additional Documentation
+
+- **[Implementation Guide](docs/tenant-onboarding/IMPLEMENTATION_GUIDE.md)** - Step-by-step setup
+- **[API Documentation](docs/api/)** - Service endpoints (future)
 - **[Terraform Guide](terraform/README.md)** - Infrastructure setup
 - **[Runbook](docs/runbook.md)** - Operations guide (future)
 
 ---
 
-## 🔮 Future Roadmap
+## 🔮 Implementation Roadmap
 
-- [ ] **Permission Engine** - Fine-grained authorization in Auth Service
-- [ ] **Redis Integration** - Distributed caching
-- [ ] **Async Provisioning** - Queue-based tenant creation for scale
-- [ ] **Tenant Migration Tools** - Move tenants between RDS instances
+### ✅ Phase 1: Self-Service Signup Portal (COMPLETE)
+
+**Status:** DONE - 2025-11-30
+
+**Features Delivered:**
+- ✅ Personal signup (B2C) with auto-verification
+- ✅ Organization signup (B2B) with admin creation
+- ✅ Database-per-tenant isolation
+- ✅ Automated tenant provisioning
+- ✅ Custom attributes (`custom:tenantId`, `custom:role`)
+- ✅ Immediate login post-signup
+
+**Known Limitations:**
+- ⚠️ Email verification bypassed (auto-verified for MVP)
+- ⚠️ No organization user management yet
+
+---
+
+### 🚧 Phase 2: Organization Admin Portal (NEXT)
+
+**Target:** Q1 2026
+
+**Core Features:**
+- [ ] **Admin Dashboard** - Organization overview page
+- [ ] **User Management**
+  - Invite team members via email
+  - View user roster
+  - Remove/deactivate users
+  - Resend invitations
+- [ ] **Role Assignment UI**
+  - Assign roles to team members
+  - View role permissions
+  - Role-based access control
+- [ ] **Organization Settings**
+  - Update company profile
+  - Manage billing info (placeholder)
+  - View usage statistics
+
+**Technical Deliverables:**
+- New `OrganizationController` in auth-service
+- Email invitation service
+- Admin portal frontend components
+- Invitation token management
+- Unit + integration tests
+
+**Design Decisions Needed:**
+1. Invitation flow: Email link vs. manual code entry?
+2. Role model: Predefined roles or custom roles?
+3. User capacity limits per organization tier?
+
+---
+
+### 📅 Phase 3: Enterprise SSO Integration
+
+**Target:** Q2 2026
+
+**Features:**
+- [ ] **SAML 2.0 Configuration UI**
+  - Upload Identity Provider metadata
+  - Configure attribute mappings
+  - Test SSO connection
+- [ ] **OIDC Provider Support**
+  - Azure AD integration
+  - Okta connector
+  - Ping Identity support
+- [ ] **Just-In-Time (JIT) Provisioning**
+  - Auto-create users on first SSO login
+  - Sync user attributes from IDP
+- [ ] **Manual org provisioning workflow**
+  - Platform admin approval process
+  - Enterprise tier activation
+
+**Infrastructure:**
+- Cognito Identity Provider configuration
+- SAML attribute mapping Lambda
+- Admin approval workflow
+
+---
+
+### 🔐 Phase 4: Native Email Verification
+
+**Target:** Q2 2026
+
+**Goal:** Replace auto-verification with Cognito native verification
+
+**Approach:**
+- Use `signUp` client API for initial registration
+- Trigger `post_confirmation` Lambda after user verifies email
+- Lambda sets `custom:tenantId` and `custom:role` attributes
+- Update frontend to handle verification flow
+
+**Components:**
+- Lambda function: `post-confirmation-handler`
+- Update `SignupController` to use `signUp` API
+- Frontend verification component (already built)
+- Terraform for Lambda trigger
+
+---
+
+### 🎯 Phase 5: Fine-Grained Permissions
+
+**Target:** Q3 2026
+
+**Features:**
+- [ ] **Permission Engine** in Auth Service
+  - Resource-based permissions
+  - Action-level authorization
+  - Permission inheritance
+- [ ] **Permission Management UI**
+  - Define custom permissions
+  - Create permission sets
+  - Assign to roles
+- [ ] **Policy Evaluation**
+  - Real-time permission checks
+  - Cached permission resolution
+  - Audit logging
+
+**Technologies:**
+- Casbin / Open Policy Agent (OPA)
+- Redis cache for permissions
+- Policy definition language
+
+---
+
+### 🚀 Phase 6: Scale & Performance
+
+**Target:** Q3-Q4 2026
+
+**Infrastructure:**
+- [ ] **Redis Integration** - Distributed caching for sessions & permissions
+- [ ] **Async Tenant Provisioning** - Queue-based (SQS) for large orgs
+- [ ] **Database Sharding** - Multiple RDS instances
+- [ ] **Tenant Migration Tools** - Move tenants between DB instances
 - [ ] **Multi-Region Support** - Data residency compliance
+- [ ] **CDN Integration** - CloudFront for static assets
+- [ ] **Auto-scaling** - ECS/EKS for service instances
+
+---
+
+### 🔬 Phase 7: Advanced Features
+
+**Target:** 2027
+
+**Features:**
 - [ ] **GraphQL API** - Alternative to REST
-- [ ] **Event-Driven Architecture** - Kafka/SNS integration
-- [ ] **Admin Portal** - Web UI for tenant management
+- [ ] **Event-Driven Architecture** - Kafka/SNS for async workflows
+- [ ] **Audit Log Service** - Compliance tracking
+- [ ] **Billing Engine** - Usage-based pricing
+- [ ] **API Rate Limiting** - Per-tenant quotas
+- [ ] **Tenant Analytics** - Usage dashboards
+- [ ] **White-Label Support** - Custom branding per tenant
+- [ ] **Mobile SDKs** - iOS/Android native auth
+
+---
+
+### 🧪 Continuous Improvements (Ongoing)
+
+**Testing:**
+- [ ] Comprehensive integration test suite
+- [ ] Load testing framework
+- [ ] Chaos engineering practices
+- [ ] Security penetration testing
+
+**Observability:**
+- [ ] Distributed tracing (X-Ray)
+- [ ] Advanced metrics dashboards
+- [ ] Alert automation
+- [ ] SLA monitoring
+
+**DevOps:**
+- [ ] Blue-green deployments
+- [ ] Feature flags system
+- [ ] Automated rollback triggers
+- [ ] Database backup automation
 
 ---
 

@@ -47,7 +47,7 @@ public class SecurityConfiguration {
                                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                                 .authorizeHttpRequests(authz -> authz
                                                 .requestMatchers("/", "/actuator/health", "/actuator/info",
-                                                                "/logged-out", "/api/signup/**")
+                                                                "/logged-out", "/signup/**")
                                                 .permitAll()
                                                 .anyRequest().authenticated())
                                 .oauth2Login(oauth2 -> oauth2

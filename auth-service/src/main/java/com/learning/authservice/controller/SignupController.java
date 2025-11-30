@@ -1,6 +1,7 @@
 package com.learning.authservice.controller;
 
 import com.learning.authservice.config.CognitoProperties;
+import com.learning.authservice.dto.VerifyRequestDto;
 import com.learning.common.dto.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +13,11 @@ import org.springframework.web.reactive.function.client.WebClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.*;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.List;
 
 /**
@@ -20,7 +25,7 @@ import java.util.List;
  * Orchestrates tenant provisioning and Cognito user creation.
  */
 @RestController
-@RequestMapping("/api/signup")
+@RequestMapping("/signup")
 @Slf4j
 @RequiredArgsConstructor
 public class SignupController {
@@ -70,6 +75,46 @@ public class SignupController {
             log.error("❌ B2C signup failed: email={} error={}", email, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(SignupResponse.failure(e.getMessage()));
+        }
+    }
+
+    /**
+     * Verify Email with Code
+     * Confirms user signup after receiving verification code via email
+     */
+    @PostMapping("/verify")
+    public ResponseEntity<SignupResponse> verifyEmail(@RequestBody @Valid VerifyRequestDto request) {
+        log.info("Email verification initiated: email={}", request.getEmail());
+
+        try {
+            String secretHash = calculateSecretHash(request.getEmail());
+
+            ConfirmSignUpRequest confirmRequest = ConfirmSignUpRequest.builder()
+                    .clientId(cognitoProperties.getClientId())
+                    .username(request.getEmail())
+                    .confirmationCode(request.getCode())
+                    .secretHash(secretHash)
+                    .build();
+
+            cognitoClient.confirmSignUp(confirmRequest);
+
+            log.info("✅ Email verified successfully: email={}", request.getEmail());
+
+            return ResponseEntity.ok(
+                    SignupResponse.success("Email verified successfully. You can now log in.", null));
+
+        } catch (ExpiredCodeException e) {
+            log.error("Verification code expired: email={}", request.getEmail());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(SignupResponse.failure("Verification code has expired. Please request a new one."));
+        } catch (CodeMismatchException e) {
+            log.error("Invalid verification code: email={}", request.getEmail());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(SignupResponse.failure("Invalid verification code. Please try again."));
+        } catch (CognitoIdentityProviderException e) {
+            log.error("Cognito verification error: email={} error={}", request.getEmail(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(SignupResponse.failure("Verification failed: " + e.awsErrorDetails().errorMessage()));
         }
     }
 
@@ -159,7 +204,6 @@ public class SignupController {
                             AttributeType.builder().name("name").value(name).build(),
                             AttributeType.builder().name("email_verified").value("true").build(),
                             AttributeType.builder().name("custom:tenantId").value(tenantId).build(),
-                            AttributeType.builder().name("custom:tenantType").value(tenantType.name()).build(),
                             AttributeType.builder().name("custom:role").value(role).build())
                     .desiredDeliveryMediums(DeliveryMediumType.EMAIL)
                     .messageAction(MessageActionType.SUPPRESS) // We'll send custom email
@@ -184,12 +228,28 @@ public class SignupController {
         }
     }
 
+    // Helper: Calculate SECRET_HASH for Cognito API calls
+    private String calculateSecretHash(String username) {
+        try {
+            String message = username + cognitoProperties.getClientId();
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec secretKeySpec = new SecretKeySpec(
+                    cognitoProperties.getClientSecret().getBytes(StandardCharsets.UTF_8),
+                    "HmacSHA256");
+            mac.init(secretKeySpec);
+            byte[] rawHmac = mac.doFinal(message.getBytes(StandardCharsets.UTF_8));
+            return Base64.getEncoder().encodeToString(rawHmac);
+        } catch (Exception e) {
+            throw new RuntimeException("Error calculating secret hash", e);
+        }
+    }
+
     // Helper: Generate tenant ID for personal accounts
     private String generateTenantId(String email) {
         String username = email.split("@")[0];
         String sanitized = username.replaceAll("[^a-zA-Z0-9]", "");
         String timestamp = String.valueOf(System.currentTimeMillis()).substring(8);
-        return "user_" + sanitized + "_" + timestamp;
+        return "user-" + sanitized + "-" + timestamp;
     }
 
     // Helper: Slugify company name for tenant ID

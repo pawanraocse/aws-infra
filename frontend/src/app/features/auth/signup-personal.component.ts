@@ -122,12 +122,13 @@ export class SignupPersonalComponent {
       password: this.signupForm.value.password
     };
 
-    this.http.post(`${environment.apiUrl}/api/signup/personal`, payload)
+    this.http.post(`${environment.apiUrl}/auth/signup/personal`, payload)
       .subscribe({
         next: () => {
           this.loading.set(false);
+          // Email is auto-verified in backend, go straight to login
           this.router.navigate(['/auth/login'], {
-            queryParams: { registered: 'true' }
+            queryParams: { registered: 'true', message: 'Account created successfully! You can now log in.' }
           });
         },
         error: (err) => {

@@ -11,32 +11,31 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 public class SecurityConfig {
 
-    @Bean
-    @Profile("!test")
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/actuator/**",
-                                "/v3/api-docs/**",
-                                "/swagger-ui/**",
-                                "/swagger-ui.html",
-                                "/webjars/**"
-                        ).permitAll()
-                        .anyRequest().authenticated()
-                )
-                .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()));
-        return http.build();
-    }
+        @Bean
+        @Profile("!test")
+        SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+                http
+                                .csrf(csrf -> csrf.disable())
+                                .authorizeHttpRequests(auth -> auth
+                                                .requestMatchers(
+                                                                "/actuator/**",
+                                                                "/v3/api-docs/**",
+                                                                "/swagger-ui/**",
+                                                                "/swagger-ui.html",
+                                                                "/webjars/**",
+                                                                "/api/tenants/**")
+                                                .permitAll()
+                                                .anyRequest().authenticated())
+                                .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()));
+                return http.build();
+        }
 
-    @Bean
-    @Profile("test")
-    SecurityFilterChain testSecurityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .csrf(AbstractHttpConfigurer::disable)
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
-        return http.build();
-    }
+        @Bean
+        @Profile("test")
+        SecurityFilterChain testSecurityFilterChain(HttpSecurity http) throws Exception {
+                http
+                                .csrf(AbstractHttpConfigurer::disable)
+                                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+                return http.build();
+        }
 }
-

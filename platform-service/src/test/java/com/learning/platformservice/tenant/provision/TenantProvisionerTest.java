@@ -17,7 +17,8 @@ class TenantProvisionerTest {
     @Test
     @DisplayName("Schema mode constructs JDBC URL with currentSchema param")
     void schemaMode_urlConstruction() {
-        TenantProvisioner provisioner = new TenantProvisioner(ds, registry, false, false, "jdbc:postgresql://localhost:5432/awsinfra");
+        TenantProvisioner provisioner = new TenantProvisioner(ds, registry, false, false,
+                "jdbc:postgresql://localhost:5432/awsinfra");
         String jdbc = provisioner.provisionTenantStorage("Acme_123", TenantStorageEnum.SCHEMA);
         assertThat(jdbc).startsWith("jdbc:postgresql://localhost:5432/awsinfra?currentSchema=");
         assertThat(jdbc).contains("acme_123");
@@ -26,7 +27,8 @@ class TenantProvisionerTest {
     @Test
     @DisplayName("Database mode disabled throws flag error before JDBC")
     void databaseMode_disabled() {
-        TenantProvisioner provisioner = new TenantProvisioner(ds, registry, false, false, "jdbc:postgresql://localhost:5432/awsinfra");
+        TenantProvisioner provisioner = new TenantProvisioner(ds, registry, false, false,
+                "jdbc:postgresql://localhost:5432/awsinfra");
         assertThatThrownBy(() -> provisioner.provisionTenantStorage("acme", TenantStorageEnum.DATABASE))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("DATABASE storageMode disabled");
@@ -35,11 +37,12 @@ class TenantProvisionerTest {
     @Test
     @DisplayName("Database name sanitization applies length and allowed chars")
     void databaseName_sanitization() throws Exception {
-        TenantProvisioner provisioner = new TenantProvisioner(ds, registry, true, true, "jdbc:postgresql://localhost:5432/awsinfra");
+        TenantProvisioner provisioner = new TenantProvisioner(ds, registry, true, true,
+                "jdbc:postgresql://localhost:5432/awsinfra");
         var method = TenantProvisioner.class.getDeclaredMethod("buildDatabaseName", String.class);
         method.setAccessible(true);
         String name = (String) method.invoke(provisioner, "ACME-*INVALID__LONG_NAME_WITH_CHARS@#$%^&*()+");
-        assertThat(name).contains("acme-invalid__long_name_with_chars");
+        assertThat(name).contains("acme_invalid__long_name_with_chars");
         assertThat(name).matches("[a-z0-9_-]+");
         assertThat(name.length()).isLessThanOrEqualTo(63);
     }

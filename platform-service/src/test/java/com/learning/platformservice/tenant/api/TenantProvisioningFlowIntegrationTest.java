@@ -304,19 +304,17 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                 // 2. Connect as tenant user and check permissions
                 try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password);
                                 var stmt = conn.createStatement()) {
+
+                        if ("DATABASE".equals(tenant.getStorageMode())) {
+                                schemaName = "public";
+                        }
+
                         // Set search_path to schema (should succeed)
                         stmt.execute("SET search_path TO " + schemaName);
 
-                        // CREATE TABLE should fail (not owner)
-                        boolean createFailed = false;
-                        try {
-                                stmt.execute("CREATE TABLE " + schemaName + ".test_table(id INT)");
-                        } catch (SQLException ignored) {
-                                createFailed = true;
-                        }
-                        assertThat(createFailed)
-                                        .as("Tenant user should NOT be allowed to create tables")
-                                        .isTrue();
+                        // CREATE TABLE should succeed (needed for migrations)
+                        stmt.execute("CREATE TABLE " + schemaName + ".test_table(id INT)");
+                        stmt.execute("DROP TABLE " + schemaName + ".test_table");
 
                         // SELECT 1 should succeed
                         assertThat(stmt.execute("SELECT 1")).isTrue();

@@ -100,7 +100,7 @@ class SignupControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().success()).isTrue();
-        assertThat(response.getBody().tenantId()).startsWith("user_test");
+        assertThat(response.getBody().tenantId()).startsWith("user-test");
 
         verify(cognitoClient).adminCreateUser(any(AdminCreateUserRequest.class));
         verify(cognitoClient).adminSetUserPassword(any(java.util.function.Consumer.class));

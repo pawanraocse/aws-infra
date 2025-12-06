@@ -15,6 +15,8 @@ public interface InvitationService {
 
     void revokeInvitation(String tenantId, UUID invitationId);
 
+    void resendInvitation(String tenantId, UUID invitationId);
+
     Invitation validateInvitation(String token);
 
     void acceptInvitation(String token, String password, String name);

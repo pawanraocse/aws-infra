@@ -4,7 +4,11 @@
     <div class="flex justify-content-between align-items-center">
       <div>
         <h1 class="text-3xl font-bold text-900 m-0">Dashboard</h1>
-        <p class="text-600 mt-2">Manage your tenant resources and view statistics.</p>
+        <p class="text-600 mt-2">
+          {{ authService.user()?.tenantType === 'ORGANIZATION' 
+            ? 'Manage your organization resources and view statistics.' 
+            : 'Welcome! Manage your personal data.' }}
+        </p>
       </div>
       <div class="flex gap-2">
         <p-tag [value]="authService.user()?.tenantType" severity="info" styleClass="text-base px-3 py-2"></p-tag>
@@ -81,8 +85,14 @@
         <ng-template pTemplate="caption">
           <div class="flex align-items-center justify-content-between mb-2">
             <div>
-              <div class="text-xl font-bold text-900">Tenant Entries</div>
-              <div class="text-600 text-sm">Manage your isolated data entries</div>
+              <div class="text-xl font-bold text-900">
+                {{ authService.user()?.tenantType === 'ORGANIZATION' ? 'Organization Entries' : 'My Data' }}
+              </div>
+              <div class="text-600 text-sm">
+                {{ authService.user()?.tenantType === 'ORGANIZATION' 
+                  ? 'Manage your organization\'s data entries' 
+                  : 'Manage your personal data entries' }}
+              </div>
             </div>
             <p-button label="New Entry" icon="pi pi-plus" (click)="showCreateDialog()"
               styleClass="p-button-primary"></p-button>

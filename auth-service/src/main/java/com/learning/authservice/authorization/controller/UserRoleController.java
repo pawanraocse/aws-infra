@@ -1,5 +1,6 @@
 package com.learning.authservice.authorization.controller;
 
+import com.learning.authservice.authorization.domain.Role;
 import com.learning.authservice.authorization.domain.UserRole;
 import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.common.infra.security.RequirePermission;
@@ -10,8 +11,7 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
+
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -27,13 +27,18 @@ public class UserRoleController {
 
     private final UserRoleService userRoleService;
 
+    @GetMapping
+    @RequirePermission(resource = "role", action = "read")
+    public ResponseEntity<List<Role>> listRoles() {
+        return ResponseEntity.ok(userRoleService.getAllRoles());
+    }
+
     @PostMapping("/assign")
     @RequirePermission(resource = "user", action = "manage")
     public ResponseEntity<Void> assignRole(
-            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader("X-User-Id") String assignedBy,
             @RequestBody @Valid RoleAssignmentRequest request) {
 
-        String assignedBy = jwt.getSubject();
         String tenantId = TenantContext.getCurrentTenant();
 
         log.info("Assigning role {} to user {} in tenant {}", request.getRoleId(), request.getUserId(), tenantId);
@@ -63,6 +68,23 @@ public class UserRoleController {
 
         String tenantId = TenantContext.getCurrentTenant();
         return ResponseEntity.ok(userRoleService.getUserRoles(userId, tenantId));
+    }
+
+    @PutMapping("/users/{userId}")
+    @RequirePermission(resource = "user", action = "manage")
+    public ResponseEntity<Void> updateUserRole(
+            @PathVariable String userId,
+            @RequestHeader("X-User-Id") String assignedBy,
+            @RequestBody @Valid RoleAssignmentRequest request) {
+
+        String tenantId = TenantContext.getCurrentTenant();
+
+        if (!userId.equals(request.getUserId())) {
+            throw new IllegalArgumentException("Path ID and Body ID mismatch");
+        }
+
+        userRoleService.updateUserRole(userId, tenantId, request.getRoleId(), assignedBy);
+        return ResponseEntity.ok().build();
     }
 
     // DTOs

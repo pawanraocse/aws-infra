@@ -27,81 +27,81 @@ import java.util.List;
 @EnableWebFluxSecurity
 public class SecurityConfig {
 
-    @Value("${cors.allowed-origins:http://localhost:4200}")
-    private String allowedOrigins;
+        @Value("${cors.allowed-origins:http://localhost:4200}")
+        private String allowedOrigins;
 
-    @Bean
-    public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
-        log.info("Configuring security filter chain");
+        @Bean
+        public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
+                log.info("Configuring security filter chain");
 
-        http.csrf(ServerHttpSecurity.CsrfSpec::disable)
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .authorizeExchange(exchange -> exchange
-                        .pathMatchers(
-                                "/auth/login/**", "/auth/signup/**", "/auth/oauth2/**",
-                                "/auth/tokens", "/auth/logout", "/auth/.well-known/**",
-                                "/auth/logged-out", "/actuator/**", "/fallback"
-                        ).permitAll()
-                        .anyExchange().authenticated()
-                )
-                .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(new JwtAuthenticationConverter()))
-                )
-                .exceptionHandling(exception -> exception
-                        .authenticationEntryPoint(authenticationEntryPoint())
-                        .accessDeniedHandler(accessDeniedHandler())
-                );
+                http.csrf(ServerHttpSecurity.CsrfSpec::disable)
+                                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                                .authorizeExchange(exchange -> exchange
+                                                .pathMatchers(
+                                                                "/auth/login/**", "/auth/signup/**", "/auth/oauth2/**",
+                                                                "/auth/tokens", "/auth/logout", "/auth/.well-known/**",
+                                                                "/auth/logged-out", "/auth/verify",
+                                                                "/auth/resend-verification",
+                                                                "/actuator/**", "/fallback")
+                                                .permitAll()
+                                                .anyExchange().authenticated())
+                                .oauth2ResourceServer(oauth2 -> oauth2
+                                                .jwt(jwt -> jwt.jwtAuthenticationConverter(
+                                                                new JwtAuthenticationConverter())))
+                                .exceptionHandling(exception -> exception
+                                                .authenticationEntryPoint(authenticationEntryPoint())
+                                                .accessDeniedHandler(accessDeniedHandler()));
 
-        return http.build();
-    }
+                return http.build();
+        }
 
-    private Mono<Void> writeJsonResponse(ServerWebExchange exchange, HttpStatus status, String code, String message) {
-        String requestId = exchange.getRequest().getHeaders().getFirst("X-Request-Id");
-        String body = String.format(
-                "{\"timestamp\":\"%s\",\"status\":%d,\"code\":\"%s\",\"message\":\"%s\",\"requestId\":\"%s\"}",
-                Instant.now(), status.value(), code, message, requestId != null ? requestId : "none"
-        );
-        exchange.getResponse().setStatusCode(status);
-        exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        return exchange.getResponse().writeWith(
-                Mono.fromSupplier(() -> exchange.getResponse().bufferFactory()
-                        .wrap(body.getBytes(StandardCharsets.UTF_8)))
-        );
-    }
+        private Mono<Void> writeJsonResponse(ServerWebExchange exchange, HttpStatus status, String code,
+                        String message) {
+                String requestId = exchange.getRequest().getHeaders().getFirst("X-Request-Id");
+                String body = String.format(
+                                "{\"timestamp\":\"%s\",\"status\":%d,\"code\":\"%s\",\"message\":\"%s\",\"requestId\":\"%s\"}",
+                                Instant.now(), status.value(), code, message, requestId != null ? requestId : "none");
+                exchange.getResponse().setStatusCode(status);
+                exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                return exchange.getResponse().writeWith(
+                                Mono.fromSupplier(() -> exchange.getResponse().bufferFactory()
+                                                .wrap(body.getBytes(StandardCharsets.UTF_8))));
+        }
 
-    @Bean
-    public ServerAuthenticationEntryPoint authenticationEntryPoint() {
-        return (exchange, ex) -> {
-            log.warn("Unauthorized access: uri={}, requestId={}",
-                    exchange.getRequest().getURI(),
-                    exchange.getRequest().getHeaders().getFirst("X-Request-Id"));
-            return writeJsonResponse(exchange, HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Authentication required");
-        };
-    }
+        @Bean
+        public ServerAuthenticationEntryPoint authenticationEntryPoint() {
+                return (exchange, ex) -> {
+                        log.warn("Unauthorized access: uri={}, requestId={}",
+                                        exchange.getRequest().getURI(),
+                                        exchange.getRequest().getHeaders().getFirst("X-Request-Id"));
+                        return writeJsonResponse(exchange, HttpStatus.UNAUTHORIZED, "UNAUTHORIZED",
+                                        "Authentication required");
+                };
+        }
 
-    @Bean
-    public ServerAccessDeniedHandler accessDeniedHandler() {
-        return (exchange, ex) -> {
-            log.warn("Access denied: uri={}, requestId={}",
-                    exchange.getRequest().getURI(),
-                    exchange.getRequest().getHeaders().getFirst("X-Request-Id"));
-            return writeJsonResponse(exchange, HttpStatus.FORBIDDEN, "FORBIDDEN", "Access denied");
-        };
-    }
+        @Bean
+        public ServerAccessDeniedHandler accessDeniedHandler() {
+                return (exchange, ex) -> {
+                        log.warn("Access denied: uri={}, requestId={}",
+                                        exchange.getRequest().getURI(),
+                                        exchange.getRequest().getHeaders().getFirst("X-Request-Id"));
+                        return writeJsonResponse(exchange, HttpStatus.FORBIDDEN, "FORBIDDEN", "Access denied");
+                };
+        }
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L);
+        @Bean
+        public CorsConfigurationSource corsConfigurationSource() {
+                CorsConfiguration configuration = new CorsConfiguration();
+                configuration.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
+                configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+                configuration.setAllowedHeaders(List.of("*"));
+                configuration.setAllowCredentials(true);
+                configuration.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
+                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+                source.registerCorsConfiguration("/**", configuration);
 
-        log.info("CORS configured with allowed origins: {}", allowedOrigins);
-        return source;
-    }
+                log.info("CORS configured with allowed origins: {}", allowedOrigins);
+                return source;
+        }
 }

@@ -16,11 +16,12 @@ import org.slf4j.LoggerFactory;
 public class AuthHelper {
 
     private static final Logger log = LoggerFactory.getLogger(AuthHelper.class);
-    
+
     private static final String AUTH_SERVICE_URL = "http://localhost:8081/auth";
-    
+
     // Test user credentials (should match a user in your Cognito user pool)
-    // TODO: Replace with actual test user credentials or load from environment variables
+    // TODO: Replace with actual test user credentials or load from environment
+    // variables
     private static final String TEST_USER_EMAIL = System.getenv().getOrDefault("TEST_USER_EMAIL", "test@example.com");
     private static final String TEST_USER_PASSWORD = System.getenv().getOrDefault("TEST_USER_PASSWORD", "Test123!");
 
@@ -66,8 +67,7 @@ public class AuthHelper {
             String errorMessage = String.format(
                     "Login failed with status %d: %s",
                     response.getStatusCode(),
-                    response.getBody().asString()
-            );
+                    response.getBody().asString());
             log.error(errorMessage);
             throw new RuntimeException(errorMessage);
         }
@@ -82,7 +82,8 @@ public class AuthHelper {
     }
 
     /**
-     * Returns a complete authentication response including access token, ID token, etc.
+     * Returns a complete authentication response including access token, ID token,
+     * etc.
      *
      * @return AuthResponse object
      */
@@ -125,8 +126,7 @@ public class AuthHelper {
                 response.jsonPath().getString("tokenType"),
                 response.jsonPath().getLong("expiresIn"),
                 response.jsonPath().getString("userId"),
-                response.jsonPath().getString("email")
-        );
+                response.jsonPath().getString("email"));
     }
 
     /**
@@ -139,7 +139,42 @@ public class AuthHelper {
             String tokenType,
             Long expiresIn,
             String userId,
-            String email
-    ) {
+            String email) {
+    }
+
+    /**
+     * Signs up a new user and returns the email and password.
+     *
+     * @return A pair of email and password
+     */
+    public static UserCredentials signup() {
+        String email = "test.user." + java.util.UUID.randomUUID().toString().substring(0, 8) + "@example.com";
+        String password = "TestPassword123!";
+        String name = "Test User";
+
+        String signupPayload = String.format("""
+                {
+                    "email": "%s",
+                    "password": "%s",
+                    "name": "%s"
+                }
+                """, email, password, name);
+
+        Response response = RestAssured.given()
+                .baseUri(AUTH_SERVICE_URL)
+                .contentType(ContentType.JSON)
+                .body(signupPayload)
+                .when()
+                .post("/signup/personal")
+                .then()
+                .statusCode(201)
+                .extract()
+                .response();
+
+        log.info("Signup successful for user: {}", email);
+        return new UserCredentials(email, password);
+    }
+
+    public record UserCredentials(String email, String password) {
     }
 }

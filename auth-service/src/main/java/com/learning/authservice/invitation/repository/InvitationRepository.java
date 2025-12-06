@@ -19,4 +19,6 @@ public interface InvitationRepository extends JpaRepository<Invitation, UUID> {
     Optional<Invitation> findByTenantIdAndEmail(String tenantId, String email);
 
     List<Invitation> findByTenantIdAndStatus(String tenantId, InvitationStatus status);
+
+    long countByTenantIdAndStatus(String tenantId, InvitationStatus status);
 }

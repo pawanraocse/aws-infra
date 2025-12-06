@@ -3,6 +3,7 @@ package com.learning.authservice.service;
 import com.learning.authservice.dto.AuthRequestDto;
 import com.learning.authservice.dto.AuthResponseDto;
 import com.learning.authservice.dto.SignupRequestDto;
+import com.learning.authservice.dto.SignupResponseDto;
 import com.learning.authservice.dto.UserInfoDto;
 
 public interface AuthService {
@@ -10,8 +11,9 @@ public interface AuthService {
 
     AuthResponseDto login(AuthRequestDto request);
 
-    AuthResponseDto signup(SignupRequestDto request);
+    SignupResponseDto signup(SignupRequestDto request);
 
     void logout();
-}
 
+    void deleteAccount();
+}

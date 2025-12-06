@@ -51,7 +51,20 @@ export class LoginComponent {
       });
       // Navigation handled in authService
     } catch (err: any) {
-      this.error.set(err.message || 'Login failed. Please check your credentials.');
+      this.loading.set(false);
+
+      // Handle unverified user error
+      if (err.name === 'UserNotConfirmedException') {
+        this.error.set('Please verify your email before logging in. Check your inbox for the verification link.');
+        // Navigate to verify-email page with email
+        setTimeout(() => {
+          this.router.navigate(['/auth/verify-email'], {
+            state: { email: this.loginForm.value.username }
+          });
+        }, 2000);
+      } else {
+        this.error.set(err.message || 'Login failed. Please check your credentials.');
+      }
     } finally {
       this.loading.set(false);
     }

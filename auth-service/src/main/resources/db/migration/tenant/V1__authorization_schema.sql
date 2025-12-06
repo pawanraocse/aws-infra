@@ -176,5 +176,52 @@ FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
+-- 9. INVITATIONS TABLE (User Invitation System)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id VARCHAR(64) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    role_id VARCHAR(64) NOT NULL,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    status VARCHAR(32) NOT NULL CHECK (status IN ('PENDING', 'ACCEPTED', 'EXPIRED', 'REVOKED')),
+    invited_by VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_invitations_tenant ON invitations(tenant_id);
+CREATE INDEX idx_invitations_email ON invitations(email);
+CREATE INDEX idx_invitations_token ON invitations(token);
+CREATE INDEX idx_invitations_status ON invitations(status);
+
+COMMENT ON TABLE invitations IS 'Stores invitation tokens for inviting new users to tenants';
+COMMENT ON COLUMN invitations.tenant_id IS 'Tenant ID for which the invitation is created';
+COMMENT ON COLUMN invitations.email IS 'Email address of the invited user';
+COMMENT ON COLUMN invitations.role_id IS 'Role to be assigned to the user upon acceptance';
+COMMENT ON COLUMN invitations.token IS 'Secure random token used in the invitation link';
+COMMENT ON COLUMN invitations.status IS 'Current status of the invitation';
+COMMENT ON COLUMN invitations.invited_by IS 'User ID who created the invitation';
+COMMENT ON COLUMN invitations.expires_at IS 'Expiration timestamp for the invitation';
+
+-- Trigger to update updated_at column for invitations
+CREATE TRIGGER update_invitations_updated_at
+BEFORE UPDATE ON invitations
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+-- Add invite permission
+INSERT INTO permissions (id, resource, action, description) VALUES
+('user-invite', 'user', 'invite', 'Invite new users to the tenant')
+ON CONFLICT (resource, action) DO NOTHING;
+
+-- Grant invite permission to tenant-admin role
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('tenant-admin', 'user-invite')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- ============================================================================
 -- MIGRATION COMPLETE
 -- ============================================================================

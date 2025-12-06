@@ -16,4 +16,9 @@ public class VerifyRequestDto {
 
     @NotBlank(message = "Verification code is required")
     private String code;
+
+    @NotBlank(message = "Tenant ID is required")
+    private String tenantId;
+
+    private String role = "tenant-admin"; // Default role
 }

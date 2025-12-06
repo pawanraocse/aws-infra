@@ -178,4 +178,21 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         return new TenantDto(tenant.getId(), tenant.getName(), tenant.getStatus(), tenant.getStorageMode(),
                 tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
     }
+
+    @Override
+    public void deprovision(String tenantId) {
+        log.info("tenant_deprovision_init tenantId={}", tenantId);
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new TenantNotFoundException(tenantId));
+
+        // Soft delete: Mark as DELETED
+        // Future: Actually drop database
+        // (tenantProvisioner.dropTenantDatabase(tenantId))
+
+        tenant.setStatus("DELETED");
+        tenant.setUpdatedAt(OffsetDateTime.now());
+        tenantRepository.save(tenant);
+
+        log.info("tenant_deprovision_success tenantId={} status=DELETED", tenantId);
+    }
 }

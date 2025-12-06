@@ -3,6 +3,7 @@ package com.learning.authservice.controller;
 import com.learning.authservice.dto.AuthRequestDto;
 import com.learning.authservice.dto.AuthResponseDto;
 import com.learning.authservice.dto.SignupRequestDto;
+import com.learning.authservice.dto.SignupResponseDto;
 import com.learning.authservice.dto.UserInfoDto;
 import com.learning.authservice.service.AuthService;
 import jakarta.servlet.http.Cookie;
@@ -31,14 +32,22 @@ public class AuthController {
     private final OAuth2AuthorizedClientService authorizedClientService; // NT-07 added
 
     @GetMapping("/me")
-    public ResponseEntity<UserInfoDto> getCurrentUser(@RequestHeader(name = "Authorization", required = false) String authorizationHeader) {
+    public ResponseEntity<UserInfoDto> getCurrentUser(
+            @RequestHeader(name = "Authorization", required = false) String authorizationHeader) {
         // Accept JWT in Authorization header for stateless auth
         return ResponseEntity.ok(authService.getCurrentUser());
     }
 
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> deleteAccount() {
+        authService.deleteAccount();
+        return ResponseEntity.noContent().build();
+    }
+
     /**
      * Get JWT tokens from the current OAuth2 session.
-     * This endpoint extracts the ID token and access token from the authenticated OIDC user.
+     * This endpoint extracts the ID token and access token from the authenticated
+     * OIDC user.
      * Use this after successful OAuth2 login to get tokens for API calls.
      */
     @GetMapping("/tokens")
@@ -54,7 +63,8 @@ public class AuthController {
         }
         OAuth2AuthorizedClient client = authorizedClientService.loadAuthorizedClient("cognito", auth.getName());
         if (client == null || client.getAccessToken() == null) {
-            log.warn("operation=getTokens status=unauthorized reason=access_token_missing userId={}", oidcUser.getSubject());
+            log.warn("operation=getTokens status=unauthorized reason=access_token_missing userId={}",
+                    oidcUser.getSubject());
             return unauthorizedError("ACCESS_TOKEN_MISSING", "Access token not available");
         }
         String accessToken = client.getAccessToken().getTokenValue();
@@ -76,13 +86,15 @@ public class AuthController {
     }
 
     private ResponseEntity<String> unauthorizedError(String code, String message) {
-        String body = String.format("{\"timestamp\":\"%s\",\"status\":401,\"code\":\"%s\",\"message\":\"%s\",\"requestId\":\"%s\"}",
-                Instant.now(), code, message.replace("\"","\\\""), java.util.UUID.randomUUID());
+        String body = String.format(
+                "{\"timestamp\":\"%s\",\"status\":401,\"code\":\"%s\",\"message\":\"%s\",\"requestId\":\"%s\"}",
+                Instant.now(), code, message.replace("\"", "\\\""), java.util.UUID.randomUUID());
         return ResponseEntity.status(401).contentType(org.springframework.http.MediaType.APPLICATION_JSON).body(body);
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponseDto> login(@Valid @RequestBody AuthRequestDto request, HttpServletResponse response) {
+    public ResponseEntity<AuthResponseDto> login(@Valid @RequestBody AuthRequestDto request,
+            HttpServletResponse response) {
         log.info("operation=login, email={}", request.getEmail());
         AuthResponseDto authResponse = authService.login(request);
         // Set JWT as HttpOnly cookie for browser clients using Jakarta API
@@ -98,19 +110,11 @@ public class AuthController {
     }
 
     @PostMapping("/signup")
-    public ResponseEntity<AuthResponseDto> signup(@Valid @RequestBody SignupRequestDto request, HttpServletResponse response) {
-        log.info("operation=signup, email={}", request.getEmail());
-        AuthResponseDto authResponse = authService.signup(request);
-        // Set JWT as HttpOnly cookie for browser clients using Jakarta API
-        if (authResponse.getAccessToken() != null) {
-            Cookie jwtCookie = new Cookie("JWT", authResponse.getAccessToken());
-            jwtCookie.setHttpOnly(true);
-            jwtCookie.setSecure(true);
-            jwtCookie.setPath("/");
-            jwtCookie.setMaxAge(authResponse.getExpiresIn() != null ? authResponse.getExpiresIn().intValue() : 900);
-            response.addCookie(jwtCookie);
-        }
-        return ResponseEntity.ok(authResponse);
+    public ResponseEntity<SignupResponseDto> signup(@Valid @RequestBody SignupRequestDto requestDto) {
+        log.info("operation=signup, email={}", requestDto.getEmail());
+        SignupResponseDto response = authService.signup(requestDto);
+        // Note: No JWT cookie set - user must verify email first before login
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/logout")

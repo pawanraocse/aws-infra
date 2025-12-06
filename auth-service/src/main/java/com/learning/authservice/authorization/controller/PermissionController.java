@@ -7,6 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.learning.authservice.authorization.domain.Permission;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -36,6 +38,14 @@ public class PermissionController {
                 request.getResource(),
                 request.getAction());
         return ResponseEntity.ok(allowed);
+    }
+
+    /**
+     * Get all defined permissions.
+     */
+    @GetMapping
+    public ResponseEntity<List<Permission>> listPermissions() {
+        return ResponseEntity.ok(permissionService.getAllPermissions());
     }
 
     /**

@@ -13,13 +13,14 @@ import java.io.IOException;
 
 /**
  * Filter to extract Tenant ID from request headers and populate TenantContext.
+ * Relies on Gateway to inject trusted X-Tenant-Id header.
  * Ensures context is cleared after request processing.
  */
 @Component
 @Slf4j
 public class TenantContextFilter extends OncePerRequestFilter {
 
-    private static final String TENANT_HEADER = "X-Tenant-Id";
+    public static final String TENANT_HEADER = "X-Tenant-Id";
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -29,8 +30,10 @@ public class TenantContextFilter extends OncePerRequestFilter {
         String tenantId = request.getHeader(TENANT_HEADER);
 
         if (tenantId != null && !tenantId.isBlank()) {
-            log.trace("Found tenant ID in header: {}", tenantId);
+            log.trace("Setting tenant context: {}", tenantId);
             TenantContext.setCurrentTenant(tenantId);
+        } else {
+            log.trace("No tenant ID found in request header: {}", TENANT_HEADER);
         }
 
         try {

@@ -8,4 +8,11 @@ public interface TenantProvisioningService {
 
     // Future: retry migration of failed tenant services
     TenantDto retryMigration(String tenantId);
+
+    /**
+     * Delete/Deprovision a tenant.
+     * 
+     * @param tenantId The ID of the tenant to delete.
+     */
+    void deprovision(String tenantId);
 }

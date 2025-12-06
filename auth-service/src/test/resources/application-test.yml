@@ -2,7 +2,23 @@ spring:
   application:
     name: auth-service-test
   
-
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        # Skip schema validation during startup to avoid datasource connection requirement
+        hbm2ddl:
+          auto: none
+        temp:
+          use_jdbc_metadata_defaults: false
+        jdbc:
+          lob:
+            non_contextual_creation: true
     
   security:
     oauth2:

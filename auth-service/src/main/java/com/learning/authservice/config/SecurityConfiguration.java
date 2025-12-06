@@ -47,7 +47,8 @@ public class SecurityConfiguration {
                                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                                 .authorizeHttpRequests(authz -> authz
                                                 .requestMatchers("/", "/actuator/health", "/actuator/info",
-                                                                "/logged-out", "/signup/**")
+                                                                "/logged-out", "/signup/**", "/login", "/error",
+                                                                "/verify", "/resend-verification")
                                                 .permitAll()
                                                 .anyRequest().authenticated())
                                 .oauth2Login(oauth2 -> oauth2
@@ -61,7 +62,19 @@ public class SecurityConfiguration {
                                                 .logoutSuccessHandler(cognitoLogoutHandler))
                                 .headers(h -> h
                                                 .frameOptions(f -> f.deny())
-                                                .contentSecurityPolicy(c -> c.policyDirectives("default-src 'none'")));
+                                                .contentSecurityPolicy(c -> c.policyDirectives("default-src 'none'")))
+                                .securityMatcher("/**")
+                                .exceptionHandling(ex -> ex
+                                                .authenticationEntryPoint((request, response, authException) -> {
+                                                        String path = request.getRequestURI();
+                                                        log.info("Authentication failure for path: {}", path);
+                                                        if (path.contains("/signup") || path.contains("/api")) {
+                                                                response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
+                                                                                "Authentication required");
+                                                        } else {
+                                                                response.sendRedirect("/oauth2/authorization/cognito");
+                                                        }
+                                                }));
 
                 return http.build();
         }

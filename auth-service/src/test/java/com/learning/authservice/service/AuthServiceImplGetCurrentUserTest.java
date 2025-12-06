@@ -35,10 +35,12 @@ class AuthServiceImplGetCurrentUserTest {
         props.setDomain("domain");
         props.setRegion("us-east-1");
         props.setClientId("client");
-        CognitoIdentityProviderClient cognitoIdentityProviderClient =
-                Mockito.mock(CognitoIdentityProviderClient.class);
-        // Note: Not calling props.validate() to avoid throwing during these tests; we only test getCurrentUser.
-        return new AuthServiceImpl(props, req, resp, cognitoIdentityProviderClient);
+        CognitoIdentityProviderClient cognitoIdentityProviderClient = Mockito.mock(CognitoIdentityProviderClient.class);
+        org.springframework.web.reactive.function.client.WebClient webClient = Mockito
+                .mock(org.springframework.web.reactive.function.client.WebClient.class);
+        // Note: Not calling props.validate() to avoid throwing during these tests; we
+        // only test getCurrentUser.
+        return new AuthServiceImpl(props, req, resp, cognitoIdentityProviderClient, webClient);
     }
 
     private DefaultOidcUser oidcUser(String sub, String email, String name) {
@@ -46,8 +48,7 @@ class AuthServiceImplGetCurrentUserTest {
         OidcIdToken idToken = new OidcIdToken("id-token-" + sub, now, now.plusSeconds(3600), Map.of(
                 "sub", sub,
                 "email", email,
-                "name", name
-        ));
+                "name", name));
         OidcUserInfo userInfo = new OidcUserInfo(Map.of("email", email, "name", name));
         return new DefaultOidcUser(List.of(new SimpleGrantedAuthority("ROLE_USER")), idToken, userInfo, "sub");
     }
@@ -69,13 +70,14 @@ class AuthServiceImplGetCurrentUserTest {
     void throwsWhenPrincipalInvalid() {
         HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
         HttpServletResponse resp = Mockito.mock(HttpServletResponse.class);
+        // Mock request without X-User-Id header
+        Mockito.when(req.getHeader("X-User-Id")).thenReturn(null);
         SecurityContextHolder.setContext(new SecurityContextImpl(new UsernamePasswordAuthenticationToken(
-                "plainUser", "N/A", List.of(new SimpleGrantedAuthority("ROLE_USER"))
-        )));
+                "plainUser", "N/A", List.of(new SimpleGrantedAuthority("ROLE_USER")))));
         AuthServiceImpl svc = authService(req, resp);
         assertThatThrownBy(svc::getCurrentUser)
                 .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Invalid user principal");
+                .hasMessageContaining("User not authenticated");
     }
 
     @Test
@@ -83,10 +85,15 @@ class AuthServiceImplGetCurrentUserTest {
     void returnsUserInfoDtoWhenValid() {
         HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
         HttpServletResponse resp = Mockito.mock(HttpServletResponse.class);
+
+        // Mock headers that getCurrentUser expects
+        Mockito.when(req.getHeader("X-User-Id")).thenReturn("sub123");
+        Mockito.when(req.getHeader("X-Email")).thenReturn("user@example.com");
+        Mockito.when(req.getHeader("X-Username")).thenReturn("Test User");
+
         var user = oidcUser("sub123", "user@example.com", "Test User");
         SecurityContextHolder.setContext(new SecurityContextImpl(new UsernamePasswordAuthenticationToken(
-                user, "N/A", user.getAuthorities()
-        )));
+                user, "N/A", user.getAuthorities())));
         AuthServiceImpl svc = authService(req, resp);
         UserInfoDto info = svc.getCurrentUser();
         assertThat(info).isNotNull();
@@ -95,4 +102,3 @@ class AuthServiceImplGetCurrentUserTest {
         assertThat(info.getName()).contains("Test User");
     }
 }
-

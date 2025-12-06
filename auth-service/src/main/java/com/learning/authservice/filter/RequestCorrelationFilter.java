@@ -10,7 +10,7 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -19,8 +19,10 @@ import java.util.UUID;
 
 /**
  * NT-13 RequestCorrelationFilter (refined)
- * Ensures every request has an X-Request-Id header; propagates to MDC for structured JSON logging.
- * Logs duration and completion status with source tracking ("generated" | "upstream").
+ * Ensures every request has an X-Request-Id header; propagates to MDC for
+ * structured JSON logging.
+ * Logs duration and completion status with source tracking ("generated" |
+ * "upstream").
  */
 @Slf4j
 @Component
@@ -34,8 +36,8 @@ public class RequestCorrelationFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain)
+            HttpServletResponse response,
+            FilterChain filterChain)
             throws ServletException, IOException {
 
         String requestId = request.getHeader(REQUEST_ID_HEADER);
@@ -52,7 +54,7 @@ public class RequestCorrelationFilter extends OncePerRequestFilter {
         MDC.put(MDC_REQUEST_ID, requestId);
         MDC.put(MDC_PATH, request.getRequestURI());
 
-        String userId = resolveUserId();
+        String userId = resolveUserId(request);
         if (userId != null) {
             MDC.put(MDC_USER_ID, userId);
         }
@@ -65,7 +67,8 @@ public class RequestCorrelationFilter extends OncePerRequestFilter {
             long duration = System.currentTimeMillis() - start;
             int status = response.getStatus();
 
-            log.info("auth_request_completed {{\"requestId\":\"{}\",\"userId\":\"{}\",\"method\":\"{}\",\"path\":\"{}\",\"status\":{},\"durationMs\":{},\"source\":\"{}\"}}",
+            log.info(
+                    "auth_request_completed {{\"requestId\":\"{}\",\"userId\":\"{}\",\"method\":\"{}\",\"path\":\"{}\",\"status\":{},\"durationMs\":{},\"source\":\"{}\"}}",
                     escape(requestId),
                     escape(userId),
                     request.getMethod(),
@@ -80,18 +83,21 @@ public class RequestCorrelationFilter extends OncePerRequestFilter {
         }
     }
 
-    private String resolveUserId() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated()) return null;
-        Object principal = auth.getPrincipal();
-        if (principal instanceof OidcUser oidcUser) {
-            return oidcUser.getSubject();
+    private String resolveUserId(HttpServletRequest request) {
+        String userId = request.getHeader("X-User-Id");
+        if (userId != null && !userId.isBlank()) {
+            return userId;
         }
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated())
+            return null;
         return auth.getName();
     }
 
     private String escape(String v) {
-        if (v == null) return "";
+        if (v == null)
+            return "";
         return v.replace("\"", " ").replace("\n", " ").replace("\r", " ");
     }
 }

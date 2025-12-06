@@ -60,4 +60,16 @@ public class TenantController {
     public ResponseEntity<TenantDto> retryMigration(@PathVariable String id) {
         return ResponseEntity.ok(tenantProvisioningService.retryMigration(id));
     }
+
+    @Operation(summary = "Delete tenant", description = "Deletes (deprovisions) a tenant. Action is irreversible (logically).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Tenant deleted"),
+            @ApiResponse(responseCode = "404", description = "Tenant not found")
+    })
+    @DeleteMapping("/{id}")
+    @RequirePermission(resource = "tenant", action = "delete")
+    public ResponseEntity<Void> delete(@PathVariable String id) {
+        tenantProvisioningService.deprovision(id);
+        return ResponseEntity.noContent().build();
+    }
 }

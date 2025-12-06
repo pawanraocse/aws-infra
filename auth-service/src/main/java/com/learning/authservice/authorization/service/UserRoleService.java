@@ -106,4 +106,40 @@ public class UserRoleService {
     public List<UserRole> getUserRoles(String userId, String tenantId) {
         return userRoleRepository.findActiveRolesByUserIdAndTenantId(userId, tenantId, Instant.now());
     }
+
+    /**
+     * Update a user's role by revoking existing roles and assigning the new one.
+     * Assumes single-role-per-user model for this operation.
+     */
+    @CacheEvict(value = { "userPermissions", "userAllPermissions" }, key = "#userId + ':' + #tenantId")
+    public void updateUserRole(String userId, String tenantId, String newRoleId, String assignedBy) {
+        log.info("Updating role for user {} in tenant {} to {}", userId, tenantId, newRoleId);
+
+        // 1. Get existing roles
+        List<UserRole> existingRoles = getUserRoles(userId, tenantId);
+
+        // 2. Revoke all existing roles
+        for (UserRole role : existingRoles) {
+            // Skip if it's already the target role (idempotency)
+            if (role.getRoleId().equals(newRoleId)) {
+                continue;
+            }
+            revokeRole(userId, tenantId, role.getRoleId());
+        }
+
+        // 3. Assign new role (if not already present)
+        if (existingRoles.stream().noneMatch(r -> r.getRoleId().equals(newRoleId))) {
+            assignRole(userId, tenantId, newRoleId, assignedBy);
+        }
+    }
+
+    /**
+     * Get all available roles.
+     *
+     * @return List of all roles
+     */
+    @Transactional(readOnly = true)
+    public List<Role> getAllRoles() {
+        return roleRepository.findAll();
+    }
 }

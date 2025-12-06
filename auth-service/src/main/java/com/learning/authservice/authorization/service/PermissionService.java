@@ -1,6 +1,8 @@
 package com.learning.authservice.authorization.service;
 
+import com.learning.authservice.authorization.domain.Permission;
 import com.learning.authservice.authorization.domain.UserRole;
+import com.learning.authservice.authorization.repository.PermissionRepository;
 import com.learning.authservice.authorization.repository.RolePermissionRepository;
 import com.learning.authservice.authorization.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class PermissionService {
 
     private final UserRoleRepository userRoleRepository;
     private final RolePermissionRepository rolePermissionRepository;
+    private final PermissionRepository permissionRepository;
 
     /**
      * Check if user has permission for a specific resource and action.
@@ -181,5 +184,14 @@ public class PermissionService {
                 .toList();
 
         return !superAdminRoles.isEmpty();
+    }
+
+    /**
+     * Get all defined permissions.
+     *
+     * @return List of all permissions
+     */
+    public List<Permission> getAllPermissions() {
+        return permissionRepository.findAll();
     }
 }

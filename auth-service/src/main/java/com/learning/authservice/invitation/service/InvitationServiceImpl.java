@@ -118,6 +118,29 @@ public class InvitationServiceImpl implements InvitationService {
     }
 
     @Override
+    @Transactional
+    public void resendInvitation(String tenantId, UUID invitationId) {
+        Invitation invitation = invitationRepository.findById(invitationId)
+                .orElseThrow(() -> new IllegalArgumentException("Invitation not found"));
+
+        if (!invitation.getTenantId().equals(tenantId)) {
+            throw new SecurityException("Invitation does not belong to this tenant");
+        }
+
+        if (invitation.getStatus() != InvitationStatus.PENDING) {
+            throw new IllegalStateException("Cannot resend invitation with status: " + invitation.getStatus());
+        }
+
+        if (invitation.getExpiresAt().isBefore(Instant.now())) {
+            invitation.setExpiresAt(Instant.now().plus(expirationHours, ChronoUnit.HOURS));
+            invitationRepository.save(invitation);
+        }
+
+        String inviteLink = frontendUrl + "/auth/join?token=" + invitation.getToken();
+        emailService.sendInvitationEmail(invitation.getEmail(), inviteLink, tenantId);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Invitation validateInvitation(String token) {
         Invitation invitation = invitationRepository.findByToken(token)

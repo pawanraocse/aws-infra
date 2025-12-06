@@ -1,8 +1,8 @@
 # High-Level Design: Multi-Tenant SaaS Template System
 
-**Version:** 3.1  
-**Last Updated:** 2025-11-29  
-**Purpose:** Production-ready, reusable multi-tenant architecture template with RBAC authorization
+**Version:** 4.2  
+**Last Updated:** 2025-12-03  
+**Purpose:** Production-ready, reusable multi-tenant architecture template with RBAC authorization and complete database-per-tenant isolation
 
 ---
 
@@ -94,14 +94,14 @@ graph TB
 **Role:** Gatekeeper - Security boundary for ALL incoming requests
 
 **Responsibilities:**
-- ✅ **Authentication Validation** - Verify JWT tokens from Cognito
+- ✅ **Authentication Validation** - Verify JWT tokens from Cognito (**Sole Validator**)
 - ✅ **Tenant Context Extraction** - Extract tenant ID from token/headers
-- ✅ **Header Enrichment** - Inject trusted headers (`X-Tenant-Id`, `X-User-Id`, `X-Authorities`)
+- ✅ **Header Enrichment** - Inject trusted headers (`X-Tenant-Id`, `X-User-Id`, `X-Authorities`, `X-Email`)
 - ✅ **Load Balancing** - Route to healthy service instances via Eureka
 - ✅ **Rate Limiting** - Prevent abuse (future)
 - ✅ **Request Sanitization** - Strip incoming `X-*` headers to prevent spoofing
 
-**Key Feature:** Fail-closed security - rejects requests without valid tenant context
+**Key Feature:** Fail-closed security - rejects requests without valid tenant context. Acts as the **only** OAuth2 Resource Server in the system.
 
 ---
 
@@ -122,6 +122,7 @@ graph TB
   - Creates Cognito users with custom attributes
 - ✅ **Session Management** - Token issuance, refresh, logout
 - ✅ **MFA Support** - Via Cognito (SMS, TOTP)
+- ✅ **Trusts Gateway:** Relies on `X-User-Id` and `X-Tenant-Id` headers. **No local JWT validation.**
 
 #### Authorization (RBAC - Role-Based Access Control)
 - ✅ **Permission-Based Access Control (PBAC)** - Fine-grained permissions system
@@ -138,17 +139,57 @@ graph TB
   - `user_roles` - Assigns roles to users within tenant context
 - ✅ **Permission APIs:**
   - `POST /api/v1/permissions/check` - Remote permission validation (used by other services)
-  - `GET /api/v1/permissions/{userId}/{tenantId}` - Get all user permissions
+  - `GET /api/v1/permissions/user/{userId}/tenant/{tenantId}` - Get all user permissions
+  - `GET /api/v1/permissions` - List all defined permissions (resource + action)
 - ✅ **Role Assignment APIs:**
-  - `POST /api/v1/roles/users` - Assign role to user
-  - `DELETE /api/v1/roles/users` - Revoke role from user
-  - `GET /api/v1/roles/users/{userId}/{tenantId}` - Get user's roles
+  - `GET /api/v1/roles` - List all available roles (Platform & Tenant scopes)
+  - `POST /api/v1/roles/assign` - Assign role to user
+  - `POST /api/v1/roles/revoke` - Revoke role from user
+  - `PUT /api/v1/roles/users/{userId}` - Update user's role
+  - `GET /api/v1/roles/user/{userId}` - Get user's roles
+- ✅ **User Statistics APIs:**
+  - `GET /api/v1/stats/users` - Get aggregated user statistics for tenant
+    - Returns: total users, pending invitations, role distribution
+    - Aggregates from `invitations` and `user_roles` tables
+- ✅ **Invitation Management APIs:**
+  - `POST /api/v1/invitations` - Send invitation to new user
+  - `GET /api/v1/invitations/{tenantId}` - List all invitations for tenant
+  - `POST /api/v1/invitations/{token}/accept` - Accept invitation and join organization
+  - `DELETE /api/v1/invitations/{id}` - Revoke pending invitation
+  - `POST /api/v1/invitations/{id}/resend` - Resend invitation email
+- ✅ **Email Verification APIs:**
+  - `POST /api/v1/auth/resend-verification` - Resend verification email to user
+  - `POST /api/v1/auth/confirm-signup` - Confirm signup with verification code
+- ✅ **Invitation Schema:**
+  - Table: `invitations` (id, tenant_id, email, token, role_id, status, expires_at, invited_by)
+  - Statuses: PENDING, ACCEPTED, EXPIRED, REVOKED
 
-**Technology:** AWS Cognito User Pools, Spring Security OAuth2, JPA
+**Technology:** AWS Cognito User Pools, Spring Security (OAuth2 Client only), JPA
+
+**Email Verification Flow (B2C Personal Signup):**
+1. User signs up → `signUp` API with `clientMetadata` (tenantId, role)
+2. Cognito sends verification **code** via email
+3. **Frontend** displays code input (VerifyEmailComponent)
+4. User enters code → `confirmSignUp` API with `clientMetadata` (tenantId, role)
+5. **Lambda PostConfirmation trigger** sets `custom:tenantId` and `custom:role`
+6. User redirected to login with full tenant context in JWT
+
+**Key Implementation Details:**
+- `clientMetadata` must be passed during BOTH `signUp` AND `confirmSignUp`
+- Gateway permits `/auth/signup/verify` without authentication
+- Frontend stores `tenantId` in router state between signup and verify pages
+
+**Lambda Functions:**
+- `cognito-post-confirmation` - Sets custom attributes (`custom:tenantId`, `custom:role`) after email verification.
+  - **Purpose:** Persists tenant context into the user profile so it's available in the JWT on every login without runtime latency.
+  - Runtime: Python 3.11
+  - Trigger: Cognito PostConfirmation event
+  - Permissions: AdminUpdateUserAttributes on User Pool
 
 **Authorization Architecture:**
 - `PermissionService` - Core permission evaluation logic
 - `UserRoleService` - Role assignment/revocation
+- `UserStatsService` - User statistics aggregation for admin dashboard
 - `AuthServicePermissionEvaluator` - Local evaluator (direct database access)
 
 
@@ -170,9 +211,28 @@ graph TB
 #### Tenant Management
 - ✅ **Lifecycle Operations:**
   - Activate, Suspend, Delete tenants
+  - **Tenant Deletion:** (`DELETE /api/tenants/{id}`)
+    - Hard delete of tenant entry (logically marked `DELETED`)
+    - Requires `tenant:delete` permission
+    - **Note:** Actual database drop is currently manual/safety-gated
   - Upgrade/downgrade tiers (STANDARD, PREMIUM, ENTERPRISE)
 - ✅ **Metadata Storage** - Master database tracks all tenant configurations
 - ✅ **Service Coordination** - Notifies backend services of new tenants
+- ✅ **Trusts Gateway:** Relies on `X-User-Id` and `X-Tenant-Id` headers. **No local JWT validation.**
+
+#### System Administration
+- ✅ **Super Admin Bootstrapping:**
+  - Created via `scripts/bootstrap-system-admin.sh`
+  - Attributes: `custom:role=super-admin`, `custom:tenantId=system`
+  - Access: Full control over all tenants (`*:*` permission)
+- ✅ **Organization Management Profile:**
+  - `GET /api/v1/organizations` - Get organization profile for current tenant
+
+  - `PUT /api/v1/organizations` - Update organization profile (company name, industry, size, website, logo)
+- ✅ **Tenant Entity Fields:**
+  - Core: `id`, `name`, `status`, `tenantType`, `slaTier`
+  - Organization Profile: `companyName`, `industry`, `companySize`, `website`, `logoUrl`
+  - Limits: `maxUsers`, `subscriptionStatus`, `trialEndsAt`
 
 #### Admin Operations
 - ✅ **Internal APIs** - Tenant migration triggers, health checks
@@ -197,6 +257,7 @@ graph TB
   - `@RequirePermission` annotations on endpoints (e.g., `entry:read`, `entry:create`)
   - `TenantContextFilter` - Extracts `X-Tenant-Id` from headers
   - `CacheConfiguration` - Caches permission check results (10 min TTL)
+- ✅ **Trusts Gateway:** Relies on `X-User-Id` and `X-Tenant-Id` headers. **No local JWT validation.**
 
 **How to Replace:**
 1. Keep the multi-tenant data access patterns
@@ -378,114 +439,297 @@ sequenceDiagram
 
 ## 🗄️ Data Architecture
 
-### Master Database (Platform Service)
+### Database Allocation by Service
+
+> **CRITICAL:** All tenant-specific data MUST reside in tenant databases. Only the tenant registry exists in the shared platform database.
+
+| Service | Platform DB (`awsinfra`) | Tenant DB (`t_<tenant_id>`) |
+|---------|--------------------------|------------------------------|
+| **Platform Service** | ✅ `tenant` table<br/>✅ `tenant_credentials`<br/>✅ System config | ❌ None |
+| **Auth Service** | ❌ None | ✅ `roles`<br/>✅ `permissions`<br/>✅ `role_permissions`<br/>✅ `user_roles`<br/>✅ `invitations` |
+| **Backend Service** | ❌ None | ✅ `entries` (your domain tables) |
+| **Gateway Service** | ❌ None (stateless) | ❌ None (stateless) |
+
+**Key Principle:** Database itself is the tenant isolation boundary. No `tenant_id` columns needed in tenant databases.
+
+---
+
+### Platform Database (Shared - `awsinfra`)
+
+**Purpose:** Tenant registry and platform-level configuration ONLY  
+**Owner:** Platform Service  
+**Location:** Shared RDS instance
+
 ```sql
--- Tenant Registry
-CREATE TABLE tenants (
-    id VARCHAR(64) PRIMARY KEY,              -- tenant_acme, user_john_doe_xyz
+-- ============================================================================
+-- TENANT REGISTRY (Platform Service)
+-- ============================================================================
+CREATE TABLE tenant (\n    id VARCHAR(64) PRIMARY KEY,              -- t_acme, t_john_doe_xyz
     name VARCHAR(255) NOT NULL,              -- Acme Corp, John's Workspace
     status VARCHAR(20) NOT NULL,             -- ACTIVE, SUSPENDED, DELETED
     storage_mode VARCHAR(20) NOT NULL,       -- DATABASE, SCHEMA
     jdbc_url TEXT NOT NULL,                  -- Connection string to tenant DB
+    db_user_secret_ref VARCHAR(255),         -- ARN to AWS Secrets Manager
+    db_user_password_enc TEXT,               -- Encrypted password (or use Secrets Manager)
     tier VARCHAR(20) NOT NULL,               -- STANDARD, PREMIUM, ENTERPRISE
     tenant_type VARCHAR(20) NOT NULL,        -- PERSONAL, ORGANIZATION
     owner_email VARCHAR(255) NOT NULL,
-    max_users INTEGER NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    owner_cognito_id VARCHAR(255),
+    max_users INTEGER NOT NULL DEFAULT 50,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- DB Credentials (encrypted, could also use AWS Secrets Manager)
-CREATE TABLE tenant_credentials (
-    tenant_id VARCHAR(64) PRIMARY KEY,
-    db_username VARCHAR(64) NOT NULL,
-    db_password_secret VARCHAR(255) NOT NULL,  -- ARN to AWS Secrets Manager
-    created_at TIMESTAMP DEFAULT NOW()
-);
+CREATE INDEX idx_tenant_status ON tenant(status);
+CREATE INDEX idx_tenant_owner ON tenant(owner_email);
+
+COMMENT ON TABLE tenant IS 'Master registry of all tenants in the system';
+COMMENT ON COLUMN tenant.jdbc_url IS 'JDBC URL to tenant-specific database';
+COMMENT ON COLUMN tenant.db_user_secret_ref IS 'AWS Secrets Manager ARN for DB credentials';
 ```
 
-### Tenant Database (Backend Service)
+**That's it!** Platform database only contains the tenant registry.
+
+---
+
+### Tenant Databases (Isolated - `t_<tenant_id>`)
+
+**Purpose:** ALL tenant-specific application data  
+**Owners:** Auth Service, Backend Service (your domain)  
+**Location:** Separate RDS databases per tenant (or schemas in shared DB)
+
+Each tenant gets a dedicated database with the following schema:
+
+#### Auth Service Tables (in Tenant DB)
+
 ```sql
--- Example: Entry entity (replace with your domain)
+-- ============================================================================
+-- AUTHORIZATION SCHEMA (Auth Service)
+-- Stores: roles, permissions, user assignments, invitations
+-- ============================================================================
+
+-- Role Definitions (Tenant-scoped)
+CREATE TABLE roles (
+    id VARCHAR(64) PRIMARY KEY,                -- tenant-admin, tenant-user, tenant-guest
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    scope VARCHAR(32) NOT NULL CHECK (scope IN ('PLATFORM', 'TENANT')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_roles_scope ON roles(scope);
+
+-- Permission Definitions (Resource:Action pairs)
+CREATE TABLE permissions (
+    id VARCHAR(64) PRIMARY KEY,
+    resource VARCHAR(50) NOT NULL,             -- entry, user, tenant, billing
+    action VARCHAR(50) NOT NULL,               -- create, read, update, delete, manage
+    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(resource, action)
+);
+
+CREATE INDEX idx_permissions_resource ON permissions(resource);
+
+-- Role-Permission Mappings
+CREATE TABLE role_permissions (
+    role_id VARCHAR(64) NOT NULL,
+    permission_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (role_id, permission_id),
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_role_permissions_role ON role_permissions(role_id);
+CREATE INDEX idx_role_permissions_permission ON role_permissions(permission_id);
+
+-- User-Role Assignments (NO tenant_id column - database itself is the tenant boundary)
+CREATE TABLE user_roles (
+    id BIGSERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,             -- Cognito user ID (sub claim)
+    role_id VARCHAR(64) NOT NULL,
+    assigned_by VARCHAR(255),
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,
+    UNIQUE(user_id, role_id),
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_user_roles_user ON user_roles(user_id);
+
+-- User Invitations
+CREATE TABLE invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) NOT NULL,
+    role_id VARCHAR(64) NOT NULL,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    status VARCHAR(32) NOT NULL CHECK (status IN ('PENDING', 'ACCEPTED', 'EXPIRED', 'REVOKED')),
+    invited_by VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_invitations_email ON invitations(email);
+CREATE INDEX idx_invitations_token ON invitations(token);
+CREATE INDEX idx_invitations_status ON invitations(status);
+
+-- Updated_at trigger
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_roles_updated_at
+BEFORE UPDATE ON roles
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_invitations_updated_at
+BEFORE UPDATE ON invitations
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+```
+
+#### Backend Service Tables (in Tenant DB)
+
+```sql
+-- ============================================================================
+-- DOMAIN SCHEMA (Backend Service - REPLACE WITH YOUR DOMAIN)
+-- Example: Entry entity
+-- ============================================================================
+
 CREATE TABLE entries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title VARCHAR(255) NOT NULL,
     content TEXT,
-    created_by VARCHAR(255) NOT NULL,         -- User ID from X-User-Id
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_by VARCHAR(255) NOT NULL,         -- User ID from X-User-Id header
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
--- NOTE: No tenant_id column needed - database itself is the isolation boundary
+
+CREATE INDEX idx_entries_created_by ON entries(created_by);
+CREATE INDEX idx_entries_created_at ON entries(created_at DESC);
+
+-- NOTE: No tenant_id column! The database itself provides tenant isolation.
+-- All queries automatically scoped to this tenant's database.
 ```
 
-### Authorization Database (Auth Service)
+---
+
+### Database Routing Architecture
+
+```mermaid
+graph TB
+    subgraph "Platform Service"
+        PS[Platform Service]
+        PS_DS[PlatformDataSource]
+    end
+    
+    subgraph "Auth Service"
+        AS[Auth Service]
+        AS_Router[TenantDataSourceRouter]
+        AS_Registry[AuthServiceTenantRegistry]
+    end
+    
+    subgraph "Backend Service"
+        BS[Backend Service]
+        BS_Router[TenantDataSourceRouter]
+        BS_Registry[PlatformServiceTenantRegistry]
+    end
+    
+    subgraph "Databases"
+        Platform_DB[(awsinfra DB<br/>tenant table)]
+        Tenant1_DB[(t_acme DB<br/>roles, entries)]
+        Tenant2_DB[(t_john_xyz DB<br/>roles, entries)]
+    end
+    
+    PS --> PS_DS
+    PS_DS --> Platform_DB
+    
+    AS --> AS_Router
+    AS_Router --> AS_Registry
+    AS_Registry -->|GET /internal/tenants/t_acme/db-info| PS
+    AS_Router -->|Dynamic routing| Tenant1_DB
+    AS_Router -->|Dynamic routing| Tenant2_DB
+    
+    BS --> BS_Router
+    BS_Router --> BS_Registry
+    BS_Registry -->|GET /internal/tenants/t_acme/db-info| PS
+    BS_Router -->|Dynamic routing| Tenant1_DB
+    BS_Router -->|Dynamic routing| Tenant2_DB
+    
+    style Platform_DB fill:#33dd77,stroke:#1f3a29,stroke-width:2px
+    style Tenant1_DB fill:#4da3ff,stroke:#1f2a3d,stroke-width:2px
+    style Tenant2_DB fill:#4da3ff,stroke:#1f2a3d,stroke-width:2px
+```
+
+**How It Works:**
+
+1. **Request arrives** with JWT token containing `custom:tenantId`
+2. **Gateway** extracts `tenantId` from token → Injects `X-Tenant-Id` header
+3. **Service receives request** with `X-Tenant-Id: t_acme`
+4. **TenantDataSourceRouter** checks tenant ID from `TenantContext` (ThreadLocal)
+5. **TenantRegistry** fetches tenant DB config from Platform Service (cached)
+6. **DataSource** dynamically routes to correct tenant database
+7. **Query executes** in isolated tenant database
+
+**Key Components:**
+- `TenantDataSourceRouter` - Extends `AbstractRoutingDataSource`, routes based on `TenantContext`
+- `TenantRegistry` - Fetches tenant JDBC URL + credentials from Platform Service
+- `LocalCache` - Caches tenant DB configs (Caffeine, 30min TTL)
+- `TenantMigrationService` - Runs Flyway migrations on tenant databases
+
+---
+
+### Seed Data (Per Tenant)
+
+Each tenant database is initialized with:
+
 ```sql
--- Role Definitions
-CREATE TABLE roles (
-    id VARCHAR(64) PRIMARY KEY,                -- super-admin, tenant-admin, tenant-user
-    name VARCHAR(255) NOT NULL,                -- Human-readable name
-    description TEXT,
-    scope VARCHAR(20) NOT NULL,                -- PLATFORM, TENANT
-    created_at TIMESTAMP DEFAULT NOW()
-);
+-- Tenant-scoped roles
+INSERT INTO roles (id, name, description, scope) VALUES
+('tenant-admin', 'TENANT_ADMIN', 'Full control over tenant resources', 'TENANT'),
+('tenant-user', 'TENANT_USER', 'Standard user with CRUD access', 'TENANT'),
+('tenant-guest', 'TENANT_GUEST', 'Read-only access', 'TENANT');
 
--- Permission Definitions (Resource:Action)
-CREATE TABLE permissions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    resource VARCHAR(64) NOT NULL,             -- entry, tenant, user, etc.
-    action VARCHAR(64) NOT NULL,               -- create, read, update, delete
-    description TEXT,
-    created_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE(resource, action)
-);
+-- Standard permissions
+INSERT INTO permissions (id, resource, action, description) VALUES
+('entry-read', 'entry', 'read', 'View entries'),
+('entry-create', 'entry', 'create', 'Create entries'),
+('entry-update', 'entry', 'update', 'Update entries'),
+('entry-delete', 'entry', 'delete', 'Delete entries'),
+('user-invite', 'user', 'invite', 'Invite new users'),
+('user-manage', 'user', 'manage', 'Full user management');
 
--- Role-Permission Mapping
-CREATE TABLE role_permissions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    role_id VARCHAR(64) NOT NULL REFERENCES roles(id),
-    permission_id UUID NOT NULL REFERENCES permissions(id),
-    created_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE(role_id, permission_id)
-);
+-- Role-permission mappings
+-- tenant-admin gets everything
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('tenant-admin', 'entry-read'),
+('tenant-admin', 'entry-create'),
+('tenant-admin', 'entry-update'),
+('tenant-admin', 'entry-delete'),
+('tenant-admin', 'user-invite'),
+('tenant-admin', 'user-manage');
 
--- User-Role Assignments (Tenant-Scoped)
-CREATE TABLE user_roles (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id VARCHAR(255) NOT NULL,             -- Cognito user ID
-    tenant_id VARCHAR(64) NOT NULL,            -- tenant_acme, user_john_xyz
-    role_id VARCHAR(64) NOT NULL REFERENCES roles(id),
-    assigned_by VARCHAR(255) NOT NULL,         -- User who assigned this role
-    assigned_at TIMESTAMP DEFAULT NOW(),
-    expires_at TIMESTAMP,                      -- NULL = never expires
-    UNIQUE(user_id, tenant_id, role_id)
-);
+-- tenant-user gets CRUD on entries
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('tenant-user', 'entry-read'),
+('tenant-user', 'entry-create'),
+('tenant-user', 'entry-update'),
+('tenant-user', 'entry-delete');
 
--- Indexes for performance
-CREATE INDEX idx_user_roles_lookup ON user_roles(user_id, tenant_id) WHERE expires_at IS NULL OR expires_at > NOW();
-CREATE INDEX idx_role_permissions_lookup ON role_permissions(role_id);
+-- tenant-guest gets read-only
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('tenant-guest', 'entry-read');
 ```
 
-**Example Data:**
-```sql
--- Roles
-INSERT INTO roles VALUES ('super-admin', 'Super Administrator', 'Platform-wide access', 'PLATFORM');
-INSERT INTO roles VALUES ('tenant-admin', 'Tenant Administrator', 'Full tenant access', 'TENANT');
-INSERT INTO roles VALUES ('tenant-user', 'Tenant User', 'Standard tenant user', 'TENANT');
-
--- Permissions
-INSERT INTO permissions (resource, action) VALUES ('entry', 'create'), ('entry', 'read'), ('entry', 'update'), ('entry', 'delete');
-INSERT INTO permissions (resource, action) VALUES ('tenant', 'create'), ('tenant', 'read'), ('tenant', 'update');
-INSERT INTO permissions (resource, action) VALUES ('user', 'invite'), ('user', 'remove');
-
--- Role-Permission Mappings
--- tenant-admin gets all entry permissions
-INSERT INTO role_permissions (role_id, permission_id) 
-  SELECT 'tenant-admin', id FROM permissions WHERE resource = 'entry';
-
--- tenant-user gets read/create entry permissions only
-INSERT INTO role_permissions (role_id, permission_id)
-  SELECT 'tenant-user', id FROM permissions WHERE resource = 'entry' AND action IN ('read', 'create');
-```
 
 ---
 
@@ -1116,37 +1360,69 @@ Every request carries tenant context through headers:
 
 ---
 
-### 🚧 Phase 2: Organization Admin Portal (NEXT)
+### ✅ Phase 2: Organization Admin Portal (COMPLETE)
 
-**Target:** Q1 2026
+**Completed:** December 2025 (Phase 5 Weeks 1-4)
 
-**Core Features:**
-- [ ] **Admin Dashboard** - Organization overview page
-- [ ] **User Management**
-  - Invite team members via email
-  - View user roster
-  - Remove/deactivate users
-  - Resend invitations
-- [ ] **Role Assignment UI**
-  - Assign roles to team members
-  - View role permissions
-  - Role-based access control
-- [ ] **Organization Settings**
-  - Update company profile
-  - Manage billing info (placeholder)
-  - View usage statistics
+**Implemented Features:**
 
-**Technical Deliverables:**
-- New `OrganizationController` in auth-service
-- Email invitation service
-- Admin portal frontend components
-- Invitation token management
-- Unit + integration tests
+#### Week 1-2: User Management
+- ✅ **User Management** (`/admin/users`)
+  - Invite team members via email (invitation tokens)
+  - View user roster and invitation status
+  - Resend/revoke invitations
+  - Join organization flow for invited users
 
-**Design Decisions Needed:**
-1. Invitation flow: Email link vs. manual code entry?
-2. Role model: Predefined roles or custom roles?
-3. User capacity limits per organization tier?
+#### Week 3: Role Management
+- ✅ **Role Management UI** (`/admin/roles`)
+  - View all available roles (Platform vs Tenant)
+  - Permission viewer component (resource:action matrix)
+  - Assign/update user roles
+  - Role-based access control enforcement
+
+#### Week 4: Dashboard & Settings
+- ✅ **Admin Dashboard** (`/admin/dashboard`)
+  - Stats cards: Total Users, Pending Invites, Admins, Current Tier
+  - Organization info display with copyable Tenant ID
+  - Quick actions panel (Invite User, Manage Roles, View Users)
+  - Real-time statistics from Auth Service
+- ✅ **Organization Settings** (`/admin/settings/organization`)
+  - Editable company profile form (name, industry, size, website, logo URL)
+  - Read-only fields: Tenant ID, Tier, Organization Type
+  - Form validation with error messages
+  - Integration with Platform Service organization APIs
+
+**Technical Implementation:**
+
+**Backend (Auth Service):**
+- ✅ `InvitationController` - User invitation management
+- ✅ `UserRoleController` - Role/permission management
+- ✅ `UserStatsController` - Aggregated user statistics
+- ✅ `PermissionController` - Permission listing
+
+**Backend (Platform Service):**
+- ✅ `OrganizationController` - Organization profile CRUD
+- ✅ `OrganizationService` - Business logic for organization management
+- ✅ Extended `Tenant` entity with organization fields
+
+**Frontend (Angular + PrimeNG):**
+- ✅ `UserListComponent`, `InviteUserDialogComponent` (user management)
+- ✅ `RoleListComponent`, `PermissionViewerComponent` (role management)
+- ✅ `DashboardComponent` (admin overview with stats)
+- ✅ `OrganizationSettingsComponent` (company profile editor)
+- ✅ Services: `InvitationService`, `RoleService`, `OrganizationService`, `UserStatsService`
+- ✅ Unit tests for all admin components
+- ✅ `AdminGuard` for role-based route protection
+
+**Database:**
+- ✅ Flyway migration V2: Added organization profile fields to `tenant` table
+
+**Design Decisions Made:**
+1. ✅ Invitation flow: Email link with secure token
+2. ✅ Role model: Predefined roles (tenant-admin, tenant-user, super-admin)
+3. ✅ Dashboard aggregates data from Platform Service (org info) and Auth Service (user stats)
+4. ✅ Organization settings use reactive forms with validation
+5. 🔜 User capacity limits per organization tier (enforcement not implemented)
 
 ---
 

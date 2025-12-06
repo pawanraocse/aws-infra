@@ -15,8 +15,6 @@ import java.util.UUID;
 
 import com.learning.common.infra.security.RequirePermission;
 import com.learning.common.infra.tenant.TenantContext;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 
 @RestController
 @RequestMapping("/api/v1/invitations")
@@ -29,11 +27,10 @@ public class InvitationController {
     @PostMapping
     @RequirePermission(resource = "user", action = "invite")
     public ResponseEntity<InvitationResponse> createInvitation(
-            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody InvitationRequest request) {
 
         String tenantId = TenantContext.getCurrentTenant();
-        String userId = jwt.getSubject();
 
         InvitationResponse response = invitationService.createInvitation(tenantId, userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -53,5 +50,14 @@ public class InvitationController {
         String tenantId = TenantContext.getCurrentTenant();
         invitationService.revokeInvitation(tenantId, id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/resend")
+    @RequirePermission(resource = "user", action = "invite")
+    public ResponseEntity<Void> resendInvitation(
+            @PathVariable UUID id) {
+        String tenantId = TenantContext.getCurrentTenant();
+        invitationService.resendInvitation(tenantId, id);
+        return ResponseEntity.ok().build();
     }
 }

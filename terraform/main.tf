@@ -54,7 +54,7 @@ resource "aws_cognito_user_pool" "main" {
   name = "${var.project_name}-${var.environment}-user-pool"
 
   username_attributes      = ["email"]
-  auto_verified_attributes = ["email"]
+  auto_verified_attributes = ["email"] # REQUIRED: Tells Cognito to send verification codes to email
 
   username_configuration {
     case_sensitive = false
@@ -139,14 +139,14 @@ resource "aws_cognito_user_pool" "main" {
   #   advanced_security_mode = "ENFORCED" # may incur additional costs
   # }
 
-  # Lambda triggers (V2_0 is configured in the Lambda function itself)
-  lambda_config {
-    pre_token_generation = aws_lambda_function.pre_token_generation.arn
-    post_confirmation    = aws_lambda_function.post_confirmation.arn
-  }
+  # Lambda triggers
+  # lambda_config {
+  #   post_confirmation = module.lambda_post_confirmation.lambda_function_arn
+  # }
 
   lifecycle {
     prevent_destroy = false
+    ignore_changes  = [lambda_config]
   }
 
   tags = {
@@ -156,6 +156,36 @@ resource "aws_cognito_user_pool" "main" {
     ManagedBy   = "Terraform"
   }
 }
+
+# Lambda Post Confirmation Module
+module "lambda_post_confirmation" {
+  source = "./modules/cognito-post-confirmation"
+
+  environment    = var.environment
+  aws_region     = var.aws_region
+  aws_account_id = data.aws_caller_identity.current.account_id
+  user_pool_id   = aws_cognito_user_pool.main.id
+  user_pool_arn  = aws_cognito_user_pool.main.arn
+}
+
+# Break circular dependency by configuring trigger via CLI
+resource "null_resource" "configure_cognito_trigger" {
+  triggers = {
+    lambda_arn   = module.lambda_post_confirmation.lambda_function_arn
+    user_pool_id = aws_cognito_user_pool.main.id
+  }
+
+  provisioner "local-exec" {
+    command = "aws cognito-idp update-user-pool --user-pool-id ${aws_cognito_user_pool.main.id} --lambda-config PostConfirmation=${module.lambda_post_confirmation.lambda_function_arn} --region ${var.aws_region}"
+  }
+
+  depends_on = [
+    aws_cognito_user_pool.main,
+    module.lambda_post_confirmation
+  ]
+}
+
+data "aws_caller_identity" "current" {}
 
 # Cognito User Pool Domain with Modern Managed Login UI
 resource "aws_cognito_user_pool_domain" "main" {
@@ -250,12 +280,14 @@ resource "aws_cognito_user_pool_client" "native" {
   read_attributes = [
     "email",
     "email_verified",
+    "name",
     "custom:tenantId",
     "custom:role"
   ]
 
   write_attributes = [
     "email",
+    "name",
     "custom:tenantId",
     "custom:role"
   ]
@@ -302,13 +334,15 @@ resource "aws_cognito_user_pool_client" "spa" {
   read_attributes = [
     "email",
     "email_verified",
+    "name",
     "custom:tenantId",
     "custom:role"
   ]
 
   # Write attributes - what the app can update
   write_attributes = [
-    "email"
+    "email",
+    "name"
   ]
 }
 

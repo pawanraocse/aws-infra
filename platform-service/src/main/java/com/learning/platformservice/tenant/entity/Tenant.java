@@ -66,6 +66,22 @@ public class Tenant {
     @Column(name = "max_users", nullable = false)
     private Integer maxUsers = 1;
 
+    // ========== NEW: Organization Profile Fields ==========
+    @Column(name = "company_name")
+    private String companyName;
+
+    @Column(name = "industry")
+    private String industry;
+
+    @Column(name = "company_size")
+    private String companySize;
+
+    @Column(name = "website")
+    private String website;
+
+    @Column(name = "logo_url")
+    private String logoUrl;
+
     // ========== NEW: SSO/IDP Configuration ==========
     @Column(name = "sso_enabled")
     private Boolean ssoEnabled = false;

@@ -73,10 +73,10 @@ import { environment } from '../../../environments/environment';
             </div>
 
             <div class="field">
-              <label for="adminPassword" class="font-medium text-900 mb-2 block">Password</label>
+              <label for="password" class="font-medium text-900 mb-2 block">Password</label>
               <p-password 
-                id="adminPassword" 
-                formControlName="adminPassword" 
+                id="password" 
+                formControlName="password" 
                 [toggleMask]="true"
                 styleClass="w-full"
                 inputStyleClass="w-full"
@@ -130,7 +130,7 @@ export class SignupOrganizationComponent {
     companyName: ['', [Validators.required, Validators.minLength(3)]],
     adminName: ['', [Validators.required, Validators.minLength(2)]],
     adminEmail: ['', [Validators.required, Validators.email]],
-    adminPassword: ['', [Validators.required, Validators.minLength(8)]],
+    password: ['', [Validators.required, Validators.minLength(8)]],
     tier: ['STANDARD', Validators.required]
   });
 

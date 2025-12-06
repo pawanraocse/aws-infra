@@ -85,4 +85,30 @@ export class AuthService {
     this.user.set(null);
     this.isAuthenticated.set(false);
   }
+
+  /**
+   * Resend verification email to user
+   */
+  async resendVerificationEmail(email: string): Promise<void> {
+    try {
+      const { resendSignUpCode } = await import('aws-amplify/auth');
+      await resendSignUpCode({ username: email });
+    } catch (error) {
+      console.error('Resend verification failed', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Confirm signup with verification code
+   */
+  async confirmSignUp(email: string, code: string): Promise<void> {
+    try {
+      const { confirmSignUp } = await import('aws-amplify/auth');
+      await confirmSignUp({ username: email, confirmationCode: code });
+    } catch (error) {
+      console.error('Confirm signup failed', error);
+      throw error;
+    }
+  }
 }

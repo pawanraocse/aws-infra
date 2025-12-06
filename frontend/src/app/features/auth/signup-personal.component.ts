@@ -124,12 +124,23 @@ export class SignupPersonalComponent {
 
     this.http.post(`${environment.apiUrl}/auth/signup/personal`, payload)
       .subscribe({
-        next: () => {
+        next: (response: any) => {
           this.loading.set(false);
-          // Email is auto-verified in backend, go straight to login
-          this.router.navigate(['/auth/login'], {
-            queryParams: { registered: 'true', message: 'Account created successfully! You can now log in.' }
-          });
+
+          if (response.userConfirmed) {
+            // User is already confirmed (e.g. auto-verified), go to login
+            this.router.navigate(['/auth/login'], {
+              queryParams: { verified: 'true', email: this.signupForm.value.email }
+            });
+          } else {
+            // Navigate to email verification page with tenantId
+            this.router.navigate(['/auth/verify-email'], {
+              state: {
+                email: this.signupForm.value.email,
+                tenantId: response.tenantId
+              }
+            });
+          }
         },
         error: (err) => {
           this.loading.set(false);

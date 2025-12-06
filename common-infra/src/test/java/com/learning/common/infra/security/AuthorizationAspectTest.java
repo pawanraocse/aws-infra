@@ -1,8 +1,8 @@
 package com.learning.common.infra.security;
 
 import com.learning.common.infra.tenant.TenantContext;
+import jakarta.servlet.http.HttpServletRequest;
 import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,12 +10,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.lang.reflect.Method;
+import org.springframework.security.access.AccessDeniedException;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
@@ -30,13 +28,7 @@ class AuthorizationAspectTest {
     private ProceedingJoinPoint joinPoint;
 
     @Mock
-    private MethodSignature signature;
-
-    @Mock
-    private SecurityContext securityContext;
-
-    @Mock
-    private Authentication authentication;
+    private HttpServletRequest request;
 
     @InjectMocks
     private AuthorizationAspect authorizationAspect;
@@ -48,31 +40,27 @@ class AuthorizationAspectTest {
 
     @BeforeEach
     void setUp() {
-        SecurityContextHolder.setContext(securityContext);
+        ServletRequestAttributes attributes = mock(ServletRequestAttributes.class);
+        when(attributes.getRequest()).thenReturn(request);
+        RequestContextHolder.setRequestAttributes(attributes);
     }
 
     @AfterEach
     void tearDown() {
-        SecurityContextHolder.clearContext();
+        RequestContextHolder.resetRequestAttributes();
         TenantContext.clear();
     }
 
     @Test
     void checkPermission_WhenAuthorized_Proceeds() throws Throwable {
         // Setup Context
-        when(securityContext.getAuthentication()).thenReturn(authentication);
-        when(authentication.isAuthenticated()).thenReturn(true);
-        when(authentication.getName()).thenReturn(userId);
+        when(request.getHeader("X-User-Id")).thenReturn(userId);
         TenantContext.setCurrentTenant(tenantId);
 
         // Setup Annotation
         RequirePermission annotation = mock(RequirePermission.class);
         lenient().when(annotation.resource()).thenReturn(resource);
         lenient().when(annotation.action()).thenReturn(action);
-
-        // Setup JoinPoint
-        // Setup JoinPoint
-        // No need to mock signature as it's not used in the aspect
 
         // Setup Permission Check
         when(permissionEvaluator.hasPermission(userId, tenantId, resource, action)).thenReturn(true);
@@ -87,19 +75,13 @@ class AuthorizationAspectTest {
     @Test
     void checkPermission_WhenUnauthorized_ThrowsException() throws Throwable {
         // Setup Context
-        when(securityContext.getAuthentication()).thenReturn(authentication);
-        when(authentication.isAuthenticated()).thenReturn(true);
-        when(authentication.getName()).thenReturn(userId);
+        when(request.getHeader("X-User-Id")).thenReturn(userId);
         TenantContext.setCurrentTenant(tenantId);
 
         // Setup Annotation
         RequirePermission annotation = mock(RequirePermission.class);
         lenient().when(annotation.resource()).thenReturn(resource);
         lenient().when(annotation.action()).thenReturn(action);
-
-        // Setup JoinPoint
-        // Setup JoinPoint
-        // No need to mock signature as it's not used in the aspect
 
         // Setup Permission Check
         when(permissionEvaluator.hasPermission(userId, tenantId, resource, action)).thenReturn(false);
@@ -113,9 +95,7 @@ class AuthorizationAspectTest {
     @Test
     void checkPermission_WhenNoTenantContext_ThrowsException() throws Throwable {
         // Setup Context
-        when(securityContext.getAuthentication()).thenReturn(authentication);
-        when(authentication.isAuthenticated()).thenReturn(true);
-        when(authentication.getName()).thenReturn(userId);
+        when(request.getHeader("X-User-Id")).thenReturn(userId);
         TenantContext.clear(); // No tenant
 
         // Setup Annotation
@@ -123,8 +103,5 @@ class AuthorizationAspectTest {
 
         // Execute & Verify
         assertThrows(AccessDeniedException.class, () -> authorizationAspect.checkPermission(joinPoint, annotation));
-    }
-
-    public void dummyMethod() {
     }
 }

@@ -2,17 +2,8 @@ spring:
   application:
     name: auth-service
 
-  datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/awsinfra}
-    username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
-    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.postgresql.Driver}
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
+  # Tenant datasource routing is handled by TenantDataSourceRouter
+  # Individual tenant connections are created dynamically
 
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
@@ -29,17 +20,7 @@ spring:
         order_updates: true
 
   flyway:
-    enabled: true
-    baseline-on-migrate: true
-    baseline-version: 0
-    baseline-description: Initial baseline for existing DBs
-    validate-on-migrate: true
-    out-of-order: false
-    mixed: false
-    clean-disabled: true
-    locations: classpath:db/migration
-    schemas: public  # changed from public
-    table: flyway_schema_history_auth  # separate history table to avoid clashes with backend-service migrations
+    enabled: false  # Disabled - using custom Flyway configuration for platform and tenant databases
 
   security:
     oauth2:
@@ -61,6 +42,9 @@ spring:
           cognito:
             issuer-uri: ${COGNITO_ISSUER_URI}
             user-name-attribute: username
+      resourceserver:
+        jwt:
+          issuer-uri: ${COGNITO_ISSUER_URI}
 
 # Cognito configuration
 cognito:
@@ -117,3 +101,14 @@ auth:
   cognito:
     singleton:
       enabled: true
+
+# Datasource configuration
+app:
+  datasource:
+    platform:
+      url: ${PLATFORM_DATASOURCE_URL:jdbc:postgresql://localhost:5432/awsinfra}
+      username: ${PLATFORM_DATASOURCE_USERNAME:postgres}
+      password: ${PLATFORM_DATASOURCE_PASSWORD:postgres}
+  flyway:
+    platform:
+      enabled: ${PLATFORM_FLYWAY_ENABLED:false}  # Disable for now, no platform tables yet

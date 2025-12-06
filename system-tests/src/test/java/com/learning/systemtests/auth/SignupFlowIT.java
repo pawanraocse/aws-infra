@@ -67,7 +67,7 @@ class SignupFlowIT {
                 .statusCode(201)
                 .body("success", equalTo(true))
                 .body("tenantId", notNullValue())
-                .body("tenantId", startsWith("user_"))
+                .body("tenantId", startsWith("user-"))
                 .body("message", containsStringIgnoringCase("successful"))
                 .extract().response();
 

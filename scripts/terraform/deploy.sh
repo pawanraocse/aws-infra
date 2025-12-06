@@ -146,6 +146,8 @@ log_info "Configuration saved to $OUTPUT_FILE"
 
 # Update Frontend Environment Files
 FRONTEND_DIR="$SCRIPT_DIR/../../frontend"
+log_info "DEBUG: SCRIPT_DIR=$SCRIPT_DIR"
+log_info "DEBUG: FRONTEND_DIR=$FRONTEND_DIR (resolved: $(cd "$FRONTEND_DIR" 2>/dev/null && pwd || echo 'NOT_FOUND'))"
 if [ -d "$FRONTEND_DIR/src/environments" ]; then
     log_info "Updating frontend environment files..."
     

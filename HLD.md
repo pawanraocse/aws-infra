@@ -1,8 +1,9 @@
 # High-Level Design: Multi-Tenant SaaS Template System
 
-**Version:** 4.2  
-**Last Updated:** 2025-12-03  
+**Version:** 4.3  
+**Last Updated:** 2025-12-06  
 **Purpose:** Production-ready, reusable multi-tenant architecture template with RBAC authorization and complete database-per-tenant isolation
+
 
 ---
 
@@ -405,10 +406,188 @@ sequenceDiagram
 3. For each role, check `role_permissions` and `permissions` tables
 4. Return `true` if any role grants the requested `resource:action` permission
 
+---
+
+## 🔐 Roles and Permissions Model
+
+This section provides a comprehensive overview of the Role-Based Access Control (RBAC) system implemented in the platform.
+
+### Role Hierarchy
+
+```mermaid
+graph TB
+    subgraph "Platform Level"
+        SA[🔴 super-admin<br/>Platform Owner]
+    end
+    
+    subgraph "Tenant Level"
+        TA[🟠 tenant-admin<br/>Organization Admin]
+        TU[🟢 tenant-user<br/>Standard User]
+        TG[⚪ tenant-guest<br/>Read-Only]
+    end
+    
+    SA -.->|manages| TA
+    TA -->|manages| TU
+    TA -->|manages| TG
+    TU -.->|can become| TA
+```
+
+### Role Definitions
+
+| Role | Scope | Description | Typical Use Case |
+|------|-------|-------------|------------------|
+| **super-admin** | Platform | Full system access. Manages all tenants. | System operators, DevOps |
+| **tenant-admin** | Tenant | Full access within their organization. Can manage users and roles. | Organization owners, IT admins |
+| **tenant-user** | Tenant | Standard user within an organization. Full CRUD on business data. | Regular employees |
+| **tenant-guest** | Tenant | Read-only access to organization data. | External contractors, auditors |
+
+### Permission Model
+
+Permissions follow a **Resource:Action** pattern:
+
+```
+<resource>:<action>
+
+Examples:
+- entry:read      → Read data entries
+- entry:create    → Create new entries
+- user:invite     → Invite users to organization
+- tenant:delete   → Delete a tenant (super-admin only)
+- *:*             → Wildcard (all permissions)
+```
+
+### Default Role Permissions
+
+#### super-admin
+```
+*:*                    → All permissions (wildcard)
+```
+
+#### tenant-admin
+| Resource | Actions |
+|----------|---------|
+| entry | read, create, update, delete |
+| user | read, invite, update, delete |
+| role | read, assign, revoke |
+| organization | read, manage |
+| stats | read |
+
+#### tenant-user
+| Resource | Actions |
+|----------|---------|
+| entry | read, create, update, delete |
+
+#### tenant-guest
+| Resource | Actions |
+|----------|---------|
+| entry | read |
+
+### Database Schema
+
+```mermaid
+erDiagram
+    roles {
+        uuid id PK
+        string name
+        string description
+        enum scope "PLATFORM | TENANT"
+        boolean is_default
+        timestamp created_at
+    }
+    
+    permissions {
+        uuid id PK
+        string resource
+        string action
+        string description
+    }
+    
+    role_permissions {
+        uuid role_id FK
+        uuid permission_id FK
+    }
+    
+    user_roles {
+        uuid id PK
+        string user_id
+        string tenant_id
+        uuid role_id FK
+        timestamp assigned_at
+        string assigned_by
+    }
+    
+    roles ||--o{ role_permissions : has
+    permissions ||--o{ role_permissions : granted_to
+    roles ||--o{ user_roles : assigned
+```
+
+### Frontend Route Guards
+
+| Guard | Purpose | Redirects To |
+|-------|---------|--------------|
+| `authGuard` | Requires authentication | `/auth/login` |
+| `guestGuard` | Only for unauthenticated users | `/app` |
+| `adminGuard` | Requires `tenant-admin` OR `super-admin` | `/app/dashboard` |
+| `superAdminGuard` | Requires `super-admin` only | `/app/dashboard` |
+| `tenantUserGuard` | Blocks `super-admin` from tenant routes | `/app/admin/dashboard` |
+
+### Super-Admin Specifics
+
+**Super-admin is a special platform-level role with these characteristics:**
+
+1. **No Tenant Context** - Uses `tenantId: "system"` instead of real tenant
+2. **Wildcard Permission** - Has `*:*` which matches all permission checks
+3. **Platform Management** - Can view/manage all tenants
+4. **Separate UI** - Lands on Platform Dashboard, not data entries
+5. **Cannot Be Deleted** - Account deletion is hidden for super-admins
+
+**How Super-Admin Bypass Works:**
+```java
+// In PermissionController.checkPermission()
+if ("super-admin".equals(role)) {
+    return ResponseEntity.ok(true);  // Grant all permissions
+}
+```
+
+### Adding New Permissions
+
+1. **Add permission to seed data:**
+```sql
+INSERT INTO permissions (id, resource, action, description)
+VALUES (gen_random_uuid(), 'invoice', 'create', 'Create invoices');
+```
+
+2. **Assign to roles:**
+```sql
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id 
+FROM roles r, permissions p
+WHERE r.name = 'tenant-admin' 
+AND p.resource = 'invoice' AND p.action = 'create';
+```
+
+3. **Use in code:**
+```java
+@RequirePermission(resource = "invoice", action = "create")
+public ResponseEntity<Invoice> createInvoice(...) { ... }
+```
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/roles` | GET | List all roles (Platform + Tenant) |
+| `/api/v1/roles/assign` | POST | Assign role to user |
+| `/api/v1/roles/revoke` | POST | Revoke role from user |
+| `/api/v1/roles/user/{userId}` | GET | Get user's roles |
+| `/api/v1/permissions/check` | POST | Check if user has permission (internal) |
+| `/api/v1/permissions` | GET | List all defined permissions |
+
 
 ---
 
 ## 🏢 Multi-Tenancy Model
+
 
 ### Isolation Strategy: Database-per-Tenant (Primary)
 
@@ -1138,136 +1317,47 @@ Every request carries tenant context through headers:
 
 ## 📚 Additional Documentation
 
-- **[Implementation Guide](docs/tenant-onboarding/IMPLEMENTATION_GUIDE.md)** - Step-by-step setup
-- **[API Documentation](docs/api/)** - Service endpoints (future)
-    E --> F[Update Frontend Environment Files]
-    E --> G[Generate cognito-config.env]
-    
-    D -.->|Source of Truth| H[Backend Services]
-    F -.->|Auto-configured| I[Angular Frontend]
-    
-    style D fill:#33dd77,stroke:#1f3a29,stroke-width:2px
-    style F fill:#bb66ff,stroke:#261f3a,stroke-width:2px
-    style H fill:#ffb84d,stroke:#3a2d1f,stroke-width:2px
-    style I fill:#bb66ff,stroke:#261f3a,stroke-width:2px
-```
+- **[Status Tracking](docs/STATUS.md)** - Current project status and roadmap
 
-### Frontend Configuration
+---
 
-The Angular frontend requires Cognito credentials to authenticate users. These are automatically configured by the Terraform deployment script.
+## 🏭 Production Readiness Features
 
-#### Automatic Configuration (Recommended)
+This section outlines features for enterprise-grade deployments.
 
-When you run `./scripts/terraform/deploy.sh`, the frontend environment files are automatically updated with:
-- User Pool ID
-- Client ID
-- AWS Region
+### Security & Compliance
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Tenant Rate Limiting** | Per-tenant request limits based on SLA tier | 🔜 Planned |
+| **Audit Logging** | GDPR/HIPAA/SOC2 compliant access logs | 🔜 Planned |
+| **Data Export API** | GDPR Right to Data Portability | 🔜 Planned |
+| **Soft Delete** | 30-day grace period before permanent deletion | ✅ Implemented |
 
-**Generated Files:**
-- `frontend/src/environments/environment.development.ts` - Used for `npm start`
-- `frontend/src/environments/environment.ts` - Used for `npm run build`
+### Performance Optimization
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Per-Tenant Connection Pools** | Tier-based pool sizing (FREE: 2-5, ENTERPRISE: 10-20) | 🔜 Planned |
+| **DataSource Caching** | Caffeine cache with 1-hour TTL, max 100 tenants | 🔜 Planned |
+| **Circuit Breaker** | Resilience4j for platform-service calls | 🔜 Planned |
 
-**Example Generated Configuration:**
-```typescript
-export const environment = {
-  production: false,
-  apiUrl: 'http://localhost:8080',
-  cognito: {
-    userPoolId: 'us-east-1_jjRFRnxGA',
-    userPoolWebClientId: '4apvlvee4rsmnb06ntd49ljvp5',
-    region: 'us-east-1'
-  }
-};
-```
+### Observability
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Tenant Metrics** | Per-tenant latency, throughput, error rates | 🔜 Planned |
+| **Usage Tracking** | API calls, storage, compute hours per tenant | 🔜 Planned |
+| **Health Checks** | Active tenant count, DB connectivity checks | 🔜 Planned |
 
-#### Manual Configuration (Alternative)
-
-If needed, you can fetch configuration from SSM manually:
-
-```bash
-# Get User Pool ID
-aws ssm get-parameter \
-  --name "/cloud-infra/dev/cognito/user_pool_id" \
-  --query 'Parameter.Value' \
-  --output text
-
-# Get Client ID
-aws ssm get-parameter \
-  --name "/cloud-infra/dev/cognito/client_id" \
-  --query 'Parameter.Value' \
-  --output text
-```
-
-Then manually update `frontend/src/environments/environment.development.ts`.
-
-### Backend Services Configuration
-
-Backend services (Auth, Platform, Backend) read configuration from SSM Parameter Store at runtime.
-
-**Spring Boot Integration:**
-```yaml
-spring:
-  cloud:
-    aws:
-      paramstore:
-        enabled: true
-        prefix: /cloud-infra
-        profile-separator: /
-        fail-fast: true
-```
-
-**How it works:**
-1. Service starts up
-2. Reads `/cloud-infra/dev/cognito/*` parameters from SSM
-3. Populates Spring environment properties
-4. Configures OAuth2 client and resource server
-
-**Key Benefits:**
-- ✅ No hardcoded credentials in code
-- ✅ Centralized configuration management
-- ✅ Easy to update without redeployment
-- ✅ Secure storage (SecureString for secrets)
-- ✅ IAM-based access control
-
-### Complete Deployment Workflow
-
-```bash
-# 1. Deploy AWS Infrastructure (includes frontend config)
-./scripts/terraform/deploy.sh
-
-# 2. Start Backend Services
-./scripts/start-all.sh
-
-# 3. Start Frontend (in separate terminal)
-cd frontend
-npm start
-
-# 4. Access Application
-# Frontend: http://localhost:4200
-# Gateway: http://localhost:8080
-```
-
-**First-Time Setup:**
-```bash
-# Install dependencies
-cd frontend && npm install
-
-# Build all services
-cd .. && mvn clean install -DskipTests
-
-# Deploy infrastructure
-./scripts/terraform/deploy.sh
-
-# Start services
-./scripts/start-all.sh
-
-# Start frontend
-cd frontend && npm start
-```
+### Lifecycle Management
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Tenant Archival** | Auto-archive inactive tenants to S3 after 90 days | 🔜 Planned |
+| **Database Sharding** | Multi-shard support for 1000s of tenants | 🔜 Planned |
 
 ---
 
 ## 🛣️ Request Flow Example
+
+
 
 **User wants to create an Entry in their tenant**
 

@@ -27,11 +27,23 @@ public class PermissionController {
      * Check if a user has a specific permission.
      * This endpoint is public (authenticated) but checks permissions for the
      * requested user/tenant.
-     * In a real system, we might restrict who can check whose permissions.
-     * For service-to-service calls, we assume trust or use client credentials.
+     * 
+     * Super-admin (role from X-Role header) gets automatic access to all resources.
+     * This handles the case where super-admin (tenantId=system) accesses any
+     * tenant.
      */
     @PostMapping("/check")
-    public ResponseEntity<Boolean> checkPermission(@RequestBody PermissionCheckRequest request) {
+    public ResponseEntity<Boolean> checkPermission(
+            @RequestHeader(value = "X-Role", required = false) String role,
+            @RequestBody PermissionCheckRequest request) {
+
+        // Super-admin bypass: grant all permissions
+        if ("super-admin".equals(role)) {
+            log.debug("Super-admin permission granted for resource={}:{}",
+                    request.getResource(), request.getAction());
+            return ResponseEntity.ok(true);
+        }
+
         boolean allowed = permissionService.hasPermission(
                 request.getUserId(),
                 request.getTenantId(),

@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -21,8 +22,28 @@ public class TenantServiceImpl implements TenantService {
     @Transactional(readOnly = true)
     public Optional<TenantDto> getTenant(String id) {
         var dto = tenantRepository.findById(id)
-                .map(t -> new TenantDto(t.getId(), t.getName(), t.getStatus(), t.getStorageMode(), t.getSlaTier(), t.getJdbcUrl(), t.getLastMigrationVersion()));
+                .map(this::toDto);
         log.debug("tenant_lookup tenantId={} found={}", id, dto.isPresent());
         return dto;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TenantDto> getAllTenants() {
+        log.debug("Fetching all tenants for platform management");
+        return tenantRepository.findAll().stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    private TenantDto toDto(com.learning.platformservice.tenant.entity.Tenant t) {
+        return new TenantDto(
+                t.getId(),
+                t.getName(),
+                t.getStatus(),
+                t.getStorageMode(),
+                t.getSlaTier(),
+                t.getJdbcUrl(),
+                t.getLastMigrationVersion());
     }
 }

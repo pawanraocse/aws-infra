@@ -45,10 +45,24 @@ CREATE TABLE IF NOT EXISTS tenant (
     archived_at TIMESTAMPTZ,
     archived_to_s3 BOOLEAN DEFAULT FALSE,
     
+    -- Organization Profile (for company customization)
+    company_name VARCHAR(255),
+    industry VARCHAR(100),
+    company_size VARCHAR(20),
+    website VARCHAR(500),
+    logo_url VARCHAR(1000),
+    
     -- Timestamps  
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+COMMENT ON COLUMN tenant.company_name IS 'Official company name (editable by tenant admins)';
+COMMENT ON COLUMN tenant.industry IS 'Industry sector (Technology, Healthcare, Finance, etc.)';
+COMMENT ON COLUMN tenant.company_size IS 'Employee count range (1-10, 11-50, 51-200, 201-500, 501-1000, 1001+)';
+COMMENT ON COLUMN tenant.website IS 'Company website URL';
+COMMENT ON COLUMN tenant.logo_url IS 'URL to company logo image';
+
 
 -- Indexes for performance
 CREATE INDEX idx_tenant_type ON tenant(tenant_type);

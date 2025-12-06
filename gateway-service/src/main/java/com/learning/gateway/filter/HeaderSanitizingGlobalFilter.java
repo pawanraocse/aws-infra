@@ -14,8 +14,10 @@ import java.util.List;
 
 /**
  * NT-02 HeaderSanitizingGlobalFilter
- * Removes any inbound spoofable identity / authorization headers before JWT processing.
- * Runs at highest precedence. Controlled by feature flag security.gateway.sanitize-headers (default true).
+ * Removes any inbound spoofable identity / authorization headers before JWT
+ * processing.
+ * Runs at highest precedence. Controlled by feature flag
+ * security.gateway.sanitize-headers (default true).
  */
 @Slf4j
 @Component
@@ -26,15 +28,16 @@ public class HeaderSanitizingGlobalFilter implements GlobalFilter, Ordered {
             "X-Username",
             "X-Email",
             "X-Tenant-Id",
+            "X-Role",
             "X-Authorities",
-            "X-Auth-Signature"
-    );
+            "X-Auth-Signature");
 
     @Value("${security.gateway.sanitize-headers:true}")
     private boolean sanitizeEnabled;
 
     @Override
-    public Mono<Void> filter(ServerWebExchange exchange, org.springframework.cloud.gateway.filter.GatewayFilterChain chain) {
+    public Mono<Void> filter(ServerWebExchange exchange,
+            org.springframework.cloud.gateway.filter.GatewayFilterChain chain) {
         if (!sanitizeEnabled) {
             return chain.filter(exchange); // Feature flag off
         }
@@ -59,4 +62,3 @@ public class HeaderSanitizingGlobalFilter implements GlobalFilter, Ordered {
         return Ordered.HIGHEST_PRECEDENCE;
     }
 }
-

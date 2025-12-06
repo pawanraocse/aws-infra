@@ -43,13 +43,16 @@ public class JwtAuthenticationGatewayFilterFactory
                     Jwt jwt = authentication.getToken();
                     TenantExtractionResult tenantResult = extractTenantId(jwt);
                     if (!tenantResult.success()) {
-                        log.debug("NT-01 deny userId={} code={} status={}", jwt.getSubject(), tenantResult.errorCode(), tenantResult.errorStatus().value());
-                        return writeError(exchange, tenantResult.errorStatus(), tenantResult.errorCode(), tenantResult.errorMessage());
+                        log.debug("NT-01 deny userId={} code={} status={}", jwt.getSubject(), tenantResult.errorCode(),
+                                tenantResult.errorStatus().value());
+                        return writeError(exchange, tenantResult.errorStatus(), tenantResult.errorCode(),
+                                tenantResult.errorMessage());
                     }
                     String tenantId = tenantResult.tenantId();
                     String userId = jwt.getSubject();
                     String username = jwt.getClaimAsString("username");
                     String email = jwt.getClaimAsString("email");
+                    String role = extractRole(jwt);
                     String authorities = authentication.getAuthorities().stream()
                             .map(Object::toString)
                             .collect(Collectors.joining(","));
@@ -58,12 +61,14 @@ public class JwtAuthenticationGatewayFilterFactory
                             .header("X-User-Id", userId)
                             .header("X-Username", username != null ? username : "")
                             .header("X-Email", email != null ? email : "")
-                            .header("X-Tenant-Id", tenantId);
+                            .header("X-Tenant-Id", tenantId)
+                            .header("X-Role", role != null ? role : "");
                     if (!authorities.isBlank()) {
                         builder.header("X-Authorities", authorities);
                     }
 
-                    log.debug("NT-01 allow path={} userId={} tenantId={}", exchange.getRequest().getPath(), userId, tenantId);
+                    log.debug("NT-01 allow path={} userId={} tenantId={} role={}", exchange.getRequest().getPath(),
+                            userId, tenantId, role);
                     return chain.filter(exchange.mutate().request(builder.build()).build());
                 })
                 .switchIfEmpty(chain.filter(exchange));
@@ -76,12 +81,14 @@ public class JwtAuthenticationGatewayFilterFactory
                     .filter(g -> g != null && g.startsWith(TENANT_GROUP_PREFIX))
                     .toList();
             if (tenantGroups.size() > 1) {
-                return TenantExtractionResult.error(HttpStatus.BAD_REQUEST, "TENANT_CONFLICT", "Multiple tenant groups present");
+                return TenantExtractionResult.error(HttpStatus.BAD_REQUEST, "TENANT_CONFLICT",
+                        "Multiple tenant groups present");
             }
             if (tenantGroups.size() == 1) {
                 String raw = tenantGroups.get(0).substring(TENANT_GROUP_PREFIX.length());
                 if (!TENANT_ID_PATTERN.matcher(raw).matches()) {
-                    return TenantExtractionResult.error(HttpStatus.BAD_REQUEST, "TENANT_INVALID_FORMAT", "Tenant ID format invalid");
+                    return TenantExtractionResult.error(HttpStatus.BAD_REQUEST, "TENANT_INVALID_FORMAT",
+                            "Tenant ID format invalid");
                 }
                 return TenantExtractionResult.success(raw);
             }
@@ -96,15 +103,28 @@ public class JwtAuthenticationGatewayFilterFactory
 
         if (tenantClaim != null && !tenantClaim.isBlank()) {
             if (!TENANT_ID_PATTERN.matcher(tenantClaim).matches()) {
-                return TenantExtractionResult.error(HttpStatus.BAD_REQUEST, "TENANT_INVALID_FORMAT", "Tenant ID format invalid");
+                return TenantExtractionResult.error(HttpStatus.BAD_REQUEST, "TENANT_INVALID_FORMAT",
+                        "Tenant ID format invalid");
             }
             return TenantExtractionResult.success(tenantClaim);
         }
         return TenantExtractionResult.error(HttpStatus.FORBIDDEN, "TENANT_MISSING", "Tenant claim missing");
     }
 
+    /**
+     * Extract role from JWT custom claims.
+     * Tries multiple claim formats for compatibility.
+     */
+    private String extractRole(Jwt jwt) {
+        String role = jwt.getClaimAsString("custom:role");
+        if (role == null) {
+            role = jwt.getClaimAsString("role");
+        }
+        return role;
+    }
+
     private Mono<Void> writeError(org.springframework.web.server.ServerWebExchange exchange,
-                                  HttpStatus status, String code, String message) {
+            HttpStatus status, String code, String message) {
         exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_ALREADY_ROUTED_ATTR, Boolean.TRUE);
         var response = exchange.getResponse();
         if (response.isCommitted()) {
@@ -112,8 +132,10 @@ public class JwtAuthenticationGatewayFilterFactory
         }
         response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        String requestId = Optional.ofNullable(exchange.getRequest().getHeaders().getFirst(REQUEST_ID_HEADER)).orElse("none");
-        String body = String.format("{\"timestamp\":\"%s\",\"status\":%d,\"code\":\"%s\",\"message\":\"%s\",\"requestId\":\"%s\"}",
+        String requestId = Optional.ofNullable(exchange.getRequest().getHeaders().getFirst(REQUEST_ID_HEADER))
+                .orElse("none");
+        String body = String.format(
+                "{\"timestamp\":\"%s\",\"status\":%d,\"code\":\"%s\",\"message\":\"%s\",\"requestId\":\"%s\"}",
                 Instant.now(), status.value(), code, message.replace("\"", "\\\""), requestId);
         DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
         return response.writeWith(Mono.just(buffer));

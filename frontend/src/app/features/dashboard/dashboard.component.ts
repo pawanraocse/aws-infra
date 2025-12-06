@@ -1,6 +1,7 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { EntryService, Entry } from '../../core/services/entry.service';
 import { CardModule } from 'primeng/card';
@@ -25,6 +26,7 @@ export class DashboardComponent implements OnInit {
   authService = inject(AuthService);
   private entryService = inject(EntryService);
   private fb = inject(FormBuilder);
+  private router = inject(Router);
 
   entries = signal<Entry[]>([]);
   totalRecords = signal(0);
@@ -44,7 +46,9 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit() {
     this.loadEntries();
+
   }
+
 
   loadEntries(event?: any) {
     this.loading.set(true);

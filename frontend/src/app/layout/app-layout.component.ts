@@ -20,7 +20,18 @@ export class AppLayoutComponent {
   items = computed<MenuItem[]>(() => {
     const user = this.authService.user();
     const isOrganization = user?.tenantType === 'ORGANIZATION';
-    const isAdmin = user?.role === 'tenant-admin' || user?.role === 'super-admin';
+    const isSuperAdmin = user?.role === 'super-admin';
+    const isTenantAdmin = user?.role === 'tenant-admin';
+
+    // SUPER-ADMIN: Platform management menu (no personal data)
+    if (isSuperAdmin) {
+      return [
+        { label: 'Platform', icon: 'pi pi-home', routerLink: '/app/admin/dashboard' },
+        { label: 'Tenants', icon: 'pi pi-building', routerLink: '/app/admin/tenants' },
+        { label: 'Settings', icon: 'pi pi-user', routerLink: '/app/settings/account' }
+      ];
+    }
+
 
     // PERSONAL users: Simple menu
     if (!isOrganization) {
@@ -36,7 +47,7 @@ export class AppLayoutComponent {
       { label: 'Entries', icon: 'pi pi-list', routerLink: '/app/dashboard' }
     ];
 
-    if (isAdmin) {
+    if (isTenantAdmin) {
       items.push({
         label: 'Admin',
         icon: 'pi pi-shield',
@@ -50,6 +61,7 @@ export class AppLayoutComponent {
 
     return items;
   });
+
 
   logout() {
     this.authService.logout();

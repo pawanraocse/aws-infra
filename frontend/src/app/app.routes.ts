@@ -3,6 +3,8 @@ import { authGuard } from './core/guards/auth.guard';
 import { guestGuard } from './core/guards/guest.guard';
 import { AppLayoutComponent } from './layout/app-layout.component';
 import { adminGuard } from './core/guards/admin.guard';
+import { superAdminGuard } from './core/guards/super-admin.guard';
+import { tenantUserGuard } from './core/guards/tenant-user.guard';
 
 export const routes: Routes = [
   {
@@ -36,13 +38,22 @@ export const routes: Routes = [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
       {
         path: 'dashboard',
-        loadComponent: () => import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent)
+        loadComponent: () => import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent),
+        canActivate: [tenantUserGuard]  // Redirect super-admin to platform dashboard
       },
+
+      // Platform Admin Routes (super-admin only)
       {
         path: 'admin/dashboard',
-        loadComponent: () => import('./features/admin/dashboard/dashboard.component').then(m => m.DashboardComponent),
-        canActivate: [adminGuard]
+        loadComponent: () => import('./features/admin/platform/platform-dashboard.component').then(m => m.PlatformDashboardComponent),
+        canActivate: [superAdminGuard]
       },
+      {
+        path: 'admin/tenants',
+        loadComponent: () => import('./features/admin/platform/tenant-list.component').then(m => m.TenantListComponent),
+        canActivate: [superAdminGuard]
+      },
+      // Tenant Admin Routes
       {
         path: 'admin/users',
         loadComponent: () => import('./features/admin/users/user-list.component').then(m => m.UserListComponent),
@@ -64,6 +75,7 @@ export const routes: Routes = [
       }
     ]
   },
+
   {
     path: 'auth/join',
     loadComponent: () => import('./features/auth/join-organization.component').then(m => m.JoinOrganizationComponent)

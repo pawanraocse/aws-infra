@@ -223,5 +223,71 @@ INSERT INTO role_permissions (role_id, permission_id) VALUES
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 -- ============================================================================
--- MIGRATION COMPLETE
+-- 10. SSO/IDP Management permissions (Organization tenants)
+-- ============================================================================
+INSERT INTO permissions (id, resource, action, description) VALUES
+('sso-read', 'sso', 'read', 'View SSO/IDP configuration'),
+('sso-manage', 'sso', 'manage', 'Configure SSO/IDP settings (SAML, OIDC, etc.)')
+ON CONFLICT (resource, action) DO NOTHING;
+
+-- ============================================================================
+-- 11. Role viewing permission
+-- ============================================================================
+INSERT INTO permissions (id, resource, action, description) VALUES
+('role-read', 'role', 'read', 'View available roles and their permissions')
+ON CONFLICT (resource, action) DO NOTHING;
+
+-- ============================================================================
+-- 12. Platform-level permissions (super-admin only)
+-- Note: These are checked in code for super-admin role, not assigned via role_permissions
+-- ============================================================================
+INSERT INTO permissions (id, resource, action, description) VALUES
+('platform-tenant-list', 'platform', 'tenant:list', 'List all tenants in the system'),
+('platform-tenant-create', 'platform', 'tenant:create', 'Create/provision new tenants'),
+('platform-tenant-delete', 'platform', 'tenant:delete', 'Delete/deprovision tenants'),
+('platform-pipeline-run', 'platform', 'pipeline:run', 'Run platform maintenance pipelines')
+ON CONFLICT (resource, action) DO NOTHING;
+
+-- ============================================================================
+-- 13. Grant SSO, role viewing, and stats permissions to tenant-admin
+-- ============================================================================
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('tenant-admin', 'sso-read'),
+('tenant-admin', 'sso-manage'),
+('tenant-admin', 'role-read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- Stats permission for tenant-admin
+INSERT INTO permissions (id, resource, action, description) VALUES
+('stats-read', 'stats', 'read', 'View tenant statistics')
+ON CONFLICT (resource, action) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('tenant-admin', 'stats-read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- Organization management permission
+INSERT INTO permissions (id, resource, action, description) VALUES
+('org-read', 'organization', 'read', 'View organization profile'),
+('org-manage', 'organization', 'manage', 'Manage organization profile settings')
+ON CONFLICT (resource, action) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('tenant-admin', 'org-read'),
+('tenant-admin', 'org-manage')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- Role assignment permissions
+INSERT INTO permissions (id, resource, action, description) VALUES
+('role-assign', 'role', 'assign', 'Assign roles to users'),
+('role-revoke', 'role', 'revoke', 'Revoke roles from users')
+ON CONFLICT (resource, action) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('tenant-admin', 'role-assign'),
+('tenant-admin', 'role-revoke')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- ============================================================================
+-- MIGRATION COMPLETE - V1 (Consolidated from V1 + V2)
 -- ============================================================================

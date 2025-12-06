@@ -10,6 +10,15 @@ export const authGuard: CanActivateFn = async (route, state) => {
   const isAuthenticated = await authService.checkAuth();
 
   if (isAuthenticated) {
+    const user = authService.user();
+    // Super-admin should go to platform dashboard, not regular dashboard
+    if (user?.role === 'super-admin') {
+      const url = state.url;
+      // Redirect if accessing root /app, /app/, or /app/dashboard
+      if (url === '/app' || url === '/app/' || url.startsWith('/app/dashboard')) {
+        return router.createUrlTree(['/app/admin/dashboard']);
+      }
+    }
     return true;
   }
 

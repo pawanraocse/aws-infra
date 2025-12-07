@@ -21,6 +21,44 @@ This is a **template system** for building multi-tenant SaaS applications. It pr
 
 ---
 
+## 🚀 Quick Start Guide
+
+### Prerequisites
+- Java 21+, Maven 3.9+
+- Docker & Docker Compose
+- Node.js 18+ (for frontend)
+- AWS CLI configured with credentials
+- Terraform 1.9+
+
+### Step 1: Deploy AWS Infrastructure (Cognito)
+```bash
+cd terraform
+terraform init
+terraform apply -auto-approve
+```
+This creates: Cognito User Pool, Lambda triggers, SSM parameters.
+
+### Step 2: Start Backend Services
+```bash
+# From project root
+docker-compose up -d
+```
+Services available at:
+- Gateway: http://localhost:8080
+- Frontend: http://localhost:4200
+- Eureka Dashboard: http://localhost:8761
+
+### Step 3: Create System Admin
+```bash
+./scripts/bootstrap-system-admin.sh your-admin@email.com "YourPassword123!"
+```
+
+### Step 4: Test the Flow
+1. Navigate to http://localhost:4200
+2. **Personal Signup (B2C):** Create account → Verify email → Login
+3. **Organization Signup (B2B):** Create org → Invite users → Login
+4. Access dashboard with your tenant's isolated data
+
 ## 🏗️ System Architecture
 
 ```mermaid
@@ -187,6 +225,46 @@ graph TB
   - Trigger: Cognito PostConfirmation event
   - Permissions: AdminUpdateUserAttributes on User Pool
 
+**Email Verification Troubleshooting:**
+
+> [!WARNING]
+> **Common Issue:** If verification codes aren't being sent, check that `auto_verified_attributes` is set to `["email"]` in Cognito User Pool.
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| No verification email received | `auto_verified_attributes` is null | `aws cognito-idp update-user-pool --user-pool-id <ID> --auto-verified-attributes email` |
+| Emails not arriving (SES) | SES sandbox mode - only sends to verified emails | Verify recipient: `aws ses verify-email-identity --email-address <email>` |
+| Gmail filtering emails | Using `no-reply@verificationemail.com` (Cognito default) | Switch to SES with your own verified domain |
+
+**Check Cognito Configuration:**
+```bash
+aws cognito-idp describe-user-pool --user-pool-id <ID> \
+  --query 'UserPool.{AutoVerified:AutoVerifiedAttributes,EmailConfig:EmailConfiguration}'
+```
+
+**Expected Output:**
+```json
+{
+  "AutoVerified": ["email"],
+  "EmailConfig": {"EmailSendingAccount": "COGNITO_DEFAULT"}
+}
+```
+
+**Internal API for Tenant Provisioning:**
+- During signup, auth-service calls `POST /internal/tenants` to provision the tenant
+- This endpoint bypasses authentication (service-to-service call)
+- Located in `TenantInternalController.java` in platform-service
+
+**Email Configuration Options:**
+
+| Option | Best For | From Address | Daily Limit | Cost |
+|--------|----------|--------------|-------------|------|
+| **COGNITO_DEFAULT** (current) | Development/Testing | `no-reply@verificationemail.com` | ~50 | FREE |
+| **SES with verified identity** | Production | Your custom address | 62,000/month free | FREE then $0.10/1000 |
+
+> [!TIP]
+> For production, switch to SES with your own verified domain for better deliverability and branding. See `terraform/main.tf` for the commented SES configuration.
+
 **Authorization Architecture:**
 - `PermissionService` - Core permission evaluation logic
 - `UserRoleService` - Role assignment/revocation
@@ -274,6 +352,115 @@ graph TB
 - `analytics-service` - Reporting and dashboards
 
 **Key Pattern:** Always read tenant from `X-Tenant-Id` header injected by Gateway
+
+---
+
+## 🔧 How to Build Your Service (Replacing Backend-Service)
+
+This section provides a detailed guide for replacing the example `backend-service` with your own domain service.
+
+### Step 1: Copy the Structure
+```bash
+cp -r backend-service your-service-name
+cd your-service-name
+```
+
+### Step 2: Update Build Configuration
+Update `pom.xml`:
+```xml
+<artifactId>your-service-name</artifactId>
+<name>Your Service Name</name>
+```
+
+Update `application.yml`:
+```yaml
+spring:
+  application:
+    name: your-service-name
+server:
+  port: 8082  # Or choose a different port
+```
+
+### Step 3: Keep These Files (Critical for Multi-Tenancy)
+| File | Purpose |
+|------|---------|
+| `TenantAwareDatabaseConfig.java` | Routes queries to correct tenant database |
+| `TenantContextFilter.java` | Extracts `X-Tenant-Id` from request headers |
+| `RemotePermissionEvaluator.java` | Validates permissions against auth-service |
+| `CacheConfiguration.java` | Caches permission checks (performance) |
+
+### Step 4: Replace Domain Entities
+Delete the example `Entry` entity and create your own:
+```java
+@Entity
+@Table(name = "orders")  // Your domain table
+public class Order {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+    
+    private String customerId;
+    private BigDecimal totalAmount;
+    // Your domain fields...
+}
+```
+
+### Step 5: Add Permissions to Your Endpoints
+```java
+@RestController
+@RequestMapping("/api/v1/orders")
+public class OrderController {
+
+    @GetMapping
+    @RequirePermission(resource = "order", action = "read")
+    public List<Order> getOrders() { ... }
+    
+    @PostMapping
+    @RequirePermission(resource = "order", action = "create")
+    public Order createOrder(@RequestBody OrderDto dto) { ... }
+}
+```
+
+### Step 6: Add Your Permissions to Auth-Service
+Add SQL migration in `auth-service/src/main/resources/db/migration/tenant/`:
+```sql
+-- V100__add_order_permissions.sql
+INSERT INTO permissions (id, resource, action, description) VALUES
+    (gen_random_uuid(), 'order', 'read', 'View orders'),
+    (gen_random_uuid(), 'order', 'create', 'Create orders'),
+    (gen_random_uuid(), 'order', 'update', 'Update orders'),
+    (gen_random_uuid(), 'order', 'delete', 'Delete orders');
+
+-- Assign to tenant-admin role
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT 'tenant-admin', id FROM permissions WHERE resource = 'order';
+```
+
+### Step 7: Update Gateway Routes
+Add your service to `gateway-service/src/main/resources/application.yml`:
+```yaml
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: your-service
+          uri: lb://YOUR-SERVICE-NAME
+          predicates:
+            - Path=/api/v1/orders/**
+```
+
+### Step 8: Update Docker Compose
+Add your service to `docker-compose.yml`:
+```yaml
+your-service:
+  build: ./your-service-name
+  ports:
+    - "8084:8084"
+  environment:
+    - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
+  depends_on:
+    eureka-server:
+      condition: service_healthy
 
 ---
 
@@ -1318,6 +1505,124 @@ Every request carries tenant context through headers:
 ## 📚 Additional Documentation
 
 - **[Status Tracking](docs/STATUS.md)** - Current project status and roadmap
+
+---
+
+## ☁️ AWS Deployment Guide
+
+### Deployment Architecture
+```mermaid
+graph TB
+    subgraph "AWS Cloud"
+        ALB[Application Load Balancer]
+        
+        subgraph "ECS Fargate"
+            Gateway[Gateway Service]
+            Auth[Auth Service]
+            Platform[Platform Service]
+            Backend[Your Service]
+        end
+        
+        subgraph "Data Layer"
+            RDS[(RDS PostgreSQL)]
+            Secrets[Secrets Manager]
+            SSM[SSM Parameters]
+        end
+        
+        subgraph "Auth"
+            Cognito[Cognito User Pool]
+            Lambda[PostConfirmation Lambda]
+        end
+    end
+    
+    ALB --> Gateway
+    Gateway --> Auth
+    Gateway --> Platform
+    Gateway --> Backend
+    Auth --> Cognito
+    Platform --> RDS
+    Backend --> RDS
+    Platform --> Secrets
+```
+
+### Infrastructure Setup (Terraform)
+
+**Step 1: Configure remote state** (recommended for production)
+```bash
+cd terraform
+# Edit backend.tf to use S3 backend
+terraform init -migrate-state
+```
+
+**Step 2: Create infrastructure**
+```bash
+terraform apply -var="environment=prod"
+```
+
+This creates:
+- Cognito User Pool with Lambda triggers
+- SSM Parameters for service configuration
+- (Optional) VPC, RDS, ECS clusters via modules
+
+### ECS Fargate Deployment
+
+**Service configuration:**
+```yaml
+# Example task definition
+family: gateway-service
+cpu: 256
+memory: 512
+containers:
+  - name: gateway
+    image: ${ECR_REPO}/gateway-service:latest
+    portMappings:
+      - containerPort: 8080
+    environment:
+      - name: SPRING_PROFILES_ACTIVE
+        value: prod
+```
+
+**Recommended instance sizing:**
+| Service | vCPU | Memory | Min Instances |
+|---------|------|--------|---------------|
+| Gateway | 0.25 | 512MB | 2 |
+| Auth | 0.25 | 512MB | 2 |
+| Platform | 0.25 | 512MB | 1 |
+| Backend | 0.25 | 512MB | 2 |
+
+### Cost Estimation (Monthly)
+
+> [!NOTE]
+> Estimates based on us-east-1 pricing. Actual costs may vary.
+
+| Resource | Free Tier | After Free Tier |
+|----------|-----------|-----------------|
+| **Cognito** | 50,000 MAU | $0.0055/MAU after |
+| **Fargate** | - | ~$50/month (4 services, min instances) |
+| **RDS PostgreSQL** | 750 hrs/month (t3.micro) | ~$15-30/month (t3.small) |
+| **ALB** | - | ~$16/month + data |
+| **Secrets Manager** | $0.40/secret/month | $0.40/secret |
+| **Lambda** | 1M requests/month | $0.20/1M after |
+
+**Estimated total:** $80-150/month for small production setup
+
+### Environment Variables (Production)
+
+```bash
+# Required for each service
+SPRING_PROFILES_ACTIVE=prod
+AWS_REGION=us-east-1
+
+# Cognito (from SSM)
+COGNITO_USER_POOL_ID=us-east-1_xxxxx
+COGNITO_CLIENT_ID=xxxxx
+COGNITO_CLIENT_SECRET=xxxxx
+
+# Database (from Secrets Manager)
+SPRING_DATASOURCE_URL=jdbc:postgresql://rds-endpoint:5432/dbname
+SPRING_DATASOURCE_USERNAME=xxx
+SPRING_DATASOURCE_PASSWORD=xxx
+```
 
 ---
 

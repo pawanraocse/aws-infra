@@ -62,7 +62,7 @@ public class SignupController {
                     request.password(),
                     request.name(),
                     tenantId,
-                    "tenant-user" // Default role for personal tenant
+                    "tenant-admin" // Personal user is admin of their own tenant
             );
 
             log.info("✅ B2C signup completed: email={} tenantId={}", email, tenantId);
@@ -183,7 +183,7 @@ public class SignupController {
     // Helper: Call platform-service to provision tenant
     private void provisionTenant(ProvisionTenantRequest request) {
         platformWebClient.post()
-                .uri("/platform/api/tenants")
+                .uri("/platform/internal/tenants")
                 .bodyValue(request)
                 .retrieve()
                 .bodyToMono(Void.class)

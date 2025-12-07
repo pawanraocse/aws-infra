@@ -103,10 +103,36 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
-  # Email configuration (COGNITO_DEFAULT uses Cognito's default sending - keeps you in free tier)
+  # ==========================================================================
+  # Email Configuration Options
+  # ==========================================================================
+  # Option 1: COGNITO_DEFAULT (Current - Free, good for dev/testing)
+  #   - Uses Cognito's shared email service
+  #   - Sends from: no-reply@verificationemail.com
+  #   - Limit: ~50 emails/day
+  #   - Cost: FREE
+  #
+  # Option 2: SES with verified identity (Production recommended)
+  #   - Uses your own SES-verified domain/email
+  #   - Sends from: your custom address (e.g., noreply@yourcompany.com)
+  #   - Limit: Based on SES limits (62,000/month free from EC2/Lambda)
+  #   - Cost: FREE within limits, then $0.10/1000 emails
+  #   - Requires: SES identity verification + exit sandbox for production
+  # ==========================================================================
+
+  # Current: Using Cognito Default (free tier, good for development)
   email_configuration {
     email_sending_account = "COGNITO_DEFAULT"
   }
+
+  # PRODUCTION: Uncomment below and comment out COGNITO_DEFAULT above
+  # First, verify your email/domain in SES and create the identity resource
+  # email_configuration {
+  #   email_sending_account  = "DEVELOPER"
+  #   source_arn             = "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/noreply@yourcompany.com"
+  #   from_email_address     = "Your App <noreply@yourcompany.com>"
+  #   reply_to_email_address = "support@yourcompany.com"
+  # }
 
   # MFA configuration: keep SOFTWARE token (free). SMS MFA is commented out to avoid SMS charges.
   mfa_configuration = "OPTIONAL"
@@ -144,8 +170,16 @@ resource "aws_cognito_user_pool" "main" {
   #   post_confirmation = module.lambda_post_confirmation.lambda_function_arn
   # }
 
+  # ==========================================================================
+  # Production Safety
+  # ==========================================================================
+  # IMPORTANT: Set to true in production to prevent accidental User Pool deletion
+  # User Pools cannot be recovered once deleted - all users will be lost!
+  deletion_protection = var.environment == "prod" ? "ACTIVE" : "INACTIVE"
+
   lifecycle {
-    prevent_destroy = false
+    # Set to true in production to prevent terraform destroy
+    prevent_destroy = false # Change to true for production
     ignore_changes  = [lambda_config]
   }
 
@@ -169,6 +203,7 @@ module "lambda_post_confirmation" {
 }
 
 # Break circular dependency by configuring trigger via CLI
+# IMPORTANT: update-user-pool replaces unspecified attributes, so we must include --auto-verified-attributes
 resource "null_resource" "configure_cognito_trigger" {
   triggers = {
     lambda_arn   = module.lambda_post_confirmation.lambda_function_arn
@@ -176,7 +211,16 @@ resource "null_resource" "configure_cognito_trigger" {
   }
 
   provisioner "local-exec" {
-    command = "aws cognito-idp update-user-pool --user-pool-id ${aws_cognito_user_pool.main.id} --lambda-config PostConfirmation=${module.lambda_post_confirmation.lambda_function_arn} --region ${var.aws_region}"
+    # Note: set -e ensures script fails if CLI command fails
+    command = <<-EOT
+      set -e
+      aws cognito-idp update-user-pool \
+        --user-pool-id ${aws_cognito_user_pool.main.id} \
+        --auto-verified-attributes email \
+        --lambda-config PostConfirmation=${module.lambda_post_confirmation.lambda_function_arn} \
+        --region ${var.aws_region}
+      echo "✅ Cognito User Pool updated successfully"
+    EOT
   }
 
   depends_on = [

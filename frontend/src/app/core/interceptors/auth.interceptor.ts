@@ -5,7 +5,11 @@ import { from, switchMap } from 'rxjs';
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   return from(fetchAuthSession()).pipe(
     switchMap(session => {
-      const token = session.tokens?.accessToken?.toString();
+      // Use idToken instead of accessToken because:
+      // - AWS Cognito ID tokens contain custom attributes (custom:tenantId, custom:role)
+      // - Access tokens do NOT contain custom attributes
+      // - Gateway needs custom:tenantId claim for tenant routing
+      const token = session.tokens?.idToken?.toString();
       if (token) {
         const cloned = req.clone({
           setHeaders: {

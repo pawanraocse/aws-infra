@@ -4,13 +4,19 @@ import com.learning.backendservice.BaseControllerTest;
 import com.learning.backendservice.dto.EntryRequestDto;
 import com.learning.backendservice.entity.Entry;
 import com.learning.backendservice.repository.EntryRepository;
+import com.learning.backendservice.tenant.registry.TenantRegistryService;
+import com.learning.common.dto.TenantDbConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.hamcrest.Matchers.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -21,9 +27,23 @@ class EntryControllerTest extends BaseControllerTest {
     @Autowired
     private EntryRepository entryRepository;
 
+    @MockBean
+    private TenantRegistryService tenantRegistry;
+
+    @Value("${spring.datasource.url}")
+    private String dbUrl;
+
+    @Value("${spring.datasource.username}")
+    private String dbUsername;
+
+    @Value("${spring.datasource.password}")
+    private String dbPassword;
+
     @BeforeEach
-    void cleanup() {
+    void setUp() {
         entryRepository.deleteAll();
+        when(tenantRegistry.load(anyString()))
+                .thenReturn(new TenantDbConfig(dbUrl, dbUsername, dbPassword));
     }
 
     @Test
@@ -33,6 +53,9 @@ class EntryControllerTest extends BaseControllerTest {
 
         // When/Then
         mockMvc.perform(post("/api/v1/entries")
+                        .header("X-User-Id", "test-user")
+                        .header("X-Role", "tenant-admin")
+                        .header("X-Tenant-Id", "test-tenant")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andDo(print())
@@ -51,6 +74,9 @@ class EntryControllerTest extends BaseControllerTest {
 
         // When/Then
         mockMvc.perform(post("/api/v1/entries")
+                        .header("X-User-Id", "test-user")
+                        .header("X-Role", "tenant-admin")
+                        .header("X-Tenant-Id", "test-tenant")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andDo(print())
@@ -64,7 +90,10 @@ class EntryControllerTest extends BaseControllerTest {
         entryRepository.save(Entry.builder().key("key2").value("value2").build());
 
         // When/Then
-        mockMvc.perform(get("/api/v1/entries"))
+        mockMvc.perform(get("/api/v1/entries")
+                        .header("X-User-Id", "test-user")
+                        .header("X-Role", "tenant-admin")
+                        .header("X-Tenant-Id", "test-tenant"))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
@@ -78,7 +107,10 @@ class EntryControllerTest extends BaseControllerTest {
         Entry saved = entryRepository.save(Entry.builder().key("find-me").value("found").build());
 
         // When/Then
-        mockMvc.perform(get("/api/v1/entries/{id}", saved.getId()))
+        mockMvc.perform(get("/api/v1/entries/{id}", saved.getId())
+                        .header("X-User-Id", "test-user")
+                        .header("X-Role", "tenant-admin")
+                        .header("X-Tenant-Id", "test-tenant"))
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(saved.getId()))
@@ -88,7 +120,10 @@ class EntryControllerTest extends BaseControllerTest {
 
     @Test
     void shouldReturn404WhenEntryNotFound() throws Exception {
-        mockMvc.perform(get("/api/v1/entries/{id}", 99999L))
+        mockMvc.perform(get("/api/v1/entries/{id}", 99999L)
+                        .header("X-User-Id", "test-user")
+                        .header("X-Role", "tenant-admin")
+                        .header("X-Tenant-Id", "test-tenant"))
                 .andDo(print())
                 .andExpect(status().isNotFound());
     }
@@ -101,6 +136,9 @@ class EntryControllerTest extends BaseControllerTest {
 
         // When/Then
         mockMvc.perform(put("/api/v1/entries/{id}", existing.getId())
+                        .header("X-User-Id", "test-user")
+                        .header("X-Role", "tenant-admin")
+                        .header("X-Tenant-Id", "test-tenant")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andDo(print())
@@ -118,18 +156,27 @@ class EntryControllerTest extends BaseControllerTest {
         Entry saved = entryRepository.save(Entry.builder().key("delete-me").value("value").build());
 
         // When/Then
-        mockMvc.perform(delete("/api/v1/entries/{id}", saved.getId()))
+        mockMvc.perform(delete("/api/v1/entries/{id}", saved.getId())
+                        .header("X-User-Id", "test-user")
+                        .header("X-Role", "tenant-admin")
+                        .header("X-Tenant-Id", "test-tenant"))
                 .andDo(print())
                 .andExpect(status().isNoContent());
 
         // Verify deleted
-        mockMvc.perform(get("/api/v1/entries/{id}", saved.getId()))
+        mockMvc.perform(get("/api/v1/entries/{id}", saved.getId())
+                        .header("X-User-Id", "test-user")
+                        .header("X-Role", "tenant-admin")
+                        .header("X-Tenant-Id", "test-tenant"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void shouldReturn404WhenDeletingNonExistentEntry() throws Exception {
-        mockMvc.perform(delete("/api/v1/entries/{id}", 99999L))
+        mockMvc.perform(delete("/api/v1/entries/{id}", 99999L)
+                        .header("X-User-Id", "test-user")
+                        .header("X-Role", "tenant-admin")
+                        .header("X-Tenant-Id", "test-tenant"))
                 .andDo(print())
                 .andExpect(status().isNotFound());
     }
@@ -139,6 +186,9 @@ class EntryControllerTest extends BaseControllerTest {
         // Given - Create first entry
         EntryRequestDto request1 = new EntryRequestDto("duplicate-key", "value1");
         mockMvc.perform(post("/api/v1/entries")
+                        .header("X-User-Id", "test-user")
+                        .header("X-Role", "tenant-admin")
+                        .header("X-Tenant-Id", "test-tenant")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -146,6 +196,9 @@ class EntryControllerTest extends BaseControllerTest {
         // When/Then - Try to create with same key
         EntryRequestDto request2 = new EntryRequestDto("duplicate-key", "value2");
         mockMvc.perform(post("/api/v1/entries")
+                        .header("X-User-Id", "test-user")
+                        .header("X-Role", "tenant-admin")
+                        .header("X-Tenant-Id", "test-tenant")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request2)))
                 .andDo(print())
@@ -165,6 +218,9 @@ class EntryControllerTest extends BaseControllerTest {
 
         // When/Then - Request page 0, size 10
         mockMvc.perform(get("/api/v1/entries")
+                        .header("X-User-Id", "test-user")
+                        .header("X-Role", "tenant-admin")
+                        .header("X-Tenant-Id", "test-tenant")
                         .param("page", "0")
                         .param("size", "10"))
                 .andDo(print())

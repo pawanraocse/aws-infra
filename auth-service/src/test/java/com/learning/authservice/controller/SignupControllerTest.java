@@ -1,5 +1,6 @@
 package com.learning.authservice.controller;
 
+import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.authservice.config.CognitoProperties;
 import com.learning.common.dto.OrganizationSignupRequest;
 import com.learning.common.dto.PersonalSignupRequest;
@@ -17,8 +18,11 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminCreateUserRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminCreateUserResponse;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.SignUpRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.SignUpResponse;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UserType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.UsernameExistsException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,11 +54,14 @@ class SignupControllerTest {
     @Mock
     private WebClient.ResponseSpec responseSpec;
 
+    @Mock
+    private UserRoleService userRoleService;
+
     private SignupController signupController;
 
     @BeforeEach
     void setUp() {
-        signupController = new SignupController(cognitoClient, cognitoProperties, platformWebClient);
+        signupController = new SignupController(cognitoClient, cognitoProperties, platformWebClient, userRoleService);
         lenient().when(cognitoProperties.getUserPoolId()).thenReturn("us-east-1_xxxxxx");
         lenient().when(cognitoProperties.getClientId()).thenReturn("client-id");
         lenient().when(cognitoProperties.getClientSecret()).thenReturn("client-secret");
@@ -100,6 +107,15 @@ class SignupControllerTest {
                 "Acme Corp", "admin@acme.com", "Admin User", "password123", "STANDARD");
 
         mockWebClientSuccess();
+
+        // Mock AdminCreateUser response
+        UserType mockUser = UserType.builder()
+                .attributes(AttributeType.builder().name("sub").value("test-user-id").build())
+                .build();
+        AdminCreateUserResponse mockResponse = AdminCreateUserResponse.builder()
+                .user(mockUser)
+                .build();
+        when(cognitoClient.adminCreateUser(any(AdminCreateUserRequest.class))).thenReturn(mockResponse);
 
         // Act
         ResponseEntity<SignupResponse> response = signupController.signupOrganization(request);

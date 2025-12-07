@@ -25,4 +25,3 @@ public class LocalCache {
         cache.invalidate(tenantId);
     }
 }
-

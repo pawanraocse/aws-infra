@@ -15,6 +15,7 @@ spring:
       max-lifetime: 1800000
   
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: none
     show-sql: false
@@ -49,11 +50,11 @@ server:
 
 services:
   platform:
-    base-url: http://platform-service
+    base-url: http://platform-service/platform
   backend:
     base-url: http://backend-service
   auth:
-    base-url: http://auth-service
+    base-url: http://auth-service/auth
   file:
     base-url: http://file-service
 

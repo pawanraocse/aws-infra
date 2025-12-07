@@ -1,6 +1,7 @@
 package com.learning.authservice.config;
 
 import com.learning.authservice.CognitoLogoutHandler;
+import com.learning.common.infra.tenant.TenantContextFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +36,8 @@ public class SecurityConfiguration {
         private static final String REQUEST_ID_HEADER = "X-Request-Id";
 
         @Bean
-        public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        public SecurityFilterChain filterChain(HttpSecurity http, TenantContextFilter tenantContextFilter)
+                        throws Exception {
                 CognitoLogoutHandler cognitoLogoutHandler = new CognitoLogoutHandler(cognitoProperties);
 
                 SimpleUrlAuthenticationSuccessHandler successHandler = new SimpleUrlAuthenticationSuccessHandler();
@@ -43,12 +45,17 @@ public class SecurityConfiguration {
                 successHandler.setAlwaysUseDefaultTargetUrl(true);
 
                 http
+                                // Add TenantContextFilter before any authentication to set tenant context
+                                .addFilterBefore(tenantContextFilter,
+                                                org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
                                 .csrf(csrf -> csrf.disable())
                                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                                 .authorizeHttpRequests(authz -> authz
                                                 .requestMatchers("/", "/actuator/health", "/actuator/info",
                                                                 "/logged-out", "/signup/**", "/login", "/error",
-                                                                "/verify", "/resend-verification")
+                                                                "/verify", "/resend-verification",
+                                                                "/api/v1/permissions/**") // Internal service-to-service
+                                                                                          // calls
                                                 .permitAll()
                                                 .anyRequest().authenticated())
                                 .oauth2Login(oauth2 -> oauth2

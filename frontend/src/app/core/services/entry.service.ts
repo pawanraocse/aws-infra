@@ -22,7 +22,7 @@ export interface Page<T> {
 @Injectable({ providedIn: 'root' })
 export class EntryService {
     private http = inject(HttpClient);
-    private apiUrl = `${environment.apiUrl}/api/entries`;
+    private apiUrl = `${environment.apiUrl}/api/v1/entries`;
 
     getEntries(page = 0, size = 10): Observable<Page<Entry>> {
         const params = new HttpParams()

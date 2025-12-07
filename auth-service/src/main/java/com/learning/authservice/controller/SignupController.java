@@ -1,5 +1,6 @@
 package com.learning.authservice.controller;
 
+import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.authservice.config.CognitoProperties;
 import com.learning.authservice.dto.VerifyRequestDto;
 import com.learning.common.dto.*;
@@ -34,6 +35,7 @@ public class SignupController {
     private final CognitoIdentityProviderClient cognitoClient;
     private final CognitoProperties cognitoProperties;
     private final WebClient platformWebClient;
+    private final UserRoleService userRoleService;
 
     /**
      * B2C Personal Signup Flow
@@ -91,6 +93,7 @@ public class SignupController {
 
         try {
             String secretHash = calculateSecretHash(request.getEmail());
+            String role = request.getRole() != null ? request.getRole() : "tenant-admin";
 
             ConfirmSignUpRequest confirmRequest = ConfirmSignUpRequest.builder()
                     .clientId(cognitoProperties.getClientId())
@@ -99,12 +102,29 @@ public class SignupController {
                     .secretHash(secretHash)
                     .clientMetadata(Map.of(
                             "tenantId", request.getTenantId(),
-                            "role", request.getRole() != null ? request.getRole() : "tenant-admin"))
+                            "role", role))
                     .build();
 
             cognitoClient.confirmSignUp(confirmRequest);
 
-            log.info("✅ Email verified successfully: email={}", request.getEmail());
+            // After confirmation, get user's sub from Cognito and assign role in database
+            AdminGetUserRequest getUserRequest = AdminGetUserRequest.builder()
+                    .userPoolId(cognitoProperties.getUserPoolId())
+                    .username(request.getEmail())
+                    .build();
+
+            AdminGetUserResponse userResponse = cognitoClient.adminGetUser(getUserRequest);
+            String userId = userResponse.userAttributes().stream()
+                    .filter(attr -> "sub".equals(attr.name()))
+                    .map(AttributeType::value)
+                    .findFirst()
+                    .orElseThrow(() -> new RuntimeException("Failed to get user sub from Cognito"));
+
+            // Assign role in database for authorization checks
+            userRoleService.assignRole(userId, request.getTenantId(), role, "system");
+
+            log.info("✅ Email verified and role assigned: email={} userId={} tenantId={} role={}",
+                    request.getEmail(), userId, request.getTenantId(), role);
 
             return ResponseEntity.ok(
                     SignupResponse.success("Email verified successfully. You can now log in.", null, true));
@@ -249,12 +269,13 @@ public class SignupController {
                             AttributeType.builder().name("name").value(name).build(),
                             AttributeType.builder().name("email_verified").value("true").build(),
                             AttributeType.builder().name("custom:tenantId").value(tenantId).build(),
-                            AttributeType.builder().name("custom:role").value(role).build())
+                            AttributeType.builder().name("custom:role").value(role).build(),
+                            AttributeType.builder().name("custom:tenantType").value(tenantType.name()).build())
                     .desiredDeliveryMediums(DeliveryMediumType.EMAIL)
                     .messageAction(MessageActionType.SUPPRESS) // We'll send custom email
                     .build();
 
-            cognitoClient.adminCreateUser(createRequest);
+            AdminCreateUserResponse createResponse = cognitoClient.adminCreateUser(createRequest);
 
             // Set permanent password
             cognitoClient.adminSetUserPassword(b -> b
@@ -263,7 +284,18 @@ public class SignupController {
                     .password(password)
                     .permanent(true));
 
-            log.info("Cognito user created: email={} tenantId={} role={}", email, tenantId, role);
+            // Extract user's Cognito sub (unique ID) to use in user_roles table
+            String userId = createResponse.user().attributes().stream()
+                    .filter(attr -> "sub".equals(attr.name()))
+                    .map(AttributeType::value)
+                    .findFirst()
+                    .orElseThrow(() -> new RuntimeException("Failed to get user sub from Cognito response"));
+
+            // Assign role in database for authorization checks
+            userRoleService.assignRole(userId, tenantId, role, "system");
+
+            log.info("Cognito user created and role assigned: email={} tenantId={} role={} userId={}",
+                    email, tenantId, role, userId);
 
         } catch (UsernameExistsException e) {
             throw new IllegalArgumentException("User with email " + email + " already exists");

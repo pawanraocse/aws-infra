@@ -42,6 +42,10 @@ public class PermissionService {
      */
     @Cacheable(value = "userPermissions", key = "#userId + ':' + #tenantId + ':' + #resource + ':' + #action")
     public boolean hasPermission(String userId, String tenantId, String resource, String action) {
+        // Debug: verify TenantContext is set correctly
+        String currentTenant = com.learning.common.infra.tenant.TenantContext.getCurrentTenant();
+        System.err.println(">>> TenantContext.getCurrentTenant() = " + currentTenant + " (expected: " + tenantId + ")");
+
         log.debug("Checking permission: user={}, tenant={}, resource={}, action={}",
                 userId, tenantId, resource, action);
 

@@ -64,6 +64,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isOk())
@@ -90,6 +91,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isOk());
@@ -98,6 +100,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isConflict())
@@ -130,6 +133,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isOk())
@@ -161,6 +165,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isBadRequest());
@@ -184,6 +189,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isOk())
@@ -191,7 +197,8 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                 mockMvc.perform(post(CONTEXT_PATH + "/api/tenants/failretry/retry-migration")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
-                                .header("X-Tenant-Id", "system"))
+                                .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin"))
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.id").value("failretry"));
         }
@@ -214,6 +221,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isOk())
@@ -221,7 +229,8 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                 mockMvc.perform(post(CONTEXT_PATH + "/api/tenants/transitid/retry-migration")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
-                                .header("X-Tenant-Id", "system"))
+                                .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin"))
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.status").value("ACTIVE"));
         }
@@ -241,6 +250,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isBadRequest());
@@ -261,6 +271,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isBadRequest());
@@ -288,6 +299,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isOk())
@@ -351,7 +363,8 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                 mockMvc.perform(post(CONTEXT_PATH + "/api/tenants/notfound/retry-migration")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
-                                .header("X-Tenant-Id", "system"))
+                                .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin"))
                                 .andExpect(status().isNotFound());
         }
 
@@ -370,6 +383,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isBadRequest());
@@ -392,6 +406,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isBadRequest());
@@ -412,6 +427,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
+                                .header("X-Role", "super-admin")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                                 .andExpect(status().isBadRequest());

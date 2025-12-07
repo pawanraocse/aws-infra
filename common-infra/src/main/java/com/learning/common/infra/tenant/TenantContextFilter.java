@@ -30,10 +30,10 @@ public class TenantContextFilter extends OncePerRequestFilter {
         String tenantId = request.getHeader(TENANT_HEADER);
 
         if (tenantId != null && !tenantId.isBlank()) {
-            log.trace("Setting tenant context: {}", tenantId);
+            log.info("TenantContextFilter: Setting tenant context: {} from header {}", tenantId, TENANT_HEADER);
             TenantContext.setCurrentTenant(tenantId);
         } else {
-            log.trace("No tenant ID found in request header: {}", TENANT_HEADER);
+            log.info("TenantContextFilter: No tenant ID found in request header: {}", TENANT_HEADER);
         }
 
         try {

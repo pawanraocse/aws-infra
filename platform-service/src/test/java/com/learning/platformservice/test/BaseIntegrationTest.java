@@ -58,6 +58,14 @@ public abstract class BaseIntegrationTest {
                                                                 .withStatus(200)
                                                                 .withHeader("Content-Type", "application/json")
                                                                 .withBody("{\"lastVersion\":\"1.0.0\"}")));
+
+                // Stub for Auth Service permission check
+                wireMockServer.stubFor(
+                                post(urlPathMatching("/api/v1/permissions/check"))
+                                                .willReturn(aResponse()
+                                                                .withStatus(200)
+                                                                .withHeader("Content-Type", "application/json")
+                                                                .withBody("true")));
         }
 
         @DynamicPropertySource

@@ -1,9 +1,9 @@
 # Multi-Tenant SaaS Template - Project Status
 
-**Last Updated:** 2025-12-06  
+**Last Updated:** 2025-12-07  
 **Current Phase:** Phase 6 Week 5 Complete ✅  
-**Template Completion:** 80%  
-**Target Completion:** End of January 2026 (8-9 weeks)
+**Template Completion:** 85%  
+**Target Completion:** End of January 2026 (~6 weeks remaining)
 
 ---
 
@@ -33,6 +33,9 @@
   - Editable company profile form
   - Tenant ID display with copy functionality
   - Form validation (company name, industry, size, website, logo URL)
+- [x] **Gateway Service 401 Unauthorized**: Fixed by configuring Gateway to use AWS SSM for Cognito Issuer URI and explicit Bean definition for `ReactiveJwtDecoder`.
+- [x] **Backend 403 Forbidden**: Fixed by propagating `Authorization` header in `RemotePermissionEvaluator` so `auth-service` can validate the permission check.
+- [x] **Auth Service SSM**: Confirmed Auth Service uses SSM parameters.
 - Backend APIs:
   - Platform Service: `GET/PUT /api/v1/organizations`
   - Auth Service: `GET /api/v1/stats/users`
@@ -71,10 +74,23 @@
   - Auth-service security: Added public endpoints for verification
   - JWT tokens now contain `custom:tenantId` for downstream services
 
+**✅ Recent Completion (Dec 7):**
+- **Personal Signup Fixes:**
+  - Created internal tenant provisioning endpoint (`TenantInternalController.java`)
+  - Personal users now assigned `tenant-admin` role (can manage own data)
+  - Fixed Cognito `auto_verified_attributes` issue via terraform `null_resource`
+- **Terraform Improvements:**
+  - Added `deletion_protection` for production safety
+  - Fixed CLI command to preserve `auto_verified_attributes` when updating Lambda config
+  - Added SES email configuration option (commented for production use)
+- **HLD Improvements:**
+  - Added Quick Start Guide (4 steps)
+  - Added "How to Build Your Service" guide (8 steps)
+  - Added AWS Deployment Guide with cost estimation
+
 **⚠️ Known Limitations:**
 - E2E automated tests need configuration fixes
 - Frontend unit tests for UserListComponent failing (PrimeNG DI issue)
-- Lambda not yet deployed (Terraform ready, needs `apply`)
 - Actual database drop for deleted tenants is currently manual (safety measure)
 
 **🚀 Next Priority:**
@@ -101,9 +117,9 @@
 ### Progress Overview
 
 ```
-Phase 1-4: ████████████░░░░░░░░ 60% ✅ COMPLETE
+Phase 1-4: ████████████████████ 100% ✅ COMPLETE
 Phase 5:   ████████████████████ 100% ✅ COMPLETE (4 weeks)
-Phase 6:   ░░░░░░░░░░░░░░░░░░░░  0% 📅 NEXT
+Phase 6:   ██████░░░░░░░░░░░░░░  33% 🚧 IN PROGRESS (Week 5 done)
 Phase 7:   ░░░░░░░░░░░░░░░░░░░░  0% 📅 Scheduled (2 weeks)
 Phase 8:   ░░░░░░░░░░░░░░░░░░░░  0% 📅 Scheduled (1 week)
 ```

@@ -85,6 +85,18 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
+  schema {
+    name                = "tenantType"
+    attribute_data_type = "String"
+    mutable             = true
+    required            = false
+
+    string_attribute_constraints {
+      min_length = 1
+      max_length = 20
+    }
+  }
+
   # Password policy
   password_policy {
     minimum_length                   = 12
@@ -326,14 +338,16 @@ resource "aws_cognito_user_pool_client" "native" {
     "email_verified",
     "name",
     "custom:tenantId",
-    "custom:role"
+    "custom:role",
+    "custom:tenantType"
   ]
 
   write_attributes = [
     "email",
     "name",
     "custom:tenantId",
-    "custom:role"
+    "custom:role",
+    "custom:tenantType"
   ]
 }
 
@@ -380,7 +394,8 @@ resource "aws_cognito_user_pool_client" "spa" {
     "email_verified",
     "name",
     "custom:tenantId",
-    "custom:role"
+    "custom:role",
+    "custom:tenantType"
   ]
 
   # Write attributes - what the app can update

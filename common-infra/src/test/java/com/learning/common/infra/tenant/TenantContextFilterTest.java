@@ -10,10 +10,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 
 import java.io.IOException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,6 +33,9 @@ class TenantContextFilterTest {
 
     @Mock
     private FilterChain filterChain;
+
+    @Mock
+    private Environment environment;
 
     @AfterEach
     void tearDown() {
@@ -54,9 +60,11 @@ class TenantContextFilterTest {
     }
 
     @Test
-    void shouldNotSetTenant_WhenHeaderMissing() throws ServletException, IOException {
-        // Given
+    void shouldAllowRequest_WhenHeaderMissingInDevProfile() throws ServletException, IOException {
+        // Given - dev profile allows missing tenant header
         when(request.getHeader("X-Tenant-Id")).thenReturn(null);
+        when(request.getRequestURI()).thenReturn("/api/entries");
+        when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(true); // dev profile
 
         // When
         doAnswer(invocation -> {

@@ -4,6 +4,8 @@ spring:
 
   cloud:
     gateway:
+      default-filters:
+        - JwtAuthentication
       server:
         webflux:
           discovery:

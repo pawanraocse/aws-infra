@@ -16,7 +16,6 @@ import java.util.UUID;
 public class InvitationResponse {
 
     private UUID id;
-    private String tenantId;
     private String email;
     private String roleId;
     private InvitationStatus status;

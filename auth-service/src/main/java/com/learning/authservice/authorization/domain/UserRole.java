@@ -7,16 +7,16 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.Instant;
 
 /**
- * User role assignment within a specific tenant.
- * Maps users (identified by Cognito user ID) to roles within tenants.
+ * User role assignment.
+ * Tenant isolation is handled via database routing (TenantDataSourceRouter).
+ * Maps users (identified by Cognito user ID) to roles.
  */
 @Entity
 @Table(name = "user_roles", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_user_roles", columnNames = { "user_id", "tenant_id", "role_id" })
+        @UniqueConstraint(name = "uk_user_roles", columnNames = { "user_id", "role_id" })
 }, indexes = {
-        @Index(name = "idx_user_roles_lookup", columnList = "user_id,tenant_id"),
-        @Index(name = "idx_user_roles_tenant", columnList = "tenant_id"),
-        @Index(name = "idx_user_roles_user", columnList = "user_id")
+        @Index(name = "idx_user_roles_user", columnList = "user_id"),
+        @Index(name = "idx_user_roles_role", columnList = "role_id")
 })
 @Getter
 @Setter
@@ -34,12 +34,6 @@ public class UserRole {
      */
     @Column(name = "user_id", nullable = false)
     private String userId;
-
-    /**
-     * Tenant ID for tenant-scoped roles
-     */
-    @Column(name = "tenant_id", nullable = false, length = 64)
-    private String tenantId;
 
     /**
      * Role ID (foreign key to roles table)

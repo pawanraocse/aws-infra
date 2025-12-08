@@ -1,7 +1,7 @@
 # High-Level Design: Multi-Tenant SaaS Template System
 
-**Version:** 4.3  
-**Last Updated:** 2025-12-06  
+**Version:** 5.0  
+**Last Updated:** 2025-12-08  
 **Purpose:** Production-ready, reusable multi-tenant architecture template with RBAC authorization and complete database-per-tenant isolation
 
 
@@ -127,6 +127,146 @@ graph TB
 
 ---
 
+## 🎯 Design Principles
+
+### 1. Gateway-as-Gatekeeper (Security Boundary)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    EXTERNAL (Untrusted)                         │
+│  Browser → JWT Token → ALB → Gateway Service                    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                    ┌─────────▼─────────┐
+                    │  Gateway Service  │  ← ONLY JWT validator
+                    │  • Validates JWT   │
+                    │  • Extracts claims │
+                    │  • Sets X-* headers│
+                    │  • Rate limiting   │
+                    └─────────┬─────────┘
+                              │
+┌─────────────────────────────▼───────────────────────────────────┐
+│                    INTERNAL (Trusted Network)                   │
+│  Services trust X-Tenant-Id, X-User-Id headers from Gateway     │
+│  No JWT validation in internal services                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Rules:**
+- ✅ Gateway is the **ONLY** service that validates JWTs
+- ✅ Internal services **NEVER** validate JWTs - they trust Gateway headers
+- ✅ Gateway strips incoming `X-*` headers to prevent spoofing
+- ✅ Fail-closed: requests without valid JWT are rejected
+
+### 2. Database-per-Tenant Isolation
+```
+Platform DB (awsinfra)          Tenant DBs (dedicated)
+┌──────────────────┐           ┌──────────────────┐
+│  tenant table    │           │  tenant_acme_db  │
+│  - id            │───────────│  • roles         │
+│  - jdbc_url ─────┼───┐       │  • permissions   │
+│  - status        │   │       │  • user_roles    │
+└──────────────────┘   │       │  • entries       │
+                       │       └──────────────────┘
+                       │       ┌──────────────────┐
+                       └──────►│  tenant_xyz_db   │
+                               │  • roles         │
+                               │  • permissions   │
+                               │  • user_roles    │
+                               │  • entries       │
+                               └──────────────────┘
+```
+
+**Key Rules:**
+- ✅ Each tenant gets a **dedicated PostgreSQL database**
+- ✅ No `tenant_id` column in tenant tables (database IS the boundary)
+- ✅ `TenantDataSourceRouter` switches datasource based on `X-Tenant-Id` header
+- ✅ Flyway migrations run per-tenant database
+
+### 3. AWS Infrastructure (Terraform-Managed)
+
+| Component | Purpose | Terraform Resource |
+|-----------|---------|-------------------|
+| **Cognito User Pool** | User authentication, JWT tokens | `aws_cognito_user_pool` |
+| **SSM Parameter Store** | Configuration (Cognito URLs, secrets) | `aws_ssm_parameter` |
+| **Secrets Manager** | Tenant DB credentials | `aws_secretsmanager_secret` |
+| **RDS PostgreSQL** | Platform + tenant databases | `aws_db_instance` |
+| **Lambda** | PostConfirmation trigger for signup | `aws_lambda_function` |
+
+**SSM Parameters (Set by Terraform):**
+```
+/cloud-infra/dev/cognito/issuer_uri     → https://cognito-idp.{region}.amazonaws.com/{poolId}
+/cloud-infra/dev/cognito/jwks_uri       → {issuer}/.well-known/jwks.json
+/cloud-infra/dev/cognito/user_pool_id   → us-east-1_xxxxxxxx
+/cloud-infra/dev/cognito/client_id      → xxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+**How Services Use SSM:**
+- Gateway reads SSM on startup for JWT validation config
+- Auth Service reads SSM for Cognito API calls
+- No hardcoded URLs - everything from SSM
+
+### 4. Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend (Amplify)
+    participant C as Cognito
+    participant L as Lambda (PostConfirm)
+    participant G as Gateway
+    participant A as Auth Service
+    participant P as Platform Service
+
+    Note over U,P: SIGNUP FLOW
+    U->>F: Enter email, password
+    F->>A: POST /api/v1/auth/signup
+    A->>P: Create tenant (Platform API)
+    P->>P: Create tenant DB
+    A->>C: signUp (with clientMetadata)
+    C->>U: Verification code email
+    U->>F: Enter code
+    F->>C: confirmSignUp
+    C->>L: PostConfirmation trigger
+    L->>C: Set custom:tenantId, custom:role
+
+    Note over U,P: LOGIN FLOW
+    U->>F: Enter credentials
+    F->>C: Authenticate
+    C->>F: JWT with custom claims
+    F->>G: API call + JWT
+    G->>G: Validate JWT, extract claims
+    G->>A: Forward + X-Tenant-Id, X-User-Id
+    A->>A: Process with tenant context
+```
+
+### 5. Authorization Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant G as Gateway
+    participant B as Backend Service
+    participant A as Auth Service
+
+    C->>G: GET /api/v1/entries (JWT)
+    G->>G: Validate JWT
+    G->>B: Forward + X-Tenant-Id, X-User-Id
+    B->>B: @RequirePermission("entry:read")
+    B->>A: POST /api/v1/permissions/check
+    A->>A: Check user_roles + role_permissions
+    A->>B: {hasPermission: true}
+    B->>B: Execute business logic
+    B->>C: Return entries
+```
+
+**Key Components:**
+- `@RequirePermission` annotation on controllers
+- `RemotePermissionEvaluator` calls Auth Service
+- `LocalPermissionEvaluator` for Auth Service itself
+- Caffeine cache (10 min TTL) for permission checks
+
+---
+
 ## 📋 Service Responsibilities
 
 ### 🛡️ Gateway Service (Port 8080)
@@ -137,7 +277,7 @@ graph TB
 - ✅ **Tenant Context Extraction** - Extract tenant ID from token/headers
 - ✅ **Header Enrichment** - Inject trusted headers (`X-Tenant-Id`, `X-User-Id`, `X-Authorities`, `X-Email`)
 - ✅ **Load Balancing** - Route to healthy service instances via Eureka
-- ✅ **Rate Limiting** - Prevent abuse (future)
+- ✅ **Rate Limiting** - Redis-based tenant/IP rate limiting (10 req/s, burst 20)
 - ✅ **Request Sanitization** - Strip incoming `X-*` headers to prevent spoofing
 
 **Key Feature:** Fail-closed security - rejects requests without valid tenant context. Acts as the **only** OAuth2 Resource Server in the system.
@@ -281,8 +421,7 @@ aws cognito-idp describe-user-pool --user-pool-id <ID> \
 
 #### Tenant Provisioning
 - ✅ **Database Provisioning:**
-  - Database-per-tenant (primary) - Creates dedicated PostgreSQL database
-  - Schema-per-tenant (fallback) - Creates schema in shared database
+  - **Database-per-tenant** - Creates dedicated PostgreSQL database for each tenant
 - ✅ **Database User Management** - Creates DB credentials, stores in AWS Secrets Manager
 - ✅ **Schema Initialization** - Runs Flyway migrations for each tenant
 - ✅ **Tenant Registry** - Maintains master metadata (JDBC URLs, status, tier)
@@ -737,7 +876,6 @@ erDiagram
     user_roles {
         uuid id PK
         string user_id
-        string tenant_id
         uuid role_id FK
         timestamp assigned_at
         string assigned_by
@@ -831,8 +969,6 @@ public ResponseEntity<Invoice> createInvoice(...) { ... }
 3. Flyway runs migrations to initialize schema
 4. Backend services connect to correct database using `X-Tenant-Id`
 
-**Alternative:** Schema-per-tenant (shared database, separate schemas) for cost optimization
-
 ### Tenant Tiers & Limits
 
 | Tier | Max Users | Features | Storage | Price |
@@ -866,33 +1002,18 @@ public ResponseEntity<Invoice> createInvoice(...) { ... }
 **Owner:** Platform Service  
 **Location:** Shared RDS instance
 
-```sql
--- ============================================================================
--- TENANT REGISTRY (Platform Service)
--- ============================================================================
-CREATE TABLE tenant (\n    id VARCHAR(64) PRIMARY KEY,              -- t_acme, t_john_doe_xyz
-    name VARCHAR(255) NOT NULL,              -- Acme Corp, John's Workspace
-    status VARCHAR(20) NOT NULL,             -- ACTIVE, SUSPENDED, DELETED
-    storage_mode VARCHAR(20) NOT NULL,       -- DATABASE, SCHEMA
-    jdbc_url TEXT NOT NULL,                  -- Connection string to tenant DB
-    db_user_secret_ref VARCHAR(255),         -- ARN to AWS Secrets Manager
-    db_user_password_enc TEXT,               -- Encrypted password (or use Secrets Manager)
-    tier VARCHAR(20) NOT NULL,               -- STANDARD, PREMIUM, ENTERPRISE
-    tenant_type VARCHAR(20) NOT NULL,        -- PERSONAL, ORGANIZATION
-    owner_email VARCHAR(255) NOT NULL,
-    owner_cognito_id VARCHAR(255),
-    max_users INTEGER NOT NULL DEFAULT 50,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `tenant` | Master tenant registry | id, name, status, tier, tenant_type, jdbc_url, owner_email |
 
-CREATE INDEX idx_tenant_status ON tenant(status);
-CREATE INDEX idx_tenant_owner ON tenant(owner_email);
+**Key Fields:**
+- `id` - Tenant identifier (e.g., `t_acme`, `t_john_doe_xyz`)
+- `jdbc_url` - Connection string to tenant-specific database
+- `db_user_secret_ref` - AWS Secrets Manager ARN for DB credentials
+- `tier` - STANDARD, PREMIUM, ENTERPRISE
+- `tenant_type` - PERSONAL or ORGANIZATION
 
-COMMENT ON TABLE tenant IS 'Master registry of all tenants in the system';
-COMMENT ON COLUMN tenant.jdbc_url IS 'JDBC URL to tenant-specific database';
-COMMENT ON COLUMN tenant.db_user_secret_ref IS 'AWS Secrets Manager ARN for DB credentials';
-```
+> **Migration file:** `platform-service/src/main/resources/db/migration/V1__initial_schema.sql`
 
 **That's it!** Platform database only contains the tenant registry.
 
@@ -902,130 +1023,31 @@ COMMENT ON COLUMN tenant.db_user_secret_ref IS 'AWS Secrets Manager ARN for DB c
 
 **Purpose:** ALL tenant-specific application data  
 **Owners:** Auth Service, Backend Service (your domain)  
-**Location:** Separate RDS databases per tenant (or schemas in shared DB)
+**Location:** Dedicated PostgreSQL database per tenant (`tenant_<company_slug>`)
 
-Each tenant gets a dedicated database with the following schema:
+Each tenant gets a dedicated database with the following tables:
 
-#### Auth Service Tables (in Tenant DB)
+#### Auth Service Tables
 
-```sql
--- ============================================================================
--- AUTHORIZATION SCHEMA (Auth Service)
--- Stores: roles, permissions, user assignments, invitations
--- ============================================================================
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `roles` | Role definitions | id, name, scope (PLATFORM/TENANT) |
+| `permissions` | Resource:action pairs | resource, action |
+| `role_permissions` | Role-permission mappings | role_id, permission_id |
+| `user_roles` | User role assignments | user_id, role_id, assigned_by |
+| `invitations` | User invitations | email, token, status, expires_at |
 
--- Role Definitions (Tenant-scoped)
-CREATE TABLE roles (
-    id VARCHAR(64) PRIMARY KEY,                -- tenant-admin, tenant-user, tenant-guest
-    name VARCHAR(100) NOT NULL UNIQUE,
-    description TEXT,
-    scope VARCHAR(32) NOT NULL CHECK (scope IN ('PLATFORM', 'TENANT')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+> **Migration file:** `auth-service/src/main/resources/db/migration/tenant/V1__authorization_schema.sql`
 
-CREATE INDEX idx_roles_scope ON roles(scope);
+#### Backend Service Tables (Example - Replace with Your Domain)
 
--- Permission Definitions (Resource:Action pairs)
-CREATE TABLE permissions (
-    id VARCHAR(64) PRIMARY KEY,
-    resource VARCHAR(50) NOT NULL,             -- entry, user, tenant, billing
-    action VARCHAR(50) NOT NULL,               -- create, read, update, delete, manage
-    description TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(resource, action)
-);
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `entries` | Example domain entity | title, content, created_by |
 
-CREATE INDEX idx_permissions_resource ON permissions(resource);
+> **Migration file:** `backend-service/src/main/resources/db/migration/tenant/V1__initial_schema.sql`
 
--- Role-Permission Mappings
-CREATE TABLE role_permissions (
-    role_id VARCHAR(64) NOT NULL,
-    permission_id VARCHAR(64) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (role_id, permission_id),
-    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_role_permissions_role ON role_permissions(role_id);
-CREATE INDEX idx_role_permissions_permission ON role_permissions(permission_id);
-
--- User-Role Assignments (NO tenant_id column - database itself is the tenant boundary)
-CREATE TABLE user_roles (
-    id BIGSERIAL PRIMARY KEY,
-    user_id VARCHAR(255) NOT NULL,             -- Cognito user ID (sub claim)
-    role_id VARCHAR(64) NOT NULL,
-    assigned_by VARCHAR(255),
-    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at TIMESTAMPTZ,
-    UNIQUE(user_id, role_id),
-    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT
-);
-
-CREATE INDEX idx_user_roles_user ON user_roles(user_id);
-
--- User Invitations
-CREATE TABLE invitations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) NOT NULL,
-    role_id VARCHAR(64) NOT NULL,
-    token VARCHAR(255) NOT NULL UNIQUE,
-    status VARCHAR(32) NOT NULL CHECK (status IN ('PENDING', 'ACCEPTED', 'EXPIRED', 'REVOKED')),
-    invited_by VARCHAR(255) NOT NULL,
-    expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT
-);
-
-CREATE INDEX idx_invitations_email ON invitations(email);
-CREATE INDEX idx_invitations_token ON invitations(token);
-CREATE INDEX idx_invitations_status ON invitations(status);
-
--- Updated_at trigger
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER update_roles_updated_at
-BEFORE UPDATE ON roles
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_invitations_updated_at
-BEFORE UPDATE ON invitations
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-```
-
-#### Backend Service Tables (in Tenant DB)
-
-```sql
--- ============================================================================
--- DOMAIN SCHEMA (Backend Service - REPLACE WITH YOUR DOMAIN)
--- Example: Entry entity
--- ============================================================================
-
-CREATE TABLE entries (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title VARCHAR(255) NOT NULL,
-    content TEXT,
-    created_by VARCHAR(255) NOT NULL,         -- User ID from X-User-Id header
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_entries_created_by ON entries(created_by);
-CREATE INDEX idx_entries_created_at ON entries(created_at DESC);
-
--- NOTE: No tenant_id column! The database itself provides tenant isolation.
--- All queries automatically scoped to this tenant's database.
-```
+**Key Design Principle:** No `tenant_id` column needed - database-per-tenant provides isolation.
 
 ---
 
@@ -1235,8 +1257,8 @@ frontend/
   - ALB, target groups
 
 ### Observability
-- **Logging:** JSON structured logs via Logback + ELK (future)
-- **Tracing:** OpenTelemetry + Zipkin
+- **Logging:** JSON structured logs via Logback (logstash-logback-encoder)
+- **Tracing:** Micrometer + Zipkin
 - **Metrics:** Prometheus + Grafana
 - **Monitoring:** AWS CloudWatch
 
@@ -1258,7 +1280,7 @@ Compute: AWS ECS Fargate or EKS
 Load Balancer: AWS ALB with SSL/TLS
 Database: RDS Multi-AZ with read replicas
 Cognito: AWS Cognito
-Cache: ElastiCache Redis (future)
+Cache: ElastiCache Redis (rate limiting, session)
 Storage: S3 for static assets
 CDN: CloudFront
 ```
@@ -1769,221 +1791,16 @@ Every request carries tenant context through headers:
 ## 📚 Additional Documentation
 
 - **[Implementation Guide](docs/tenant-onboarding/IMPLEMENTATION_GUIDE.md)** - Step-by-step setup
-- **[API Documentation](docs/api/)** - Service endpoints (future)
+- **[Roadmap](docs/ROADMAP.md)** - Future phases and feature plans
 - **[Terraform Guide](terraform/README.md)** - Infrastructure setup
-- **[Runbook](docs/runbook.md)** - Operations guide (future)
+- **[Status](docs/STATUS.md)** - Sprint tracking and current progress
 
 ---
 
-## 🔮 Implementation Roadmap
+**Questions?** This template is designed to be self-explanatory. Start with Gateway → Auth → Platform → Your Service.
 
-### ✅ Phase 1: Self-Service Signup Portal (COMPLETE)
+See **[ROADMAP.md](docs/ROADMAP.md)** for future phases and feature plans.
 
-**Status:** DONE - 2025-11-30
 
-**Features Delivered:**
-- ✅ Personal signup (B2C) with auto-verification
-- ✅ Organization signup (B2B) with admin creation
-- ✅ Database-per-tenant isolation
-- ✅ Automated tenant provisioning
-- ✅ Custom attributes (`custom:tenantId`, `custom:role`)
-- ✅ Immediate login post-signup
-
-**Known Limitations:**
-- ⚠️ Email verification bypassed (auto-verified for MVP)
-- ⚠️ No organization user management yet
-
----
-
-### ✅ Phase 2: Organization Admin Portal (COMPLETE)
-
-**Completed:** December 2025 (Phase 5 Weeks 1-4)
-
-**Implemented Features:**
-
-#### Week 1-2: User Management
-- ✅ **User Management** (`/admin/users`)
-  - Invite team members via email (invitation tokens)
-  - View user roster and invitation status
-  - Resend/revoke invitations
-  - Join organization flow for invited users
-
-#### Week 3: Role Management
-- ✅ **Role Management UI** (`/admin/roles`)
-  - View all available roles (Platform vs Tenant)
-  - Permission viewer component (resource:action matrix)
-  - Assign/update user roles
-  - Role-based access control enforcement
-
-#### Week 4: Dashboard & Settings
-- ✅ **Admin Dashboard** (`/admin/dashboard`)
-  - Stats cards: Total Users, Pending Invites, Admins, Current Tier
-  - Organization info display with copyable Tenant ID
-  - Quick actions panel (Invite User, Manage Roles, View Users)
-  - Real-time statistics from Auth Service
-- ✅ **Organization Settings** (`/admin/settings/organization`)
-  - Editable company profile form (name, industry, size, website, logo URL)
-  - Read-only fields: Tenant ID, Tier, Organization Type
-  - Form validation with error messages
-  - Integration with Platform Service organization APIs
-
-**Technical Implementation:**
-
-**Backend (Auth Service):**
-- ✅ `InvitationController` - User invitation management
-- ✅ `UserRoleController` - Role/permission management
-- ✅ `UserStatsController` - Aggregated user statistics
-- ✅ `PermissionController` - Permission listing
-
-**Backend (Platform Service):**
-- ✅ `OrganizationController` - Organization profile CRUD
-- ✅ `OrganizationService` - Business logic for organization management
-- ✅ Extended `Tenant` entity with organization fields
-
-**Frontend (Angular + PrimeNG):**
-- ✅ `UserListComponent`, `InviteUserDialogComponent` (user management)
-- ✅ `RoleListComponent`, `PermissionViewerComponent` (role management)
-- ✅ `DashboardComponent` (admin overview with stats)
-- ✅ `OrganizationSettingsComponent` (company profile editor)
-- ✅ Services: `InvitationService`, `RoleService`, `OrganizationService`, `UserStatsService`
-- ✅ Unit tests for all admin components
-- ✅ `AdminGuard` for role-based route protection
-
-**Database:**
-- ✅ Flyway migration V2: Added organization profile fields to `tenant` table
-
-**Design Decisions Made:**
-1. ✅ Invitation flow: Email link with secure token
-2. ✅ Role model: Predefined roles (tenant-admin, tenant-user, super-admin)
-3. ✅ Dashboard aggregates data from Platform Service (org info) and Auth Service (user stats)
-4. ✅ Organization settings use reactive forms with validation
-5. 🔜 User capacity limits per organization tier (enforcement not implemented)
-
----
-
-### 📅 Phase 3: Enterprise SSO Integration
-
-**Target:** Q2 2026
-
-**Features:**
-- [ ] **SAML 2.0 Configuration UI**
-  - Upload Identity Provider metadata
-  - Configure attribute mappings
-  - Test SSO connection
-- [ ] **OIDC Provider Support**
-  - Azure AD integration
-  - Okta connector
-  - Ping Identity support
-- [ ] **Just-In-Time (JIT) Provisioning**
-  - Auto-create users on first SSO login
-  - Sync user attributes from IDP
-- [ ] **Manual org provisioning workflow**
-  - Platform admin approval process
-  - Enterprise tier activation
-
-**Infrastructure:**
-- Cognito Identity Provider configuration
-- SAML attribute mapping Lambda
-- Admin approval workflow
-
----
-
-### 🔐 Phase 4: Native Email Verification
-
-**Target:** Q2 2026
-
-**Goal:** Replace auto-verification with Cognito native verification
-
-**Approach:**
-- Use `signUp` client API for initial registration
-- Trigger `post_confirmation` Lambda after user verifies email
-- Lambda sets `custom:tenantId` and `custom:role` attributes
-- Update frontend to handle verification flow
-
-**Components:**
-- Lambda function: `post-confirmation-handler`
-- Update `SignupController` to use `signUp` API
-- Frontend verification component (already built)
-- Terraform for Lambda trigger
-
----
-
-### 🎯 Phase 5: Fine-Grained Permissions
-
-**Target:** Q3 2026
-
-**Features:**
-- [ ] **Permission Engine** in Auth Service
-  - Resource-based permissions
-  - Action-level authorization
-  - Permission inheritance
-- [ ] **Permission Management UI**
-  - Define custom permissions
-  - Create permission sets
-  - Assign to roles
-- [ ] **Policy Evaluation**
-  - Real-time permission checks
-  - Cached permission resolution
-  - Audit logging
-
-**Technologies:**
-- Casbin / Open Policy Agent (OPA)
-- Redis cache for permissions
-- Policy definition language
-
----
-
-### 🚀 Phase 6: Scale & Performance
-
-**Target:** Q3-Q4 2026
-
-**Infrastructure:**
-- [ ] **Redis Integration** - Distributed caching for sessions & permissions
-- [ ] **Async Tenant Provisioning** - Queue-based (SQS) for large orgs
-- [ ] **Database Sharding** - Multiple RDS instances
-- [ ] **Tenant Migration Tools** - Move tenants between DB instances
-- [ ] **Multi-Region Support** - Data residency compliance
-- [ ] **CDN Integration** - CloudFront for static assets
-- [ ] **Auto-scaling** - ECS/EKS for service instances
-
----
-
-### 🔬 Phase 7: Advanced Features
-
-**Target:** 2027
-
-**Features:**
-- [ ] **GraphQL API** - Alternative to REST
-- [ ] **Event-Driven Architecture** - Kafka/SNS for async workflows
-- [ ] **Audit Log Service** - Compliance tracking
-- [ ] **Billing Engine** - Usage-based pricing
-- [ ] **API Rate Limiting** - Per-tenant quotas
-- [ ] **Tenant Analytics** - Usage dashboards
-- [ ] **White-Label Support** - Custom branding per tenant
-- [ ] **Mobile SDKs** - iOS/Android native auth
-
----
-
-### 🧪 Continuous Improvements (Ongoing)
-
-**Testing:**
-- [ ] Comprehensive integration test suite
-- [ ] Load testing framework
-- [ ] Chaos engineering practices
-- [ ] Security penetration testing
-
-**Observability:**
-- [ ] Distributed tracing (X-Ray)
-- [ ] Advanced metrics dashboards
-- [ ] Alert automation
-- [ ] SLA monitoring
-
-**DevOps:**
-- [ ] Blue-green deployments
-- [ ] Feature flags system
-- [ ] Automated rollback triggers
-- [ ] Database backup automation
-
----
 
 **Questions?** This template is designed to be self-explanatory. Start with Gateway → Auth → Platform → Your Service.

@@ -14,8 +14,11 @@ import java.util.List;
 import java.util.UUID;
 
 import com.learning.common.infra.security.RequirePermission;
-import com.learning.common.infra.tenant.TenantContext;
 
+/**
+ * Controller for managing invitations.
+ * Tenant context is implicit via TenantDataSourceRouter.
+ */
 @RestController
 @RequestMapping("/api/v1/invitations")
 @RequiredArgsConstructor
@@ -30,34 +33,27 @@ public class InvitationController {
             @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody InvitationRequest request) {
 
-        String tenantId = TenantContext.getCurrentTenant();
-
-        InvitationResponse response = invitationService.createInvitation(tenantId, userId, request);
+        InvitationResponse response = invitationService.createInvitation(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping
     @RequirePermission(resource = "user", action = "read")
     public ResponseEntity<List<InvitationResponse>> getInvitations() {
-        String tenantId = TenantContext.getCurrentTenant();
-        return ResponseEntity.ok(invitationService.getInvitations(tenantId));
+        return ResponseEntity.ok(invitationService.getInvitations());
     }
 
     @DeleteMapping("/{id}")
-    @RequirePermission(resource = "user", action = "invite") // Revoking is part of invite management
-    public ResponseEntity<Void> revokeInvitation(
-            @PathVariable UUID id) {
-        String tenantId = TenantContext.getCurrentTenant();
-        invitationService.revokeInvitation(tenantId, id);
+    @RequirePermission(resource = "user", action = "invite")
+    public ResponseEntity<Void> revokeInvitation(@PathVariable UUID id) {
+        invitationService.revokeInvitation(id);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/resend")
     @RequirePermission(resource = "user", action = "invite")
-    public ResponseEntity<Void> resendInvitation(
-            @PathVariable UUID id) {
-        String tenantId = TenantContext.getCurrentTenant();
-        invitationService.resendInvitation(tenantId, id);
+    public ResponseEntity<Void> resendInvitation(@PathVariable UUID id) {
+        invitationService.resendInvitation(id);
         return ResponseEntity.ok().build();
     }
 }

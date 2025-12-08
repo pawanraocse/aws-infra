@@ -10,11 +10,12 @@ import java.util.UUID;
 
 /**
  * Entity representing a pending user invitation to an organization.
+ * Tenant isolation is handled via TenantDataSourceRouter.
  */
 @Entity
 @Table(name = "invitations", indexes = {
         @Index(name = "idx_invitations_token", columnList = "token"),
-        @Index(name = "idx_invitations_tenant_email", columnList = "tenant_id, email", unique = true)
+        @Index(name = "idx_invitations_email", columnList = "email")
 })
 @Getter
 @Setter
@@ -26,9 +27,6 @@ public class Invitation {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
-
-    @Column(name = "tenant_id", nullable = false, length = 64)
-    private String tenantId;
 
     @Column(nullable = false, length = 255)
     private String email;

@@ -38,10 +38,17 @@ public class SecurityConfig {
                                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                                 .authorizeExchange(exchange -> exchange
                                                 .pathMatchers(
-                                                                "/auth/login/**", "/auth/signup/**", "/auth/oauth2/**",
-                                                                "/auth/tokens", "/auth/logout", "/auth/.well-known/**",
-                                                                "/auth/logged-out", "/auth/verify",
-                                                                "/auth/resend-verification",
+                                                                // Public auth endpoints (no JWT required)
+                                                                "/auth/api/v1/auth/login",
+                                                                "/auth/api/v1/auth/signup/**",
+                                                                "/auth/api/v1/auth/tokens", "/auth/api/v1/auth/logout",
+                                                                "/auth/api/v1/auth/verify",
+                                                                "/auth/api/v1/auth/resend-verification",
+                                                                "/auth/.well-known/**", "/auth/oauth2/**",
+                                                                // Invitation acceptance (public)
+                                                                "/auth/api/v1/invitations/validate",
+                                                                "/auth/api/v1/invitations/accept",
+                                                                // System endpoints
                                                                 "/actuator/**", "/fallback")
                                                 .permitAll()
                                                 .anyExchange().authenticated())

@@ -25,7 +25,7 @@ import java.time.Instant;
 
 @Slf4j
 @RestController
-@RequestMapping("/")
+@RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController {
     private final AuthService authService;

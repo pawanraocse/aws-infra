@@ -9,6 +9,7 @@ import com.learning.authservice.invitation.dto.InvitationRequest;
 import com.learning.authservice.invitation.dto.InvitationResponse;
 import com.learning.authservice.invitation.repository.InvitationRepository;
 import com.learning.authservice.service.EmailService;
+import com.learning.common.infra.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,6 +24,10 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Service for managing user invitations.
+ * Tenant isolation is handled via TenantDataSourceRouter.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -31,7 +36,7 @@ public class InvitationServiceImpl implements InvitationService {
     private final InvitationRepository invitationRepository;
     private final RoleRepository roleRepository;
     private final EmailService emailService;
-    private final UserRoleRepository userRoleRepository; // To check if user already in tenant
+    private final UserRoleRepository userRoleRepository;
 
     @Value("${app.invitation.expiration-hours:48}")
     private int expirationHours;
@@ -41,8 +46,9 @@ public class InvitationServiceImpl implements InvitationService {
 
     @Override
     @Transactional
-    public InvitationResponse createInvitation(String tenantId, String invitedBy, InvitationRequest request) {
-        log.info("Creating invitation for email={} in tenant={} by={}", request.getEmail(), tenantId, invitedBy);
+    public InvitationResponse createInvitation(String invitedBy, InvitationRequest request) {
+        String tenantId = TenantContext.getCurrentTenant();
+        log.info("Creating invitation for email={} by={}", request.getEmail(), invitedBy);
 
         // 1. Validate Role
         Role role = roleRepository.findById(request.getRoleId())
@@ -52,26 +58,19 @@ public class InvitationServiceImpl implements InvitationService {
             throw new IllegalArgumentException("Cannot invite users with PLATFORM scope roles");
         }
 
-        // 2. Check if user already exists in tenant (TODO: Need to check
-        // UserRoleRepository or Cognito)
-        // For now, we assume if they have a role in this tenant, they are already a
-        // member.
-        // This logic might need refinement to check Cognito user existence globally.
-
-        // 3. Check for existing pending invitation
-        invitationRepository.findByTenantIdAndEmail(tenantId, request.getEmail())
+        // 2. Check for existing pending invitation
+        invitationRepository.findByEmail(request.getEmail())
                 .ifPresent(existing -> {
                     if (existing.getStatus() == InvitationStatus.PENDING) {
                         throw new IllegalStateException("Active invitation already exists for this email");
                     }
                 });
 
-        // 4. Generate Token
+        // 3. Generate Token
         String token = generateSecureToken();
 
-        // 5. Create Invitation
+        // 4. Create Invitation
         Invitation invitation = Invitation.builder()
-                .tenantId(tenantId)
                 .email(request.getEmail())
                 .roleId(request.getRoleId())
                 .token(token)
@@ -82,9 +81,8 @@ public class InvitationServiceImpl implements InvitationService {
 
         invitation = invitationRepository.save(invitation);
 
-        // 6. Send Email
+        // 5. Send Email
         String inviteLink = frontendUrl + "/auth/join?token=" + token;
-        // In a real app, we'd fetch the tenant name. For now, using tenantId.
         emailService.sendInvitationEmail(request.getEmail(), inviteLink, tenantId);
 
         return mapToResponse(invitation);
@@ -92,21 +90,17 @@ public class InvitationServiceImpl implements InvitationService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<InvitationResponse> getInvitations(String tenantId) {
-        return invitationRepository.findByTenantId(tenantId).stream()
+    public List<InvitationResponse> getInvitations() {
+        return invitationRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
     @Override
     @Transactional
-    public void revokeInvitation(String tenantId, UUID invitationId) {
+    public void revokeInvitation(UUID invitationId) {
         Invitation invitation = invitationRepository.findById(invitationId)
                 .orElseThrow(() -> new IllegalArgumentException("Invitation not found"));
-
-        if (!invitation.getTenantId().equals(tenantId)) {
-            throw new SecurityException("Invitation does not belong to this tenant");
-        }
 
         if (invitation.getStatus() != InvitationStatus.PENDING) {
             throw new IllegalStateException("Cannot revoke invitation with status: " + invitation.getStatus());
@@ -119,13 +113,10 @@ public class InvitationServiceImpl implements InvitationService {
 
     @Override
     @Transactional
-    public void resendInvitation(String tenantId, UUID invitationId) {
+    public void resendInvitation(UUID invitationId) {
+        String tenantId = TenantContext.getCurrentTenant();
         Invitation invitation = invitationRepository.findById(invitationId)
                 .orElseThrow(() -> new IllegalArgumentException("Invitation not found"));
-
-        if (!invitation.getTenantId().equals(tenantId)) {
-            throw new SecurityException("Invitation does not belong to this tenant");
-        }
 
         if (invitation.getStatus() != InvitationStatus.PENDING) {
             throw new IllegalStateException("Cannot resend invitation with status: " + invitation.getStatus());
@@ -164,12 +155,7 @@ public class InvitationServiceImpl implements InvitationService {
     public void acceptInvitation(String token, String password, String name) {
         Invitation invitation = validateInvitation(token);
 
-        // TODO: Implement user creation/linking logic here
-        // This requires interacting with Cognito (AuthService) and UserRoleRepository.
-        // For Week 1, we might just mark it as ACCEPTED and stub the user creation.
-        // Or we should inject AuthService to handle the signup/role assignment.
-
-        log.info("Accepting invitation for email={} in tenant={}", invitation.getEmail(), invitation.getTenantId());
+        log.info("Accepting invitation for email={}", invitation.getEmail());
 
         invitation.setStatus(InvitationStatus.ACCEPTED);
         invitationRepository.save(invitation);
@@ -185,7 +171,6 @@ public class InvitationServiceImpl implements InvitationService {
     private InvitationResponse mapToResponse(Invitation invitation) {
         return InvitationResponse.builder()
                 .id(invitation.getId())
-                .tenantId(invitation.getTenantId())
                 .email(invitation.getEmail())
                 .roleId(invitation.getRoleId())
                 .status(invitation.getStatus())

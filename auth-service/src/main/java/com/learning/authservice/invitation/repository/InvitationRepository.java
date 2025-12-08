@@ -9,16 +9,20 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Repository for Invitation entity.
+ * Tenant isolation is handled via TenantDataSourceRouter.
+ */
 @Repository
 public interface InvitationRepository extends JpaRepository<Invitation, UUID> {
 
     Optional<Invitation> findByToken(String token);
 
-    List<Invitation> findByTenantId(String tenantId);
+    Optional<Invitation> findByEmail(String email);
 
-    Optional<Invitation> findByTenantIdAndEmail(String tenantId, String email);
+    List<Invitation> findByStatus(InvitationStatus status);
 
-    List<Invitation> findByTenantIdAndStatus(String tenantId, InvitationStatus status);
+    long countByStatus(InvitationStatus status);
 
-    long countByTenantIdAndStatus(String tenantId, InvitationStatus status);
+    List<Invitation> findAll();
 }

@@ -12,65 +12,58 @@ import java.util.Optional;
 
 /**
  * Repository for UserRole entity.
+ * Note: Tenant isolation is handled via TenantDataSourceRouter - all queries
+ * automatically run against the current tenant's database.
  */
 @Repository
 public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
 
         /**
-         * Find all roles for a user in a specific tenant
-         */
-        List<UserRole> findByUserIdAndTenantId(String userId, String tenantId);
-
-        /**
-         * Find all roles for a user across all tenants
+         * Find all roles for a user
          */
         List<UserRole> findByUserId(String userId);
 
         /**
-         * Find all users with a specific role in a tenant
+         * Find all users with a specific role
          */
-        List<UserRole> findByTenantIdAndRoleId(String tenantId, String roleId);
+        List<UserRole> findByRoleId(String roleId);
 
         /**
          * Find a specific user role assignment
          */
-        Optional<UserRole> findByUserIdAndTenantIdAndRoleId(String userId, String tenantId, String roleId);
+        Optional<UserRole> findByUserIdAndRoleId(String userId, String roleId);
 
         /**
-         * Check if user has a specific role in a tenant
+         * Check if user has a specific role
          */
-        boolean existsByUserIdAndTenantIdAndRoleId(String userId, String tenantId, String roleId);
+        boolean existsByUserIdAndRoleId(String userId, String roleId);
 
         /**
-         * Find all active (non-expired) roles for a user in a tenant
+         * Find all active (non-expired) roles for a user
          */
         @Query("""
                         SELECT ur FROM UserRole ur
                         WHERE ur.userId = :userId
-                        AND ur.tenantId = :tenantId
                         AND (ur.expiresAt IS NULL OR ur.expiresAt > :now)
                         """)
-        List<UserRole> findActiveRolesByUserIdAndTenantId(
+        List<UserRole> findActiveRolesByUserId(
                         @Param("userId") String userId,
-                        @Param("tenantId") String tenantId,
                         @Param("now") Instant now);
 
         /**
-         * Delete all role assignments for a user in a tenant
+         * Delete all role assignments for a user
          */
-        void deleteByUserIdAndTenantId(String userId, String tenantId);
+        void deleteByUserId(String userId);
 
         /**
          * Delete a specific role assignment
          */
-        void deleteByUserIdAndTenantIdAndRoleId(String userId, String tenantId, String roleId);
+        void deleteByUserIdAndRoleId(String userId, String roleId);
 
         /**
-         * Count users by role for a tenant.
+         * Count users by role.
          * Returns list of [roleId, count] pairs for statistics.
          */
-        @Query("SELECT ur.roleId, COUNT(DISTINCT ur.userId) FROM UserRole ur " +
-                        "WHERE ur.tenantId = :tenantId " +
-                        "GROUP BY ur.roleId")
-        List<Object[]> countUsersByRoleForTenant(@Param("tenantId") String tenantId);
+        @Query("SELECT ur.roleId, COUNT(DISTINCT ur.userId) FROM UserRole ur GROUP BY ur.roleId")
+        List<Object[]> countUsersByRole();
 }

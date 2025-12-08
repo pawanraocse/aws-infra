@@ -7,15 +7,19 @@ import com.learning.authservice.invitation.dto.InvitationResponse;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Service for managing user invitations.
+ * Tenant isolation is handled via TenantDataSourceRouter.
+ */
 public interface InvitationService {
 
-    InvitationResponse createInvitation(String tenantId, String invitedBy, InvitationRequest request);
+    InvitationResponse createInvitation(String invitedBy, InvitationRequest request);
 
-    List<InvitationResponse> getInvitations(String tenantId);
+    List<InvitationResponse> getInvitations();
 
-    void revokeInvitation(String tenantId, UUID invitationId);
+    void revokeInvitation(UUID invitationId);
 
-    void resendInvitation(String tenantId, UUID invitationId);
+    void resendInvitation(UUID invitationId);
 
     Invitation validateInvitation(String token);
 

@@ -158,7 +158,7 @@ export class VerifyEmailComponent implements OnInit {
       tenantId: this.tenantId
     };
 
-    this.http.post(`${environment.apiUrl}/auth/signup/verify`, payload)
+    this.http.post(`${environment.apiUrl}/auth/api/v1/auth/signup/verify`, payload)
       .subscribe({
         next: (response: any) => {
           this.verifying = false;
@@ -184,7 +184,7 @@ export class VerifyEmailComponent implements OnInit {
     this.resending = true;
     this.errorMessage = '';
 
-    this.http.post(`${environment.apiUrl}/auth/resend-verification`, { email: this.email })
+    this.http.post(`${environment.apiUrl}/auth/api/v1/auth/resend-verification`, { email: this.email })
       .subscribe({
         next: () => {
           this.resending = false;

@@ -140,7 +140,7 @@ export class SignupOrganizationComponent {
     this.loading.set(true);
     this.error.set(null);
 
-    this.http.post(`${environment.apiUrl}/auth/signup/organization`, this.signupForm.value)
+    this.http.post(`${environment.apiUrl}/auth/api/v1/auth/signup/organization`, this.signupForm.value)
       .subscribe({
         next: () => {
           this.loading.set(false);

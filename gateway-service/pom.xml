@@ -63,11 +63,10 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
-        <!-- Redis for rate limiting (optional) -->
+        <!-- Redis for rate limiting -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
-            <optional>true</optional>
         </dependency>
 
         <!-- Lombok -->

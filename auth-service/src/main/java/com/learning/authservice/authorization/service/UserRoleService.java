@@ -15,7 +15,8 @@ import java.util.List;
 
 /**
  * Service for managing user role assignments.
- * Handles assigning and revoking roles for users in tenants.
+ * Tenant isolation is handled via TenantDataSourceRouter - all operations
+ * automatically run against the current tenant's database.
  */
 @Service
 @RequiredArgsConstructor
@@ -27,46 +28,35 @@ public class UserRoleService {
     private final RoleRepository roleRepository;
 
     /**
-     * Assign a role to a user in a specific tenant.
+     * Assign a role to a user.
+     * Tenant context is implicit via TenantDataSourceRouter.
      *
      * @param userId     Cognito user ID
-     * @param tenantId   Tenant ID
      * @param roleId     Role ID (e.g., "tenant-admin", "tenant-user")
      * @param assignedBy User ID of the admin performing the assignment
      */
-    @CacheEvict(value = { "userPermissions", "userAllPermissions" }, key = "#userId + ':' + #tenantId")
-    public void assignRole(String userId, String tenantId, String roleId, String assignedBy) {
-        log.info("Assigning role {} to user {} in tenant {} by {}", roleId, userId, tenantId, assignedBy);
+    @CacheEvict(value = { "userPermissions", "userAllPermissions" }, key = "#userId")
+    public void assignRole(String userId, String roleId, String assignedBy) {
+        log.info("Assigning role {} to user {} by {}", roleId, userId, assignedBy);
 
         // 1. Validate role exists
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleId));
 
-        // 2. Validate scope
-        if (role.getScope() == Role.RoleScope.PLATFORM && !"super-admin".equals(roleId)) {
-            // Only specific platform roles might be assignable via this API
-            // For now, we allow it but log a warning if it's a platform role assigned in a
-            // tenant context
-            // (Though our schema enforces tenant_id in user_roles, so platform roles are
-            // effectively scoped to the tenant in this table
-            // unless we treat tenant_id='system' for platform roles. For simplicity, we
-            // assume all user_roles are tenant-scoped for now,
-            // except maybe super-admin which might apply across all if logic permits, but
-            // usually super-admin is a specific user attribute or a role in a 'system'
-            // tenant).
-            log.debug("Assigning platform scope role {} within tenant {}", roleId, tenantId);
+        // 2. Log scope info
+        if (role.getScope() == Role.RoleScope.PLATFORM) {
+            log.debug("Assigning platform scope role {}", roleId);
         }
 
         // 3. Check if assignment already exists
-        if (userRoleRepository.existsByUserIdAndTenantIdAndRoleId(userId, tenantId, roleId)) {
-            log.warn("User {} already has role {} in tenant {}", userId, roleId, tenantId);
+        if (userRoleRepository.existsByUserIdAndRoleId(userId, roleId)) {
+            log.warn("User {} already has role {}", userId, roleId);
             return;
         }
 
         // 4. Create assignment
         UserRole userRole = UserRole.builder()
                 .userId(userId)
-                .tenantId(tenantId)
                 .roleId(roleId)
                 .assignedBy(assignedBy)
                 .build();
@@ -76,47 +66,45 @@ public class UserRoleService {
     }
 
     /**
-     * Revoke a role from a user in a specific tenant.
+     * Revoke a role from a user.
      *
-     * @param userId   Cognito user ID
-     * @param tenantId Tenant ID
-     * @param roleId   Role ID
+     * @param userId Cognito user ID
+     * @param roleId Role ID
      */
-    @CacheEvict(value = { "userPermissions", "userAllPermissions" }, key = "#userId + ':' + #tenantId")
-    public void revokeRole(String userId, String tenantId, String roleId) {
-        log.info("Revoking role {} from user {} in tenant {}", roleId, userId, tenantId);
+    @CacheEvict(value = { "userPermissions", "userAllPermissions" }, key = "#userId")
+    public void revokeRole(String userId, String roleId) {
+        log.info("Revoking role {} from user {}", roleId, userId);
 
-        if (!userRoleRepository.existsByUserIdAndTenantIdAndRoleId(userId, tenantId, roleId)) {
-            log.warn("User {} does not have role {} in tenant {}", userId, roleId, tenantId);
+        if (!userRoleRepository.existsByUserIdAndRoleId(userId, roleId)) {
+            log.warn("User {} does not have role {}", userId, roleId);
             return;
         }
 
-        userRoleRepository.deleteByUserIdAndTenantIdAndRoleId(userId, tenantId, roleId);
+        userRoleRepository.deleteByUserIdAndRoleId(userId, roleId);
         log.info("Role revoked successfully");
     }
 
     /**
-     * Get all active roles for a user in a tenant.
+     * Get all active roles for a user.
      *
-     * @param userId   Cognito user ID
-     * @param tenantId Tenant ID
+     * @param userId Cognito user ID
      * @return List of UserRole entities
      */
     @Transactional(readOnly = true)
-    public List<UserRole> getUserRoles(String userId, String tenantId) {
-        return userRoleRepository.findActiveRolesByUserIdAndTenantId(userId, tenantId, Instant.now());
+    public List<UserRole> getUserRoles(String userId) {
+        return userRoleRepository.findActiveRolesByUserId(userId, Instant.now());
     }
 
     /**
      * Update a user's role by revoking existing roles and assigning the new one.
      * Assumes single-role-per-user model for this operation.
      */
-    @CacheEvict(value = { "userPermissions", "userAllPermissions" }, key = "#userId + ':' + #tenantId")
-    public void updateUserRole(String userId, String tenantId, String newRoleId, String assignedBy) {
-        log.info("Updating role for user {} in tenant {} to {}", userId, tenantId, newRoleId);
+    @CacheEvict(value = { "userPermissions", "userAllPermissions" }, key = "#userId")
+    public void updateUserRole(String userId, String newRoleId, String assignedBy) {
+        log.info("Updating role for user {} to {}", userId, newRoleId);
 
         // 1. Get existing roles
-        List<UserRole> existingRoles = getUserRoles(userId, tenantId);
+        List<UserRole> existingRoles = getUserRoles(userId);
 
         // 2. Revoke all existing roles
         for (UserRole role : existingRoles) {
@@ -124,12 +112,12 @@ public class UserRoleService {
             if (role.getRoleId().equals(newRoleId)) {
                 continue;
             }
-            revokeRole(userId, tenantId, role.getRoleId());
+            revokeRole(userId, role.getRoleId());
         }
 
         // 3. Assign new role (if not already present)
         if (existingRoles.stream().noneMatch(r -> r.getRoleId().equals(newRoleId))) {
-            assignRole(userId, tenantId, newRoleId, assignedBy);
+            assignRole(userId, newRoleId, assignedBy);
         }
     }
 

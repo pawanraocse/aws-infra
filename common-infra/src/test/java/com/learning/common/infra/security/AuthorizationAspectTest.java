@@ -1,6 +1,5 @@
 package com.learning.common.infra.security;
 
-import com.learning.common.infra.tenant.TenantContext;
 import jakarta.servlet.http.HttpServletRequest;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.junit.jupiter.api.AfterEach;
@@ -34,7 +33,6 @@ class AuthorizationAspectTest {
     private AuthorizationAspect authorizationAspect;
 
     private final String userId = "user-123";
-    private final String tenantId = "tenant-1";
     private final String resource = "entry";
     private final String action = "read";
 
@@ -48,14 +46,13 @@ class AuthorizationAspectTest {
     @AfterEach
     void tearDown() {
         RequestContextHolder.resetRequestAttributes();
-        TenantContext.clear();
     }
 
     @Test
     void checkPermission_WhenAuthorized_Proceeds() throws Throwable {
         // Setup Context
         when(request.getHeader("X-User-Id")).thenReturn(userId);
-        TenantContext.setCurrentTenant(tenantId);
+        when(request.getHeader("X-Role")).thenReturn("tenant-user");
 
         // Setup Annotation
         RequirePermission annotation = mock(RequirePermission.class);
@@ -63,7 +60,7 @@ class AuthorizationAspectTest {
         lenient().when(annotation.action()).thenReturn(action);
 
         // Setup Permission Check
-        when(permissionEvaluator.hasPermission(userId, tenantId, resource, action)).thenReturn(true);
+        when(permissionEvaluator.hasPermission(userId, resource, action)).thenReturn(true);
 
         // Execute
         authorizationAspect.checkPermission(joinPoint, annotation);
@@ -76,7 +73,7 @@ class AuthorizationAspectTest {
     void checkPermission_WhenUnauthorized_ThrowsException() throws Throwable {
         // Setup Context
         when(request.getHeader("X-User-Id")).thenReturn(userId);
-        TenantContext.setCurrentTenant(tenantId);
+        when(request.getHeader("X-Role")).thenReturn("tenant-user");
 
         // Setup Annotation
         RequirePermission annotation = mock(RequirePermission.class);
@@ -84,7 +81,7 @@ class AuthorizationAspectTest {
         lenient().when(annotation.action()).thenReturn(action);
 
         // Setup Permission Check
-        when(permissionEvaluator.hasPermission(userId, tenantId, resource, action)).thenReturn(false);
+        when(permissionEvaluator.hasPermission(userId, resource, action)).thenReturn(false);
 
         // Execute & Verify
         assertThrows(AccessDeniedException.class, () -> authorizationAspect.checkPermission(joinPoint, annotation));
@@ -93,10 +90,26 @@ class AuthorizationAspectTest {
     }
 
     @Test
-    void checkPermission_WhenNoTenantContext_ThrowsException() throws Throwable {
+    void checkPermission_WhenSuperAdmin_Proceeds() throws Throwable {
         // Setup Context
         when(request.getHeader("X-User-Id")).thenReturn(userId);
-        TenantContext.clear(); // No tenant
+        when(request.getHeader("X-Role")).thenReturn("super-admin");
+
+        // Setup Annotation
+        RequirePermission annotation = mock(RequirePermission.class);
+
+        // Execute
+        authorizationAspect.checkPermission(joinPoint, annotation);
+
+        // Verify - should bypass permission check for super-admin
+        verify(joinPoint).proceed();
+        verify(permissionEvaluator, never()).hasPermission(any(), any(), any());
+    }
+
+    @Test
+    void checkPermission_WhenNoUser_ThrowsException() throws Throwable {
+        // Setup Context - no user
+        when(request.getHeader("X-User-Id")).thenReturn(null);
 
         // Setup Annotation
         RequirePermission annotation = mock(RequirePermission.class);

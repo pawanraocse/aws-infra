@@ -60,7 +60,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                   "maxUsers": 50
                                 }
                                 """;
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -87,7 +87,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 }
                                 """;
                 // First succeeds
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -96,7 +96,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .content(body))
                                 .andExpect(status().isOk());
                 // Second should conflict
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -129,7 +129,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                   "maxUsers": 50
                                 }
                                 """;
-                var mvcResult = mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                var mvcResult = mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -161,7 +161,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                   "slaTier": ""
                                 }
                                 """;
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -185,7 +185,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                   "maxUsers": 50
                                 }
                                 """;
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -194,7 +194,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .content(body))
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.id").value("failretry"));
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants/failretry/retry-migration")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants/failretry/retry-migration")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -217,7 +217,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                   "maxUsers": 50
                                 }
                                 """;
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -226,7 +226,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 .content(body))
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.status").value("ACTIVE"));
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants/transitid/retry-migration")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants/transitid/retry-migration")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -246,7 +246,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                   "slaTier": "STANDARD"
                                 }
                                 """;
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -267,7 +267,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                   "slaTier": ""
                                 }
                                 """;
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -295,7 +295,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 }
                                 """;
 
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -360,7 +360,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
         @Test
         @DisplayName("Retry migration for non-existent tenant should return 404")
         void retryMigration_nonExistentTenant() throws Exception {
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants/notfound/retry-migration")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants/notfound/retry-migration")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -379,7 +379,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                   "slaTier": "STANDARD"
                                 }
                                 """;
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -402,7 +402,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                   "slaTier": "STANDARD"
                                 }
                                 """, longId, longName);
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")
@@ -423,7 +423,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                   "slaTier": "   "
                                 }
                                 """;
-                mockMvc.perform(post(CONTEXT_PATH + "/api/tenants")
+                mockMvc.perform(post(CONTEXT_PATH + "/api/v1/tenants")
                                 .contextPath(CONTEXT_PATH)
                                 .header("X-User-Id", "admin")
                                 .header("X-Tenant-Id", "system")

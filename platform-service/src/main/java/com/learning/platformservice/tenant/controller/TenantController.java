@@ -15,7 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/tenants")
+@RequestMapping("/api/v1/tenants")
 @Slf4j
 public class TenantController {
 

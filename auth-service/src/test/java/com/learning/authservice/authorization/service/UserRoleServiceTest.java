@@ -29,7 +29,6 @@ class UserRoleServiceTest {
     private UserRoleService userRoleService;
 
     private final String userId = "user-123";
-    private final String tenantId = "tenant-1";
     private final String roleId = "tenant-admin";
     private final String assignedBy = "admin-user";
 
@@ -37,9 +36,9 @@ class UserRoleServiceTest {
     void assignRole_WhenRoleExistsAndNotAssigned_SavesAssignment() {
         Role role = Role.builder().id(roleId).scope(Role.RoleScope.TENANT).build();
         when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
-        when(userRoleRepository.existsByUserIdAndTenantIdAndRoleId(userId, tenantId, roleId)).thenReturn(false);
+        when(userRoleRepository.existsByUserIdAndRoleId(userId, roleId)).thenReturn(false);
 
-        userRoleService.assignRole(userId, tenantId, roleId, assignedBy);
+        userRoleService.assignRole(userId, roleId, assignedBy);
 
         verify(userRoleRepository).save(any(UserRole.class));
     }
@@ -49,7 +48,7 @@ class UserRoleServiceTest {
         when(roleRepository.findById(roleId)).thenReturn(Optional.empty());
 
         assertThrows(IllegalArgumentException.class,
-                () -> userRoleService.assignRole(userId, tenantId, roleId, assignedBy));
+                () -> userRoleService.assignRole(userId, roleId, assignedBy));
 
         verify(userRoleRepository, never()).save(any());
     }
@@ -58,28 +57,28 @@ class UserRoleServiceTest {
     void assignRole_WhenAssignmentExists_DoesNothing() {
         Role role = Role.builder().id(roleId).scope(Role.RoleScope.TENANT).build();
         when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
-        when(userRoleRepository.existsByUserIdAndTenantIdAndRoleId(userId, tenantId, roleId)).thenReturn(true);
+        when(userRoleRepository.existsByUserIdAndRoleId(userId, roleId)).thenReturn(true);
 
-        userRoleService.assignRole(userId, tenantId, roleId, assignedBy);
+        userRoleService.assignRole(userId, roleId, assignedBy);
 
         verify(userRoleRepository, never()).save(any());
     }
 
     @Test
     void revokeRole_WhenAssignmentExists_DeletesAssignment() {
-        when(userRoleRepository.existsByUserIdAndTenantIdAndRoleId(userId, tenantId, roleId)).thenReturn(true);
+        when(userRoleRepository.existsByUserIdAndRoleId(userId, roleId)).thenReturn(true);
 
-        userRoleService.revokeRole(userId, tenantId, roleId);
+        userRoleService.revokeRole(userId, roleId);
 
-        verify(userRoleRepository).deleteByUserIdAndTenantIdAndRoleId(userId, tenantId, roleId);
+        verify(userRoleRepository).deleteByUserIdAndRoleId(userId, roleId);
     }
 
     @Test
     void revokeRole_WhenAssignmentDoesNotExist_DoesNothing() {
-        when(userRoleRepository.existsByUserIdAndTenantIdAndRoleId(userId, tenantId, roleId)).thenReturn(false);
+        when(userRoleRepository.existsByUserIdAndRoleId(userId, roleId)).thenReturn(false);
 
-        userRoleService.revokeRole(userId, tenantId, roleId);
+        userRoleService.revokeRole(userId, roleId);
 
-        verify(userRoleRepository, never()).deleteByUserIdAndTenantIdAndRoleId(any(), any(), any());
+        verify(userRoleRepository, never()).deleteByUserIdAndRoleId(any(), any());
     }
 }

@@ -119,7 +119,7 @@ export class JoinOrganizationComponent implements OnInit {
   }
 
   validateToken() {
-    this.http.get(`${environment.apiUrl}/auth/invitations/validate?token=${this.token}`)
+    this.http.get(`${environment.apiUrl}/auth/api/v1/invitations/validate?token=${this.token}`)
       .subscribe({
         next: () => {
           this.loading = false;
@@ -139,7 +139,7 @@ export class JoinOrganizationComponent implements OnInit {
 
       const { name, password } = this.joinForm.value;
 
-      this.http.post(`${environment.apiUrl}/auth/invitations/accept`, {
+      this.http.post(`${environment.apiUrl}/auth/api/v1/invitations/accept`, {
         token: this.token,
         name,
         password

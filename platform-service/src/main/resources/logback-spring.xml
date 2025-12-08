@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <property name="APP_NAME" value="auth-service"/>
+    <property name="APP_NAME" value="platform-service"/>
 
     <shutdownHook class="ch.qos.logback.core.hook.DelayingShutdownHook"/>
 
@@ -40,14 +40,14 @@
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>
-        <logger name="com.learning.authservice" level="DEBUG"/>
+        <logger name="com.learning.platformservice" level="DEBUG"/>
     </springProfile>
 
     <springProfile name="!local,!dev">
         <root level="INFO">
             <appender-ref ref="JSON_CONSOLE"/>
         </root>
-        <logger name="com.learning.authservice" level="INFO"/>
+        <logger name="com.learning.platformservice" level="INFO"/>
     </springProfile>
 
     <!-- Common loggers -->

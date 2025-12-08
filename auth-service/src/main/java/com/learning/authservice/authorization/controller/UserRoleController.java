@@ -4,7 +4,6 @@ import com.learning.authservice.authorization.domain.Role;
 import com.learning.authservice.authorization.domain.UserRole;
 import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.common.infra.security.RequirePermission;
-import com.learning.common.infra.tenant.TenantContext;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
@@ -18,6 +17,7 @@ import java.util.List;
 
 /**
  * Controller for managing user roles.
+ * Tenant context is implicit via TenantDataSourceRouter.
  */
 @RestController
 @RequestMapping("/api/v1/roles")
@@ -39,11 +39,9 @@ public class UserRoleController {
             @RequestHeader("X-User-Id") String assignedBy,
             @RequestBody @Valid RoleAssignmentRequest request) {
 
-        String tenantId = TenantContext.getCurrentTenant();
+        log.info("Assigning role {} to user {}", request.getRoleId(), request.getUserId());
 
-        log.info("Assigning role {} to user {} in tenant {}", request.getRoleId(), request.getUserId(), tenantId);
-
-        userRoleService.assignRole(request.getUserId(), tenantId, request.getRoleId(), assignedBy);
+        userRoleService.assignRole(request.getUserId(), request.getRoleId(), assignedBy);
 
         return ResponseEntity.ok().build();
     }
@@ -53,10 +51,9 @@ public class UserRoleController {
     public ResponseEntity<Void> revokeRole(
             @RequestBody @Valid RoleRevocationRequest request) {
 
-        String tenantId = TenantContext.getCurrentTenant();
-        log.info("Revoking role {} from user {} in tenant {}", request.getRoleId(), request.getUserId(), tenantId);
+        log.info("Revoking role {} from user {}", request.getRoleId(), request.getUserId());
 
-        userRoleService.revokeRole(request.getUserId(), tenantId, request.getRoleId());
+        userRoleService.revokeRole(request.getUserId(), request.getRoleId());
 
         return ResponseEntity.ok().build();
     }
@@ -66,8 +63,7 @@ public class UserRoleController {
     public ResponseEntity<List<UserRole>> getUserRoles(
             @PathVariable String userId) {
 
-        String tenantId = TenantContext.getCurrentTenant();
-        return ResponseEntity.ok(userRoleService.getUserRoles(userId, tenantId));
+        return ResponseEntity.ok(userRoleService.getUserRoles(userId));
     }
 
     @PutMapping("/users/{userId}")
@@ -77,13 +73,11 @@ public class UserRoleController {
             @RequestHeader("X-User-Id") String assignedBy,
             @RequestBody @Valid RoleAssignmentRequest request) {
 
-        String tenantId = TenantContext.getCurrentTenant();
-
         if (!userId.equals(request.getUserId())) {
             throw new IllegalArgumentException("Path ID and Body ID mismatch");
         }
 
-        userRoleService.updateUserRole(userId, tenantId, request.getRoleId(), assignedBy);
+        userRoleService.updateUserRole(userId, request.getRoleId(), assignedBy);
         return ResponseEntity.ok().build();
     }
 

@@ -14,6 +14,7 @@ import java.util.Set;
 /**
  * Controller for checking permissions.
  * Used by other services (via internal calls) and potentially by frontend.
+ * Tenant context is implicit via TenantDataSourceRouter.
  */
 @RestController
 @RequestMapping("/api/v1/permissions")
@@ -25,12 +26,7 @@ public class PermissionController {
 
     /**
      * Check if a user has a specific permission.
-     * This endpoint is public (authenticated) but checks permissions for the
-     * requested user/tenant.
-     * 
      * Super-admin (role from X-Role header) gets automatic access to all resources.
-     * This handles the case where super-admin (tenantId=system) accesses any
-     * tenant.
      */
     @PostMapping("/check")
     public ResponseEntity<Boolean> checkPermission(
@@ -46,7 +42,6 @@ public class PermissionController {
 
         boolean allowed = permissionService.hasPermission(
                 request.getUserId(),
-                request.getTenantId(),
                 request.getResource(),
                 request.getAction());
         return ResponseEntity.ok(allowed);
@@ -61,20 +56,16 @@ public class PermissionController {
     }
 
     /**
-     * Get all permissions for a user in a tenant.
+     * Get all permissions for a user.
      */
-    @GetMapping("/user/{userId}/tenant/{tenantId}")
-    public ResponseEntity<Set<String>> getUserPermissions(
-            @PathVariable String userId,
-            @PathVariable String tenantId) {
-
-        return ResponseEntity.ok(permissionService.getUserPermissions(userId, tenantId));
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<Set<String>> getUserPermissions(@PathVariable String userId) {
+        return ResponseEntity.ok(permissionService.getUserPermissions(userId));
     }
 
     @Data
     public static class PermissionCheckRequest {
         private String userId;
-        private String tenantId;
         private String resource;
         private String action;
     }

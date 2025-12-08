@@ -59,22 +59,19 @@ COMMENT ON TABLE role_permissions IS 'Maps roles to their granted permissions';
 CREATE TABLE IF NOT EXISTS user_roles (
     id BIGSERIAL PRIMARY KEY,
     user_id VARCHAR(255) NOT NULL,
-    tenant_id VARCHAR(64) NOT NULL,
     role_id VARCHAR(64) NOT NULL,
     assigned_by VARCHAR(255),
     assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMPTZ,
-    UNIQUE(user_id, tenant_id, role_id),
+    UNIQUE(user_id, role_id),
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT
 );
 
-CREATE INDEX idx_user_roles_lookup ON user_roles(user_id, tenant_id);
-CREATE INDEX idx_user_roles_tenant ON user_roles(tenant_id);
 CREATE INDEX idx_user_roles_user ON user_roles(user_id);
+CREATE INDEX idx_user_roles_role ON user_roles(role_id);
 
-COMMENT ON TABLE user_roles IS 'Assigns roles to users within specific tenants';
+COMMENT ON TABLE user_roles IS 'Assigns roles to users (tenant isolation via database)';
 COMMENT ON COLUMN user_roles.user_id IS 'Cognito user ID (sub claim from JWT)';
-COMMENT ON COLUMN user_roles.tenant_id IS 'Tenant ID for tenant-scoped roles';
 COMMENT ON COLUMN user_roles.assigned_by IS 'User ID who assigned this role';
 COMMENT ON COLUMN user_roles.expires_at IS 'Optional expiration timestamp for temporary role assignments';
 
@@ -180,7 +177,6 @@ EXECUTE FUNCTION update_updated_at_column();
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS invitations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id VARCHAR(64) NOT NULL,
     email VARCHAR(255) NOT NULL,
     role_id VARCHAR(64) NOT NULL,
     token VARCHAR(255) NOT NULL UNIQUE,
@@ -192,13 +188,11 @@ CREATE TABLE IF NOT EXISTS invitations (
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT
 );
 
-CREATE INDEX idx_invitations_tenant ON invitations(tenant_id);
 CREATE INDEX idx_invitations_email ON invitations(email);
 CREATE INDEX idx_invitations_token ON invitations(token);
 CREATE INDEX idx_invitations_status ON invitations(status);
 
-COMMENT ON TABLE invitations IS 'Stores invitation tokens for inviting new users to tenants';
-COMMENT ON COLUMN invitations.tenant_id IS 'Tenant ID for which the invitation is created';
+COMMENT ON TABLE invitations IS 'Stores invitation tokens for inviting new users (tenant isolation via database)';
 COMMENT ON COLUMN invitations.email IS 'Email address of the invited user';
 COMMENT ON COLUMN invitations.role_id IS 'Role to be assigned to the user upon acceptance';
 COMMENT ON COLUMN invitations.token IS 'Secure random token used in the invitation link';

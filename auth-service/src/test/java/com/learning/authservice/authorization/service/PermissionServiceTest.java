@@ -1,9 +1,9 @@
 package com.learning.authservice.authorization.service;
 
 import com.learning.authservice.authorization.domain.UserRole;
+import com.learning.authservice.authorization.repository.PermissionRepository;
 import com.learning.authservice.authorization.repository.RolePermissionRepository;
 import com.learning.authservice.authorization.repository.UserRoleRepository;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -22,94 +22,96 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class PermissionServiceTest {
 
-    @Mock
-    private UserRoleRepository userRoleRepository;
+        @Mock
+        private UserRoleRepository userRoleRepository;
 
-    @Mock
-    private RolePermissionRepository rolePermissionRepository;
+        @Mock
+        private RolePermissionRepository rolePermissionRepository;
 
-    @InjectMocks
-    private PermissionService permissionService;
+        @Mock
+        private PermissionRepository permissionRepository;
 
-    private final String userId = "user-123";
-    private final String tenantId = "tenant-1";
-    private final String resource = "entry";
-    private final String action = "read";
+        @InjectMocks
+        private PermissionService permissionService;
 
-    @Test
-    void hasPermission_WhenUserHasRoleWithPermission_ReturnsTrue() {
-        UserRole userRole = UserRole.builder().roleId("tenant-user").build();
-        when(userRoleRepository.findActiveRolesByUserIdAndTenantId(eq(userId), eq(tenantId), any(Instant.class)))
-                .thenReturn(List.of(userRole));
+        private final String userId = "user-123";
+        private final String resource = "entry";
+        private final String action = "read";
 
-        when(rolePermissionRepository.existsByRoleIdAndResourceAndAction("tenant-user", resource, action))
-                .thenReturn(true);
+        @Test
+        void hasPermission_WhenUserHasRoleWithPermission_ReturnsTrue() {
+                UserRole userRole = UserRole.builder().roleId("tenant-user").build();
+                when(userRoleRepository.findActiveRolesByUserId(eq(userId), any(Instant.class)))
+                                .thenReturn(List.of(userRole));
 
-        boolean result = permissionService.hasPermission(userId, tenantId, resource, action);
+                when(rolePermissionRepository.existsByRoleIdAndResourceAndAction("tenant-user", resource, action))
+                                .thenReturn(true);
 
-        assertTrue(result);
-    }
+                boolean result = permissionService.hasPermission(userId, resource, action);
 
-    @Test
-    void hasPermission_WhenUserHasNoRoles_ReturnsFalse() {
-        when(userRoleRepository.findActiveRolesByUserIdAndTenantId(eq(userId), eq(tenantId), any(Instant.class)))
-                .thenReturn(Collections.emptyList());
+                assertTrue(result);
+        }
 
-        boolean result = permissionService.hasPermission(userId, tenantId, resource, action);
+        @Test
+        void hasPermission_WhenUserHasNoRoles_ReturnsFalse() {
+                when(userRoleRepository.findActiveRolesByUserId(eq(userId), any(Instant.class)))
+                                .thenReturn(Collections.emptyList());
 
-        assertFalse(result);
-    }
+                boolean result = permissionService.hasPermission(userId, resource, action);
 
-    @Test
-    void hasPermission_WhenUserHasRoleButNoPermission_ReturnsFalse() {
-        UserRole userRole = UserRole.builder().roleId("tenant-guest").build();
-        when(userRoleRepository.findActiveRolesByUserIdAndTenantId(eq(userId), eq(tenantId), any(Instant.class)))
-                .thenReturn(List.of(userRole));
+                assertFalse(result);
+        }
 
-        when(rolePermissionRepository.existsByRoleIdAndResourceAndAction("tenant-guest", resource, action))
-                .thenReturn(false);
+        @Test
+        void hasPermission_WhenUserHasRoleButNoPermission_ReturnsFalse() {
+                UserRole userRole = UserRole.builder().roleId("tenant-guest").build();
+                when(userRoleRepository.findActiveRolesByUserId(eq(userId), any(Instant.class)))
+                                .thenReturn(List.of(userRole));
 
-        boolean result = permissionService.hasPermission(userId, tenantId, resource, action);
+                when(rolePermissionRepository.existsByRoleIdAndResourceAndAction("tenant-guest", resource, action))
+                                .thenReturn(false);
 
-        assertFalse(result);
-    }
+                boolean result = permissionService.hasPermission(userId, resource, action);
 
-    @Test
-    void hasPermission_WhenUserIsSuperAdmin_ReturnsTrue() {
-        UserRole userRole = UserRole.builder().roleId("super-admin").build();
-        when(userRoleRepository.findActiveRolesByUserIdAndTenantId(eq(userId), eq(tenantId), any(Instant.class)))
-                .thenReturn(List.of(userRole));
+                assertFalse(result);
+        }
 
-        boolean result = permissionService.hasPermission(userId, tenantId, resource, action);
+        @Test
+        void hasPermission_WhenUserIsSuperAdmin_ReturnsTrue() {
+                UserRole userRole = UserRole.builder().roleId("super-admin").build();
+                when(userRoleRepository.findActiveRolesByUserId(eq(userId), any(Instant.class)))
+                                .thenReturn(List.of(userRole));
 
-        assertTrue(result);
-    }
+                boolean result = permissionService.hasPermission(userId, resource, action);
 
-    @Test
-    void getUserPermissions_ReturnsAllPermissions() {
-        UserRole userRole = UserRole.builder().roleId("tenant-user").build();
-        when(userRoleRepository.findActiveRolesByUserIdAndTenantId(eq(userId), eq(tenantId), any(Instant.class)))
-                .thenReturn(List.of(userRole));
+                assertTrue(result);
+        }
 
-        when(rolePermissionRepository.findPermissionIdsByRoleId("tenant-user"))
-                .thenReturn(List.of("entry:read", "entry:create"));
+        @Test
+        void getUserPermissions_ReturnsAllPermissions() {
+                UserRole userRole = UserRole.builder().roleId("tenant-user").build();
+                when(userRoleRepository.findActiveRolesByUserId(eq(userId), any(Instant.class)))
+                                .thenReturn(List.of(userRole));
 
-        Set<String> permissions = permissionService.getUserPermissions(userId, tenantId);
+                when(rolePermissionRepository.findPermissionIdsByRoleId("tenant-user"))
+                                .thenReturn(List.of("entry:read", "entry:create"));
 
-        assertEquals(2, permissions.size());
-        assertTrue(permissions.contains("entry:read"));
-        assertTrue(permissions.contains("entry:create"));
-    }
+                Set<String> permissions = permissionService.getUserPermissions(userId);
 
-    @Test
-    void getUserPermissions_WhenSuperAdmin_ReturnsWildcard() {
-        UserRole userRole = UserRole.builder().roleId("super-admin").build();
-        when(userRoleRepository.findActiveRolesByUserIdAndTenantId(eq(userId), eq(tenantId), any(Instant.class)))
-                .thenReturn(List.of(userRole));
+                assertEquals(2, permissions.size());
+                assertTrue(permissions.contains("entry:read"));
+                assertTrue(permissions.contains("entry:create"));
+        }
 
-        Set<String> permissions = permissionService.getUserPermissions(userId, tenantId);
+        @Test
+        void getUserPermissions_WhenSuperAdmin_ReturnsWildcard() {
+                UserRole userRole = UserRole.builder().roleId("super-admin").build();
+                when(userRoleRepository.findActiveRolesByUserId(eq(userId), any(Instant.class)))
+                                .thenReturn(List.of(userRole));
 
-        assertEquals(1, permissions.size());
-        assertTrue(permissions.contains("*:*"));
-    }
+                Set<String> permissions = permissionService.getUserPermissions(userId);
+
+                assertEquals(1, permissions.size());
+                assertTrue(permissions.contains("*:*"));
+        }
 }

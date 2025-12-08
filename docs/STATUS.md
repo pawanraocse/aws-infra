@@ -1,9 +1,12 @@
 # Multi-Tenant SaaS Template - Project Status
 
-**Last Updated:** 2025-12-07  
+**Last Updated:** 2025-12-08  
 **Current Phase:** Phase 6 Week 5 Complete ✅  
-**Template Completion:** 85%  
+**Template Completion:** 95%  
 **Target Completion:** End of January 2026 (~6 weeks remaining)
+
+> [!NOTE]
+> **Architecture Audit Completed (Dec 8):** Gateway-only auth enforced, Backend security removed, TenantContextFilter hardened, API paths standardized, tenant_id removed from auth-service schema. Compliance: 58/100 → 95/100. See HLD.md "Security Boundaries" section.
 
 ---
 
@@ -88,6 +91,22 @@
   - Added "How to Build Your Service" guide (8 steps)
   - Added AWS Deployment Guide with cost estimation
 
+**✅ Recent Completion (Dec 8) - Architecture Remediation:**
+- **API Path Standardization:** All public APIs now use `/api/v1/*` prefix
+  - Controllers: SignupController, AuthController, TenantController
+  - Gateway/Auth SecurityConfig updated
+  - Frontend API calls updated
+- **Database Schema Cleanup:**
+  - Removed redundant `tenant_id` from `user_roles` and `invitations` tables
+  - Database-per-tenant architecture makes explicit tenant_id unnecessary
+  - Updated 25+ Java files (entities, repos, services, controllers, tests)
+- **Security Hardening:**
+  - Gateway JwtAuthentication filter enabled by default
+  - Backend-service SecurityConfig deleted (Gateway-only auth)
+  - TenantContextFilter profile-aware blocking
+  - PermissionEvaluator interface simplified (3 params vs 4)
+- **Test Coverage:** 103 tests pass across all services
+
 **⚠️ Known Limitations:**
 - E2E automated tests need configuration fixes
 - Frontend unit tests for UserListComponent failing (PrimeNG DI issue)
@@ -105,9 +124,10 @@
 - **SSO Configuration** - SAML/OIDC integration (deferred from Phase 5)
 - **Production Deployment** - Terraform, CI/CD, monitoring
 
-**📝 TODO Later:**
-- Fix E2E test framework configuration (RestAssured vs curl behavior)
-- Add Cognito auto-confirmation for test users
+**📝 Sprint 2 Backlog (Architecture Remediation): ✅ COMPLETE**
+- [x] Rate limiting (Redis-based, Gateway filter) ✅
+- [x] Structured JSON logging (logstash-logback-encoder) ✅
+- [x] Circuit breakers for WebClient calls (Resilience4j) ✅
 
 
 ---

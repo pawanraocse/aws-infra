@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 /**
  * Service for checking user permissions in the authorization system.
  * Implements Permission-Based Access Control (PBAC).
+ * Tenant isolation is handled via TenantDataSourceRouter.
  */
 @Service
 @RequiredArgsConstructor
@@ -34,27 +35,20 @@ public class PermissionService {
      * Check if user has permission for a specific resource and action.
      *
      * @param userId   Cognito user ID (sub claim from JWT)
-     * @param tenantId Tenant ID
      * @param resource Resource name (e.g., "entry", "user", "tenant")
      * @param action   Action name (e.g., "read", "create", "update", "delete",
      *                 "manage")
      * @return true if user has the permission, false otherwise
      */
-    @Cacheable(value = "userPermissions", key = "#userId + ':' + #tenantId + ':' + #resource + ':' + #action")
-    public boolean hasPermission(String userId, String tenantId, String resource, String action) {
-        // Debug: verify TenantContext is set correctly
-        String currentTenant = com.learning.common.infra.tenant.TenantContext.getCurrentTenant();
-        System.err.println(">>> TenantContext.getCurrentTenant() = " + currentTenant + " (expected: " + tenantId + ")");
+    @Cacheable(value = "userPermissions", key = "#userId + ':' + #resource + ':' + #action")
+    public boolean hasPermission(String userId, String resource, String action) {
+        log.debug("Checking permission: user={}, resource={}, action={}", userId, resource, action);
 
-        log.debug("Checking permission: user={}, tenant={}, resource={}, action={}",
-                userId, tenantId, resource, action);
-
-        // 1. Get user's active (non-expired) roles in this tenant
-        List<UserRole> userRoles = userRoleRepository.findActiveRolesByUserIdAndTenantId(
-                userId, tenantId, Instant.now());
+        // 1. Get user's active (non-expired) roles
+        List<UserRole> userRoles = userRoleRepository.findActiveRolesByUserId(userId, Instant.now());
 
         if (userRoles.isEmpty()) {
-            log.debug("User {} has no active roles in tenant {}", userId, tenantId);
+            log.debug("User {} has no active roles", userId);
             return false;
         }
 
@@ -80,29 +74,26 @@ public class PermissionService {
             }
         }
 
-        log.debug("Permission denied: user={}, tenant={}, resource={}:{}",
-                userId, tenantId, resource, action);
+        log.debug("Permission denied: user={}, resource={}:{}", userId, resource, action);
         return false;
     }
 
     /**
-     * Get all permissions for a user in a tenant.
+     * Get all permissions for a user.
      * Returns permissions in "resource:action" format.
      *
-     * @param userId   Cognito user ID
-     * @param tenantId Tenant ID
+     * @param userId Cognito user ID
      * @return Set of permission strings (e.g., {"entry:read", "entry:create"})
      */
-    @Cacheable(value = "userAllPermissions", key = "#userId + ':' + #tenantId")
-    public Set<String> getUserPermissions(String userId, String tenantId) {
-        log.debug("Getting all permissions for user={} in tenant={}", userId, tenantId);
+    @Cacheable(value = "userAllPermissions", key = "#userId")
+    public Set<String> getUserPermissions(String userId) {
+        log.debug("Getting all permissions for user={}", userId);
 
         // Get user's active roles
-        List<UserRole> userRoles = userRoleRepository.findActiveRolesByUserIdAndTenantId(
-                userId, tenantId, Instant.now());
+        List<UserRole> userRoles = userRoleRepository.findActiveRolesByUserId(userId, Instant.now());
 
         if (userRoles.isEmpty()) {
-            log.debug("User {} has no active roles in tenant {}", userId, tenantId);
+            log.debug("User {} has no active roles", userId);
             return Set.of();
         }
 
@@ -124,7 +115,7 @@ public class PermissionService {
                 })
                 .collect(Collectors.toSet());
 
-        log.debug("User {} in tenant {} has {} permissions", userId, tenantId, permissions.size());
+        log.debug("User {} has {} permissions", userId, permissions.size());
         return permissions;
     }
 
@@ -132,14 +123,13 @@ public class PermissionService {
      * Check if user has ANY of the specified permissions.
      *
      * @param userId      User ID
-     * @param tenantId    Tenant ID
      * @param permissions List of permission strings in "resource:action" format
      * @return true if user has at least one of the permissions
      */
-    public boolean hasAnyPermission(String userId, String tenantId, List<String> permissions) {
+    public boolean hasAnyPermission(String userId, List<String> permissions) {
         for (String permission : permissions) {
             String[] parts = permission.split(":");
-            if (parts.length == 2 && hasPermission(userId, tenantId, parts[0], parts[1])) {
+            if (parts.length == 2 && hasPermission(userId, parts[0], parts[1])) {
                 return true;
             }
         }
@@ -150,14 +140,13 @@ public class PermissionService {
      * Check if user has ALL of the specified permissions.
      *
      * @param userId      User ID
-     * @param tenantId    Tenant ID
      * @param permissions List of permission strings in "resource:action" format
      * @return true if user has all of the permissions
      */
-    public boolean hasAllPermissions(String userId, String tenantId, List<String> permissions) {
+    public boolean hasAllPermissions(String userId, List<String> permissions) {
         for (String permission : permissions) {
             String[] parts = permission.split(":");
-            if (parts.length != 2 || !hasPermission(userId, tenantId, parts[0], parts[1])) {
+            if (parts.length != 2 || !hasPermission(userId, parts[0], parts[1])) {
                 return false;
             }
         }
@@ -167,13 +156,11 @@ public class PermissionService {
     /**
      * Check if user is a tenant admin.
      *
-     * @param userId   User ID
-     * @param tenantId Tenant ID
+     * @param userId User ID
      * @return true if user has tenant-admin role
      */
-    public boolean isTenantAdmin(String userId, String tenantId) {
-        return userRoleRepository.existsByUserIdAndTenantIdAndRoleId(
-                userId, tenantId, "tenant-admin");
+    public boolean isTenantAdmin(String userId) {
+        return userRoleRepository.existsByUserIdAndRoleId(userId, "tenant-admin");
     }
 
     /**

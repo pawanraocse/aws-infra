@@ -14,7 +14,7 @@ import java.util.Set;
  * Local implementation of PermissionEvaluator for Backend Service.
  * Trusts the X-Role header from Gateway and uses a simple role-to-permission
  * matrix.
- * No remote calls to auth-service - faster and simpler.
+ * Tenant isolation is handled via TenantDataSourceRouter.
  */
 @Component
 @Slf4j
@@ -39,11 +39,11 @@ public class LocalPermissionEvaluator implements PermissionEvaluator {
             ));
 
     @Override
-    public boolean hasPermission(String userId, String tenantId, String resource, String action) {
+    public boolean hasPermission(String userId, String resource, String action) {
         String role = extractRoleFromRequest();
 
-        log.info("LocalPermissionEvaluator: user={}, tenant={}, role={}, resource={}, action={}",
-                userId, tenantId, role, resource, action);
+        log.info("LocalPermissionEvaluator: user={}, role={}, resource={}, action={}",
+                userId, role, resource, action);
 
         if (role == null || role.isBlank()) {
             log.warn("No X-Role header found, denying access");

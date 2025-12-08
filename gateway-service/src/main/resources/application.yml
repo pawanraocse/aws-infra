@@ -2,12 +2,32 @@ spring:
   application:
     name: gateway-service
 
+  # Redis for rate limiting
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+
   cloud:
     gateway:
-      default-filters:
-        - JwtAuthentication
       server:
         webflux:
+          # Default filters applied to all discovered routes
+          default-filters:
+            - JwtAuthentication
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@tenantKeyResolver}"
+                deny-empty-key: false
           discovery:
             locator:
               enabled: true
@@ -84,7 +104,7 @@ management:
       access: read_only
   health:
     redis:
-      enabled: false
+      enabled: ${REDIS_HEALTH_ENABLED:true}
   metrics:
     tags:
       application: ${spring.application.name}

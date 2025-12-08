@@ -19,6 +19,23 @@ services:
     ports:
       - "5432:5432" # remove in production
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: redis-server --appendonly yes
+    networks:
+      - awsinfra-net
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   eureka-server:
     build:
       context: ./eureka-server
@@ -57,6 +74,8 @@ services:
       EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
       EUREKA_INSTANCE_HOSTNAME: gateway-service
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       ZIPKIN_ENABLED: "false"
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,gateway
       AWS_REGION: us-east-1
@@ -70,6 +89,8 @@ services:
       - "5005:5005"
     depends_on:
       eureka-server:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: [ "CMD-SHELL", "wget -q --spider http://localhost:8080/actuator/health || exit 1" ]
@@ -192,6 +213,8 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
+
 
 networks:
   awsinfra-net:

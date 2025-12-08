@@ -122,7 +122,7 @@ export class SignupPersonalComponent {
       password: this.signupForm.value.password
     };
 
-    this.http.post(`${environment.apiUrl}/auth/signup/personal`, payload)
+    this.http.post(`${environment.apiUrl}/auth/api/v1/auth/signup/personal`, payload)
       .subscribe({
         next: (response: any) => {
           this.loading.set(false);

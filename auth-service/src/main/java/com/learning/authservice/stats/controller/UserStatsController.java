@@ -3,7 +3,6 @@ package com.learning.authservice.stats.controller;
 import com.learning.authservice.stats.dto.UserStatsDTO;
 import com.learning.authservice.stats.service.UserStatsService;
 import com.learning.common.infra.security.RequirePermission;
-import com.learning.common.infra.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * REST controller for user statistics.
  * Provides aggregated metrics for admin dashboard.
+ * Tenant isolation is handled via TenantDataSourceRouter.
  */
 @RestController
 @RequestMapping("/api/v1/stats/users")
@@ -31,10 +31,8 @@ public class UserStatsController {
     @GetMapping
     @RequirePermission(resource = "stats", action = "read")
     public ResponseEntity<UserStatsDTO> getUserStats() {
-        String tenantId = TenantContext.getCurrentTenant();
-        log.info("Getting user statistics for tenant: {}", tenantId);
-
-        UserStatsDTO stats = userStatsService.getUserStats(tenantId);
+        log.info("Getting user statistics");
+        UserStatsDTO stats = userStatsService.getUserStats();
         return ResponseEntity.ok(stats);
     }
 }

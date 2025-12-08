@@ -52,8 +52,12 @@ public class SecurityConfiguration {
                                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                                 .authorizeHttpRequests(authz -> authz
                                                 .requestMatchers("/", "/actuator/health", "/actuator/info",
-                                                                "/logged-out", "/signup/**", "/login", "/error",
-                                                                "/verify", "/resend-verification",
+                                                                "/logged-out", "/error",
+                                                                "/api/v1/auth/signup/**", "/api/v1/auth/login",
+                                                                "/api/v1/auth/verify",
+                                                                "/api/v1/auth/resend-verification",
+                                                                "/api/v1/invitations/validate",
+                                                                "/api/v1/invitations/accept",
                                                                 "/api/v1/permissions/**") // Internal service-to-service
                                                                                           // calls
                                                 .permitAll()

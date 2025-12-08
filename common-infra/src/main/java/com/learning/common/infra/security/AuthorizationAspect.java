@@ -1,6 +1,5 @@
 package com.learning.common.infra.security;
 
-import com.learning.common.infra.tenant.TenantContext;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +15,8 @@ import org.springframework.security.access.AccessDeniedException;
 /**
  * Aspect to intercept methods annotated with @RequirePermission and enforce
  * access control.
- * Relies on Gateway to inject trusted X-User-Id and X-Tenant-Id headers.
+ * Relies on Gateway to inject trusted X-User-Id header.
+ * Tenant isolation is handled via TenantDataSourceRouter.
  */
 @Aspect
 @Component
@@ -26,6 +26,7 @@ public class AuthorizationAspect {
 
     private final PermissionEvaluator permissionEvaluator;
     private static final String USER_HEADER = "X-User-Id";
+    private static final String ROLE_HEADER = "X-Role";
 
     @Around("@annotation(requirePermission)")
     public Object checkPermission(ProceedingJoinPoint joinPoint, RequirePermission requirePermission) throws Throwable {
@@ -40,27 +41,24 @@ public class AuthorizationAspect {
             throw new AccessDeniedException("User is not authenticated (missing " + USER_HEADER + ")");
         }
 
-        // 3. Get current tenant
-        String tenantId = TenantContext.getCurrentTenant();
-        if (tenantId == null) {
-            log.warn("No tenant context found for permission check");
-            throw new AccessDeniedException("No tenant context found");
+        // 3. Check for super-admin bypass
+        String role = request.getHeader(ROLE_HEADER);
+        if ("super-admin".equals(role)) {
+            log.debug("Super-admin access granted for user={}", userId);
+            return joinPoint.proceed();
         }
 
         String resource = requirePermission.resource();
         String action = requirePermission.action();
 
-        log.debug("Checking permission for user={} tenant={} resource={} action={}",
-                userId, tenantId, resource, action);
+        log.debug("Checking permission for user={} resource={} action={}", userId, resource, action);
 
-        // 4. Evaluate permission
-        boolean allowed = permissionEvaluator.hasPermission(userId, tenantId, resource, action);
+        // 4. Evaluate permission (tenant context is implicit via DB routing)
+        boolean allowed = permissionEvaluator.hasPermission(userId, resource, action);
 
         if (!allowed) {
-            log.warn("Access denied: user={} tenant={} resource={} action={}",
-                    userId, tenantId, resource, action);
-            throw new AccessDeniedException(
-                    "You do not have permission to " + action + " " + resource);
+            log.warn("Access denied: user={} resource={} action={}", userId, resource, action);
+            throw new AccessDeniedException("You do not have permission to " + action + " " + resource);
         }
 
         return joinPoint.proceed();

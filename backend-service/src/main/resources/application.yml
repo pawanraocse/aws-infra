@@ -137,3 +137,48 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n"
     level: '%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]'
+
+# Resilience4j Circuit Breaker Configuration
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
+    instances:
+      platformService:
+        baseConfig: default
+        waitDurationInOpenState: 5s
+      authService:
+        baseConfig: default
+        waitDurationInOpenState: 5s
+
+  retry:
+    configs:
+      default:
+        maxAttempts: 3
+        waitDuration: 500ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+    instances:
+      platformService:
+        baseConfig: default
+      authService:
+        baseConfig: default
+
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 10s
+    instances:
+      platformService:
+        timeoutDuration: 5s
+      authService:
+        timeoutDuration: 5s
+

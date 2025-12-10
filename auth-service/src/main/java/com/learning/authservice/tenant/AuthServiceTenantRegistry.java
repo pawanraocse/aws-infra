@@ -40,7 +40,7 @@ public class AuthServiceTenantRegistry {
         log.debug("Fetching tenant DB config for tenant: {}", tenantId);
 
         return platformWebClient.get()
-                .uri("/internal/tenants/{tenantId}/db-info", tenantId)
+                .uri("/platform/internal/tenants/{tenantId}/db-info", tenantId)
                 .retrieve()
                 .bodyToMono(TenantDbConfig.class)
                 .timeout(java.time.Duration.ofSeconds(5))

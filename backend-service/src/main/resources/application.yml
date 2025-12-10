@@ -50,11 +50,11 @@ server:
 
 services:
   platform:
-    base-url: http://platform-service/platform
+    base-url: http://platform-service  # Eureka only, context-path in URI
   backend:
     base-url: http://backend-service
   auth:
-    base-url: http://auth-service/auth
+    base-url: http://auth-service  # Eureka only, context-path in URI
   file:
     base-url: http://file-service
 

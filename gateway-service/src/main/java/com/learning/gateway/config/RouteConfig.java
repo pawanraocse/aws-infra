@@ -38,6 +38,8 @@ public class RouteConfig {
                                 .route(AUTH_SERVICE_ID, r -> r
                                                 .path(AUTH_PATH)
                                                 .filters(f -> f
+                                                                .filter(jwtFilterFactory.apply(
+                                                                                new JwtAuthenticationGatewayFilterFactory.Config()))
                                                                 .preserveHostHeader()
                                                                 .circuitBreaker(c -> c
                                                                                 .setName(CB_AUTH)
@@ -53,7 +55,6 @@ public class RouteConfig {
                                                 .filters(f -> f
                                                                 .filter(jwtFilterFactory.apply(
                                                                                 new JwtAuthenticationGatewayFilterFactory.Config()))
-                                                                .rewritePath("/platform(?<segment>/?.*)", "${segment}")
                                                                 .circuitBreaker(c -> c
                                                                                 .setName(CB_PLATFORM)
                                                                                 .setFallbackUri(FALLBACK_URI))

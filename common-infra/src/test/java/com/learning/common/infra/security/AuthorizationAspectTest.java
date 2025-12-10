@@ -1,5 +1,6 @@
 package com.learning.common.infra.security;
 
+import com.learning.common.infra.exception.PermissionDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.junit.jupiter.api.AfterEach;
@@ -11,8 +12,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-
-import org.springframework.security.access.AccessDeniedException;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
@@ -84,7 +83,7 @@ class AuthorizationAspectTest {
         when(permissionEvaluator.hasPermission(userId, resource, action)).thenReturn(false);
 
         // Execute & Verify
-        assertThrows(AccessDeniedException.class, () -> authorizationAspect.checkPermission(joinPoint, annotation));
+        assertThrows(PermissionDeniedException.class, () -> authorizationAspect.checkPermission(joinPoint, annotation));
 
         verify(joinPoint, never()).proceed();
     }
@@ -115,6 +114,6 @@ class AuthorizationAspectTest {
         RequirePermission annotation = mock(RequirePermission.class);
 
         // Execute & Verify
-        assertThrows(AccessDeniedException.class, () -> authorizationAspect.checkPermission(joinPoint, annotation));
+        assertThrows(PermissionDeniedException.class, () -> authorizationAspect.checkPermission(joinPoint, annotation));
     }
 }

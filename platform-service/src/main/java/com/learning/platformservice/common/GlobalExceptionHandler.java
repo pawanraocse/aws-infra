@@ -47,6 +47,16 @@ public class GlobalExceptionHandler {
                                                 requestId(req), req.getRequestURI()));
         }
 
+        @ExceptionHandler(com.learning.common.infra.exception.PermissionDeniedException.class)
+        public ResponseEntity<ErrorResponse> permissionDenied(
+                        com.learning.common.infra.exception.PermissionDeniedException ex,
+                        HttpServletRequest req) {
+                log.warn("permission_denied path={} error={}", req.getRequestURI(), ex.getMessage());
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                                .body(ErrorResponse.of(HttpStatus.FORBIDDEN.value(), "FORBIDDEN", ex.getMessage(),
+                                                requestId(req), req.getRequestURI()));
+        }
+
         @ExceptionHandler(MethodArgumentNotValidException.class)
         public ResponseEntity<ErrorResponse> invalid(MethodArgumentNotValidException ex, HttpServletRequest req) {
                 Map<String, String> fieldErrors = ex.getBindingResult().getFieldErrors().stream()

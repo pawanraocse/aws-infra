@@ -19,7 +19,7 @@ public class AuthServiceMigration implements ServiceMigrationStrategy {
     @Override
     public MigrationResult migrate(String tenantId, TenantDbConfig config) {
         return webClient.post()
-                .uri("/internal/tenants/{tenantId}/migrate", tenantId)
+                .uri("/auth/internal/tenants/{tenantId}/migrate", tenantId)
                 .bodyValue(config)
                 .retrieve()
                 .bodyToMono(MigrationResult.class)

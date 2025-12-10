@@ -3,6 +3,7 @@ package com.learning.platformservice.tenant.action;
 import com.learning.common.dto.MigrationResult;
 import com.learning.common.dto.TenantDbConfig;
 import com.learning.common.util.SimpleCryptoUtil;
+import com.learning.platformservice.tenant.action.migration.AuthServiceMigration;
 import com.learning.platformservice.tenant.action.migration.BackendServiceMigration;
 import com.learning.platformservice.tenant.action.migration.ServiceMigrationStrategy;
 import com.learning.platformservice.tenant.entity.Tenant;
@@ -27,6 +28,7 @@ import java.util.List;
 public class MigrationInvokeAction implements TenantProvisionAction {
 
     private final WebClient backendWebClient;
+    private final WebClient authWebClient;
 
     @Override
     public void execute(TenantProvisionContext context) throws TenantProvisioningException {
@@ -35,9 +37,10 @@ public class MigrationInvokeAction implements TenantProvisionAction {
         // Build tenant DB config to share with services
         TenantDbConfig dbConfig = buildDbConfig(context);
 
-        // Service migration strategies
+        // Service migration strategies - both backend and auth
         List<ServiceMigrationStrategy> strategies = List.of(
-                new BackendServiceMigration(backendWebClient));
+                new BackendServiceMigration(backendWebClient),
+                new AuthServiceMigration(authWebClient));
 
         String lastVersion = null;
         for (ServiceMigrationStrategy strategy : strategies) {

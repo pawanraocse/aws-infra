@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TableModule } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
@@ -10,11 +10,11 @@ import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 
 @Component({
-    selector: 'app-role-list',
-    standalone: true,
-    imports: [CommonModule, TableModule, ButtonModule, TagModule, ToastModule],
-    providers: [DialogService, MessageService],
-    template: `
+  selector: 'app-role-list',
+  standalone: true,
+  imports: [CommonModule, TableModule, ButtonModule, TagModule, ToastModule],
+  providers: [DialogService, MessageService],
+  template: `
     <div class="card">
       <p-toast></p-toast>
       <div class="flex justify-content-between align-items-center mb-4">
@@ -57,41 +57,45 @@ import { ToastModule } from 'primeng/toast';
   `
 })
 export class RoleListComponent implements OnInit {
-    roles: Role[] = [];
-    ref: DynamicDialogRef | undefined;
+  roles: Role[] = [];
+  ref: DynamicDialogRef | undefined;
 
-    private roleService = inject(RoleService);
-    private dialogService = inject(DialogService);
+  private roleService = inject(RoleService);
+  private dialogService = inject(DialogService);
+  private cdr = inject(ChangeDetectorRef);
 
-    ngOnInit() {
-        this.loadRoles();
+  ngOnInit() {
+    this.loadRoles();
+  }
+
+  loadRoles() {
+    this.roleService.getRoles().subscribe({
+      next: (data) => {
+        this.roles = data;
+        this.cdr.detectChanges(); // Fix NG0100 - mark for check after async update
+      },
+      error: (err) => console.error('Failed to load roles', err)
+    });
+  }
+
+  viewPermissions(role: Role) {
+    const ref = this.dialogService.open(PermissionViewerComponent, {
+      header: `Permissions for ${role.name}`,
+      width: '70%',
+      contentStyle: { overflow: 'auto' },
+      baseZIndex: 10000,
+      data: {
+        roleId: role.id
+      }
+    });
+    this.ref = ref || undefined;
+  }
+
+  getSeverity(scope: string): 'success' | 'info' | 'warn' | 'danger' | undefined {
+    switch (scope) {
+      case 'PLATFORM': return 'danger';
+      case 'TENANT': return 'info';
+      default: return undefined;
     }
-
-    loadRoles() {
-        this.roleService.getRoles().subscribe({
-            next: (data) => this.roles = data,
-            error: (err) => console.error('Failed to load roles', err)
-        });
-    }
-
-    viewPermissions(role: Role) {
-        const ref = this.dialogService.open(PermissionViewerComponent, {
-            header: `Permissions for ${role.name}`,
-            width: '70%',
-            contentStyle: { overflow: 'auto' },
-            baseZIndex: 10000,
-            data: {
-                roleId: role.id
-            }
-        });
-        this.ref = ref || undefined;
-    }
-
-    getSeverity(scope: string): 'success' | 'info' | 'warn' | 'danger' | undefined {
-        switch (scope) {
-            case 'PLATFORM': return 'danger';
-            case 'TENANT': return 'info';
-            default: return undefined;
-        }
-    }
+  }
 }

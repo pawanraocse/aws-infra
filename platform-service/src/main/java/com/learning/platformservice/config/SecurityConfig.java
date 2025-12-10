@@ -24,7 +24,10 @@ public class SecurityConfig {
                                                                 "/swagger-ui.html",
                                                                 "/webjars/**",
                                                                 "/internal/**",
-                                                                "/api/tenants/**")
+                                                                "/api/tenants/**",
+                                                                // Gateway-authenticated endpoints (X-User-Id, X-Role
+                                                                // headers trusted)
+                                                                "/api/v1/**")
                                                 .permitAll()
                                                 .anyRequest().authenticated());
                 return http.build();

@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TableModule } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
@@ -92,6 +92,7 @@ export class UserListComponent implements OnInit {
   private invitationService = inject(InvitationService);
   private dialogService = inject(DialogService);
   private messageService = inject(MessageService);
+  private cdr = inject(ChangeDetectorRef);
 
   ngOnInit() {
     this.loadInvitations();
@@ -99,7 +100,10 @@ export class UserListComponent implements OnInit {
 
   loadInvitations() {
     this.invitationService.getInvitations().subscribe({
-      next: (data) => this.invitations = data,
+      next: (data) => {
+        this.invitations = data;
+        this.cdr.detectChanges(); // Fix NG0100 - mark for check after async update
+      },
       error: (err) => console.error('Failed to load invitations', err)
     });
   }

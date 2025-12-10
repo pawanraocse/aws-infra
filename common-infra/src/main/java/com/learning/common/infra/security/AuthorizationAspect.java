@@ -1,5 +1,6 @@
 package com.learning.common.infra.security;
 
+import com.learning.common.infra.exception.PermissionDeniedException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,8 +10,6 @@ import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-
-import org.springframework.security.access.AccessDeniedException;
 
 /**
  * Aspect to intercept methods annotated with @RequirePermission and enforce
@@ -38,7 +37,7 @@ public class AuthorizationAspect {
 
         if (userId == null || userId.isBlank()) {
             log.warn("No user ID found in request header: {}", USER_HEADER);
-            throw new AccessDeniedException("User is not authenticated (missing " + USER_HEADER + ")");
+            throw new PermissionDeniedException("User is not authenticated (missing " + USER_HEADER + ")");
         }
 
         // 3. Check for super-admin bypass
@@ -58,7 +57,7 @@ public class AuthorizationAspect {
 
         if (!allowed) {
             log.warn("Access denied: user={} resource={} action={}", userId, resource, action);
-            throw new AccessDeniedException("You do not have permission to " + action + " " + resource);
+            throw new PermissionDeniedException("You do not have permission to " + action + " " + resource);
         }
 
         return joinPoint.proceed();

@@ -58,8 +58,13 @@ public class SecurityConfiguration {
                                                                 "/api/v1/auth/resend-verification",
                                                                 "/api/v1/invitations/validate",
                                                                 "/api/v1/invitations/accept",
-                                                                "/api/v1/permissions/**") // Internal service-to-service
+                                                                "/api/v1/permissions/**", // Internal service-to-service
                                                                                           // calls
+                                                                // Gateway-authenticated endpoints (X-User-Id header
+                                                                // trusted)
+                                                                "/api/v1/roles/**",
+                                                                "/api/v1/invitations/**",
+                                                                "/api/v1/users/**")
                                                 .permitAll()
                                                 .anyRequest().authenticated())
                                 .oauth2Login(oauth2 -> oauth2

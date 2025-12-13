@@ -21,37 +21,40 @@ import java.util.concurrent.TimeUnit;
 @Configuration
 public class WebClientConfig {
 
-    private static final int CONNECT_TIMEOUT_MILLIS = 5000;
-    private static final int READ_TIMEOUT_SECONDS = 30;
-    private static final int WRITE_TIMEOUT_SECONDS = 30;
+        private static final int CONNECT_TIMEOUT_MILLIS = 5000;
+        private static final int READ_TIMEOUT_SECONDS = 30;
+        private static final int WRITE_TIMEOUT_SECONDS = 30;
 
-    /**
-     * Load-balanced WebClient.Builder for services registered with Eureka.
-     */
-    @Bean
-    @LoadBalanced
-    public WebClient.Builder loadBalancedWebClientBuilder() {
-        HttpClient httpClient = HttpClient.create()
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, CONNECT_TIMEOUT_MILLIS)
-                .responseTimeout(Duration.ofSeconds(READ_TIMEOUT_SECONDS))
-                .doOnConnected(
-                        conn -> conn.addHandlerLast(new ReadTimeoutHandler(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS))
-                                .addHandlerLast(new WriteTimeoutHandler(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)));
+        /**
+         * Load-balanced WebClient.Builder for services registered with Eureka.
+         */
+        @Bean
+        @LoadBalanced
+        public WebClient.Builder loadBalancedWebClientBuilder() {
+                HttpClient httpClient = HttpClient.create()
+                                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, CONNECT_TIMEOUT_MILLIS)
+                                .responseTimeout(Duration.ofSeconds(READ_TIMEOUT_SECONDS))
+                                .doOnConnected(
+                                                conn -> conn.addHandlerLast(new ReadTimeoutHandler(READ_TIMEOUT_SECONDS,
+                                                                TimeUnit.SECONDS))
+                                                                .addHandlerLast(new WriteTimeoutHandler(
+                                                                                WRITE_TIMEOUT_SECONDS,
+                                                                                TimeUnit.SECONDS)));
 
-        return WebClient.builder()
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .filter(ExchangeLoggingFilter.logRequest())
-                .filter(ExchangeLoggingFilter.logResponse());
-    }
+                return WebClient.builder()
+                                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                                .filter(ExchangeLoggingFilter.logRequest())
+                                .filter(ExchangeLoggingFilter.logResponse());
+        }
 
-    /**
-     * WebClient for calling platform-service via Eureka service discovery.
-     * Uses service name "platform-service" registered in Eureka.
-     */
-    @Bean
-    public WebClient platformWebClient(WebClient.Builder loadBalancedWebClientBuilder) {
-        return loadBalancedWebClientBuilder
-                .baseUrl("http://platform-service")
-                .build();
-    }
+        /**
+         * WebClient for calling platform-service via Eureka service discovery.
+         * Uses service name "platform-service" registered in Eureka.
+         */
+        @Bean
+        public WebClient platformWebClient(WebClient.Builder loadBalancedWebClientBuilder) {
+                return loadBalancedWebClientBuilder
+                                .baseUrl("http://platform-service/platform")
+                                .build();
+        }
 }

@@ -52,6 +52,15 @@ public abstract class BaseIntegrationTest {
 
                 configureFor("localhost", wireMockServer.port());
 
+                // Stub for Auth Service migration endpoint
+                wireMockServer.stubFor(
+                                post(urlPathMatching("/auth/internal/tenants/.*/migrate"))
+                                                .willReturn(aResponse()
+                                                                .withStatus(200)
+                                                                .withHeader("Content-Type", "application/json")
+                                                                .withBody("{\"lastVersion\":\"1.0.0\"}")));
+
+                // Stub for Backend Service migration endpoint
                 wireMockServer.stubFor(
                                 post(urlPathMatching("/internal/tenants/.*/migrate"))
                                                 .willReturn(aResponse()

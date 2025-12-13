@@ -214,12 +214,25 @@ module "lambda_post_confirmation" {
   user_pool_arn  = aws_cognito_user_pool.main.arn
 }
 
+# Lambda Pre Token Generation Module (for multi-tenant login)
+# Injects selected tenant ID into JWT when user logs in with multiple tenants
+module "lambda_pre_token_generation" {
+  source = "./modules/cognito-pre-token-generation"
+
+  environment    = var.environment
+  aws_region     = var.aws_region
+  aws_account_id = data.aws_caller_identity.current.account_id
+  user_pool_id   = aws_cognito_user_pool.main.id
+  user_pool_arn  = aws_cognito_user_pool.main.arn
+}
+
 # Break circular dependency by configuring trigger via CLI
 # IMPORTANT: update-user-pool replaces unspecified attributes, so we must include --auto-verified-attributes
 resource "null_resource" "configure_cognito_trigger" {
   triggers = {
-    lambda_arn   = module.lambda_post_confirmation.lambda_function_arn
-    user_pool_id = aws_cognito_user_pool.main.id
+    post_confirmation_arn    = module.lambda_post_confirmation.lambda_function_arn
+    pre_token_generation_arn = module.lambda_pre_token_generation.lambda_arn
+    user_pool_id             = aws_cognito_user_pool.main.id
   }
 
   provisioner "local-exec" {
@@ -229,15 +242,16 @@ resource "null_resource" "configure_cognito_trigger" {
       aws cognito-idp update-user-pool \
         --user-pool-id ${aws_cognito_user_pool.main.id} \
         --auto-verified-attributes email \
-        --lambda-config PostConfirmation=${module.lambda_post_confirmation.lambda_function_arn} \
+        --lambda-config PostConfirmation=${module.lambda_post_confirmation.lambda_function_arn},PreTokenGeneration=${module.lambda_pre_token_generation.lambda_arn} \
         --region ${var.aws_region}
-      echo "✅ Cognito User Pool updated successfully"
+      echo "✅ Cognito User Pool updated with Lambda triggers successfully"
     EOT
   }
 
   depends_on = [
     aws_cognito_user_pool.main,
-    module.lambda_post_confirmation
+    module.lambda_post_confirmation,
+    module.lambda_pre_token_generation
   ]
 }
 

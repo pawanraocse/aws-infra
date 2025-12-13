@@ -44,6 +44,9 @@ public class SecurityConfig {
                                                                 "/auth/api/v1/auth/tokens", "/auth/api/v1/auth/logout",
                                                                 "/auth/api/v1/auth/verify",
                                                                 "/auth/api/v1/auth/resend-verification",
+                                                                // Multi-tenant login endpoints
+                                                                "/auth/api/v1/auth/lookup",
+                                                                "/auth/api/v1/auth/last-accessed",
                                                                 "/auth/.well-known/**", "/auth/oauth2/**",
                                                                 // Invitation acceptance (public)
                                                                 "/auth/api/v1/invitations/validate",

@@ -54,12 +54,17 @@ public class SecurityConfiguration {
                                                 .requestMatchers("/", "/actuator/health", "/actuator/info",
                                                                 "/logged-out", "/error",
                                                                 "/api/v1/auth/signup/**", "/api/v1/auth/login",
+                                                                "/api/v1/auth/lookup", // Multi-tenant login lookup
+                                                                "/api/v1/auth/last-accessed", // Update last accessed
+                                                                                              // after login
                                                                 "/api/v1/auth/verify",
                                                                 "/api/v1/auth/resend-verification",
                                                                 "/api/v1/invitations/validate",
                                                                 "/api/v1/invitations/accept",
                                                                 "/api/v1/permissions/**", // Internal service-to-service
                                                                                           // calls
+                                                                "/internal/**", // Internal migration and
+                                                                                // service-to-service calls
                                                                 // Gateway-authenticated endpoints (X-User-Id header
                                                                 // trusted)
                                                                 "/api/v1/roles/**",

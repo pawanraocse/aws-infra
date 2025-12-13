@@ -1,5 +1,8 @@
 package com.learning.platformservice.tenant.service;
 
+import com.learning.platformservice.membership.dto.AddMembershipRequest;
+import com.learning.platformservice.membership.entity.MembershipRoleHint;
+import com.learning.platformservice.membership.service.MembershipService;
 import com.learning.platformservice.tenant.action.TenantProvisionAction;
 import com.learning.platformservice.tenant.action.TenantProvisionContext;
 import com.learning.common.dto.ProvisionTenantRequest;
@@ -39,13 +42,15 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
     private final List<TenantProvisionAction> actions;
     private final PlatformTenantProperties tenantProperties;
     private final TenantProvisioner tenantProvisioner;
+    private final MembershipService membershipService;
 
     @Autowired
     public TenantProvisioningServiceImpl(TenantRepository tenantRepository,
             MeterRegistry meterRegistry,
             List<TenantProvisionAction> actions,
             PlatformTenantProperties tenantProperties,
-            TenantProvisioner tenantProvisioner) {
+            TenantProvisioner tenantProvisioner,
+            MembershipService membershipService) {
         this.tenantRepository = tenantRepository;
         this.attemptsCounter = Counter.builder("platform.tenants.provision.attempts")
                 .description("Tenant provision attempts").register(meterRegistry);
@@ -56,6 +61,7 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         this.actions = actions;
         this.tenantProperties = tenantProperties;
         this.tenantProvisioner = tenantProvisioner;
+        this.membershipService = membershipService;
     }
 
     @Override
@@ -124,6 +130,30 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         tenant.setStatus(TenantStatus.ACTIVE.name());
         tenant.setUpdatedAt(OffsetDateTime.now());
         tenantRepository.save(tenant);
+
+        // Create owner membership for multi-tenant login support
+        if (request.ownerEmail() != null && !request.ownerEmail().isBlank()) {
+            try {
+                AddMembershipRequest membershipRequest = new AddMembershipRequest(
+                        request.ownerEmail(),
+                        null, // cognitoUserId - will be set on first login
+                        tenantId,
+                        MembershipRoleHint.OWNER.getValue(),
+                        true, // isOwner
+                        true, // isDefault (first membership for this user will be default)
+                        null // invitedBy - owner is not invited
+                );
+                membershipService.addMembership(membershipRequest);
+                log.info("tenant_owner_membership_created tenantId={} owner={}", tenantId, request.ownerEmail());
+            } catch (Exception e) {
+                // Membership creation failure should not block tenant provisioning
+                // This can happen due to duplicate entries (idempotency) or other transient
+                // issues
+                log.warn("tenant_owner_membership_failed tenantId={} owner={} error={}",
+                        tenantId, request.ownerEmail(), e.getMessage());
+            }
+        }
+
         successCounter.increment();
         log.info("tenant_provisioned tenantId={} type={} owner={} maxUsers={} storageMode={} durationMs={}",
                 tenantId, request.tenantType(), request.ownerEmail(), request.maxUsers(),
@@ -192,6 +222,9 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         tenant.setStatus("DELETED");
         tenant.setUpdatedAt(OffsetDateTime.now());
         tenantRepository.save(tenant);
+
+        // Remove all memberships for this tenant
+        membershipService.removeAllByTenant(tenantId);
 
         log.info("tenant_deprovision_success tenantId={} status=DELETED", tenantId);
     }

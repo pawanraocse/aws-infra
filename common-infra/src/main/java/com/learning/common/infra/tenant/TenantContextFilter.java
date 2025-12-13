@@ -27,7 +27,15 @@ import java.io.IOException;
 public class TenantContextFilter extends OncePerRequestFilter {
 
     public static final String TENANT_HEADER = "X-Tenant-Id";
-    private static final String[] EXCLUDED_PATHS = { "/actuator", "/swagger", "/v3/api-docs", "/internal" };
+    // Paths that don't require tenant context (public endpoints, internal, health
+    // checks)
+    private static final String[] EXCLUDED_PATHS = {
+            "/actuator", "/swagger", "/v3/api-docs", "/internal",
+            // Public auth endpoints (no tenant context known yet)
+            "/api/v1/auth/signup", "/api/v1/auth/login", "/api/v1/auth/verify",
+            "/api/v1/auth/lookup", "/api/v1/auth/last-accessed", "/api/v1/auth/resend-verification",
+            "/api/v1/invitations/validate", "/api/v1/invitations/accept"
+    };
 
     private final Environment environment;
 

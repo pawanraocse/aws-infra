@@ -3,11 +3,23 @@ import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
+import {
+  TenantInfo,
+  TenantLookupResult,
+  AuthExceptionType,
+  getAuthErrorMessage
+} from '../../core/models';
 import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { PasswordModule } from 'primeng/password';
 import { MessageModule } from 'primeng/message';
+import { ProgressSpinnerModule } from 'primeng/progressspinner';
+
+/**
+ * Login flow states for the multi-step state machine.
+ */
+type LoginStep = 'email' | 'select-tenant' | 'password';
 
 @Component({
   selector: 'app-login',
@@ -20,53 +32,206 @@ import { MessageModule } from 'primeng/message';
     ButtonModule,
     InputTextModule,
     PasswordModule,
-    MessageModule
+    MessageModule,
+    ProgressSpinnerModule
   ],
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.scss']
 })
 export class LoginComponent {
-  private fb = inject(FormBuilder);
-  private authService = inject(AuthService);
-  private router = inject(Router);
+  private readonly fb = inject(FormBuilder);
+  private readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
 
+  // ========== State Machine ==========
+
+  /** Current step in the login flow */
+  currentStep = signal<LoginStep>('email');
+
+  /** Loading state */
   loading = signal(false);
+
+  /** Error message to display */
   error = signal<string | null>(null);
 
-  loginForm = this.fb.group({
-    username: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required]]
+  /** Success message (e.g., for verification redirect) */
+  success = signal<string | null>(null);
+
+  /** Lookup result from tenant query */
+  lookupResult = signal<TenantLookupResult | null>(null);
+
+  /** Selected tenant for login */
+  selectedTenant = signal<TenantInfo | null>(null);
+
+  // ========== Forms ==========
+
+  /** Email form for step 1 */
+  emailForm = this.fb.group({
+    email: ['', [Validators.required, Validators.email]]
   });
 
-  async onSubmit() {
-    if (this.loginForm.invalid) return;
+  /** Password form for step 3 */
+  passwordForm = this.fb.group({
+    password: ['', [Validators.required, Validators.minLength(8)]]
+  });
+
+  // ========== Step 1: Email Lookup ==========
+
+  /**
+   * Handle email submission and lookup tenants.
+   */
+  async onEmailSubmit() {
+    if (this.emailForm.invalid) return;
+
+    const email = this.emailForm.value.email!;
+    this.loading.set(true);
+    this.error.set(null);
+
+    try {
+      const result = await this.authService.lookupTenants(email);
+      this.lookupResult.set(result);
+
+      if (result.tenants.length === 0) {
+        // No tenants found - user needs to sign up
+        this.error.set(getAuthErrorMessage(AuthExceptionType.NO_TENANTS_FOUND));
+      } else if (result.tenants.length === 1) {
+        // Single tenant - auto-select and go to password
+        this.selectTenant(result.tenants[0]);
+        this.currentStep.set('password');
+      } else {
+        // Multiple tenants - show selector
+        this.currentStep.set('select-tenant');
+      }
+    } catch (err) {
+      this.error.set('Failed to lookup account. Please try again.');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  // ========== Step 2: Tenant Selection ==========
+
+  /**
+   * Select a tenant from the list.
+   */
+  selectTenant(tenant: TenantInfo) {
+    this.selectedTenant.set(tenant);
+
+    // Check if SSO is enabled for this tenant
+    if (tenant.ssoEnabled) {
+      // SSO not yet implemented - show message
+      this.error.set(getAuthErrorMessage(AuthExceptionType.SSO_NOT_CONFIGURED));
+      return;
+    }
+
+    this.currentStep.set('password');
+    this.error.set(null);
+  }
+
+  /**
+   * Handle back button from tenant selection.
+   */
+  goBackToEmail() {
+    this.currentStep.set('email');
+    this.lookupResult.set(null);
+    this.selectedTenant.set(null);
+    this.error.set(null);
+  }
+
+  // ========== Step 3: Password & Authentication ==========
+
+  /**
+   * Handle password submission and login.
+   */
+  async onPasswordSubmit() {
+    if (this.passwordForm.invalid) return;
+
+    const email = this.emailForm.value.email!;
+    const password = this.passwordForm.value.password!;
+    const tenant = this.selectedTenant();
+
+    if (!tenant) {
+      this.error.set('Please select a workspace first.');
+      this.currentStep.set('select-tenant');
+      return;
+    }
 
     this.loading.set(true);
     this.error.set(null);
 
     try {
-      await this.authService.login({
-        username: this.loginForm.value.username!,
-        password: this.loginForm.value.password!
+      await this.authService.loginWithTenant({
+        email,
+        password,
+        selectedTenantId: tenant.tenantId
       });
       // Navigation handled in authService
-    } catch (err: any) {
+    } catch (err: unknown) {
       this.loading.set(false);
 
-      // Handle unverified user error
-      if (err.name === 'UserNotConfirmedException') {
-        this.error.set('Please verify your email before logging in. Check your inbox for the verification link.');
-        // Navigate to verify-email page with email
+      const errorWithCode = err as { code?: AuthExceptionType; message?: string };
+
+      // Handle specific error cases
+      if (errorWithCode.code === AuthExceptionType.USER_NOT_CONFIRMED) {
+        this.success.set('Redirecting to verification...');
         setTimeout(() => {
           this.router.navigate(['/auth/verify-email'], {
-            state: { email: this.loginForm.value.username }
+            state: { email: this.emailForm.value.email }
           });
-        }, 2000);
+        }, 1500);
       } else {
-        this.error.set(err.message || 'Login failed. Please check your credentials.');
+        this.error.set(errorWithCode.message || 'Login failed. Please check your credentials.');
       }
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /**
+   * Handle back button from password step.
+   */
+  goBackToTenantSelection() {
+    const result = this.lookupResult();
+
+    if (result && result.tenants.length > 1) {
+      this.currentStep.set('select-tenant');
+    } else {
+      this.goBackToEmail();
+    }
+
+    this.passwordForm.reset();
+    this.error.set(null);
+  }
+
+  // ========== UI Helpers ==========
+
+  /**
+   * Get display name for a tenant.
+   */
+  getTenantDisplayName(tenant: TenantInfo): string {
+    if (tenant.tenantType === 'PERSONAL') {
+      return 'Personal Workspace';
+    }
+    return tenant.companyName || tenant.tenantName;
+  }
+
+  /**
+   * Get subtitle for a tenant (role hint).
+   */
+  getTenantSubtitle(tenant: TenantInfo): string {
+    const roleLabels: Record<string, string> = {
+      'owner': 'Owner',
+      'admin': 'Administrator',
+      'member': 'Member',
+      'guest': 'Guest'
+    };
+    return roleLabels[tenant.roleHint] || tenant.roleHint;
+  }
+
+  /**
+   * Get icon class for tenant type.
+   */
+  getTenantIcon(tenant: TenantInfo): string {
+    return tenant.tenantType === 'PERSONAL' ? 'pi-user' : 'pi-building';
   }
 }

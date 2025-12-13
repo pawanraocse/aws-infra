@@ -1,6 +1,7 @@
 package com.learning.platformservice.tenant.service;
 
 import com.learning.common.dto.ProvisionTenantRequest;
+import com.learning.platformservice.membership.service.MembershipService;
 import com.learning.platformservice.tenant.action.TenantProvisionAction;
 import com.learning.platformservice.tenant.config.PlatformTenantProperties;
 import com.learning.platformservice.tenant.dto.TenantDto;
@@ -38,6 +39,9 @@ class TenantProvisioningServiceImplTest {
     @Mock
     private PlatformTenantProperties platformTenantProperties;
 
+    @Mock
+    private MembershipService membershipService;
+
     private SimpleMeterRegistry meterRegistry;
     private TenantProvisioningServiceImpl service;
 
@@ -51,7 +55,7 @@ class TenantProvisioningServiceImplTest {
 
     private void initServiceWithActions(List<TenantProvisionAction> actions) {
         service = new TenantProvisioningServiceImpl(tenantRepository, meterRegistry, actions,
-                platformTenantProperties, tenantProvisioner);
+                platformTenantProperties, tenantProvisioner, membershipService);
     }
 
     // Stub actions ---------------------------------------------------------

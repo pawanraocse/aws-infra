@@ -395,6 +395,112 @@ aws cognito-idp describe-user-pool --user-pool-id <ID> \
 - This endpoint bypasses authentication (service-to-service call)
 - Located in `TenantInternalController.java` in platform-service
 
+---
+
+### 🔐 Multi-Tenant Login Flow (Email-First with Smart Tenant Selection)
+
+**Purpose:** Allow users who belong to multiple tenants to select which workspace to access during login.
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       Email-First Login Flow                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. EMAIL STEP                                                              │
+│     User enters email  ────────────►  GET /api/v1/auth/lookup              │
+│                                       Returns: List of tenants for email   │
+│                                                                             │
+│  2. SELECTION STEP (if multiple tenants)                                    │
+│     ┌───────────────────────┐  ┌───────────────────────┐                   │
+│     │ 🏠 Personal Workspace │  │ 🏢 Acme Corporation   │                   │
+│     │     Owner             │  │     Administrator      │                   │
+│     │     [Default]         │  │     [SSO]              │                   │
+│     └───────────────────────┘  └───────────────────────┘                   │
+│                                                                             │
+│  3. PASSWORD STEP                                                           │
+│     User enters password ────►  Cognito Auth with clientMetadata:          │
+│                                 { selectedTenantId: "tenant-xxx" }         │
+│                                                                             │
+│  4. TOKEN GENERATION                                                        │
+│     PreTokenGeneration Lambda ─►  Override custom:tenantId in JWT          │
+│                                   with selected tenant                      │
+│                                                                             │
+│  5. AUTHENTICATED                                                           │
+│     JWT contains: { custom:tenantId: "tenant-xxx", ... }                   │
+│     User enters selected workspace                                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Cognito Lambda Triggers:**
+
+| Lambda | Trigger | Purpose |
+|--------|---------|---------|
+| **PostConfirmation** | After email verification | Sets initial `custom:tenantId`, `custom:role` during signup |
+| **PreTokenGeneration** | Before JWT issued | Overrides `custom:tenantId` based on selected tenant at login |
+
+**Database Schema (Platform Service):**
+```sql
+-- Maps users to their tenant memberships
+CREATE TABLE user_tenant_memberships (
+    id UUID PRIMARY KEY,
+    user_email VARCHAR(255) NOT NULL,           -- User identifier
+    cognito_user_id VARCHAR(255),               -- Set after first login
+    tenant_id VARCHAR(64) NOT NULL,             -- FK to tenant
+    role_hint VARCHAR(50) DEFAULT 'member',     -- Display hint (owner/admin/member/guest)
+    is_owner BOOLEAN DEFAULT false,             -- True if user created tenant
+    is_default BOOLEAN DEFAULT false,           -- User's default workspace
+    last_accessed_at TIMESTAMPTZ,               -- For sorting by recent
+    joined_at TIMESTAMPTZ DEFAULT NOW(),
+    status VARCHAR(32) DEFAULT 'ACTIVE',        -- ACTIVE, REMOVED, SUSPENDED
+    UNIQUE(user_email, tenant_id)
+);
+```
+
+**API Endpoints:**
+
+| Endpoint | Method | Auth | Purpose |
+|----------|--------|------|---------|
+| `/api/v1/auth/lookup` | GET | Public | Lookup tenants by email |
+| `/api/v1/auth/last-accessed` | PATCH | Public | Update last accessed timestamp |
+| `/internal/memberships/by-email` | GET | Internal | Backend lookup for memberships |
+| `/internal/memberships` | POST | Internal | Create membership record |
+
+**Frontend State Machine:**
+```
+                    ┌──────────┐
+                    │  email   │ ◄─── Start
+                    └────┬─────┘
+                         │
+              ┌──────────┴──────────┐
+              ▼                     ▼
+        0 tenants               1 tenant
+      [Show Error]            [Auto-select]
+                                    │
+              ▼                     ▼
+        ┌────────────────┐   ┌──────────┐
+        │ select-tenant  │◄──│ password │
+        └───────┬────────┘   └──────────┘
+                │                   ▲
+                └───────────────────┘
+```
+
+**Security Considerations:**
+- Lookup endpoint returns empty for unknown emails (prevents enumeration)
+- SSO tenants display message but don't process (Phase 4 feature)
+- PreTokenGeneration Lambda only overrides if clientMetadata is provided
+- Last accessed timestamp is non-critical (failure doesn't block login)
+
+**Files Created:**
+- `terraform/lambdas/cognito-pre-token-generation/` - Lambda source + Terraform module
+- `platform-service/.../membership/` - Entity, repository, service, controller
+- `auth-service/.../TenantLookupController.java` - Public lookup API
+- `frontend/src/app/core/models/` - TypeScript interfaces and enums
+- `frontend/src/app/features/auth/login.component.*` - Multi-step UI
+
+
+
 **Email Configuration Options:**
 
 | Option | Best For | From Address | Daily Limit | Cost |

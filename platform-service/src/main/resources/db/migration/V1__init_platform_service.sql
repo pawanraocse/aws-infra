@@ -106,3 +106,79 @@ CREATE TABLE IF NOT EXISTS tenant_usage_metrics (
 
 CREATE INDEX idx_usage_tenant_date ON tenant_usage_metrics(tenant_id, metric_date DESC);
 CREATE INDEX idx_usage_date ON tenant_usage_metrics(metric_date DESC);
+
+-- =====================================================
+-- USER-TENANT MEMBERSHIPS
+-- =====================================================
+-- Tracks which users (by email) belong to which tenants.
+-- Enables multi-tenant login: one user can access multiple workspaces.
+--
+-- Rules:
+--   - PERSONAL tenant: Max 1 per email (enforced at application level)
+--   - ORGANIZATION tenant: Unlimited per email
+--   - A user can have both personal + organization memberships
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS user_tenant_memberships (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- User identification (email is the primary identifier)
+    user_email VARCHAR(255) NOT NULL,
+    cognito_user_id VARCHAR(255),  -- Set after first login, used for faster lookups
+    
+    -- Tenant relationship
+    tenant_id VARCHAR(64) NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    
+    -- Role hint for display in tenant selector (actual permissions in tenant DB)
+    role_hint VARCHAR(50) NOT NULL DEFAULT 'member',
+    -- Valid values: owner, admin, member, guest
+    
+    -- Ownership: true if this user created/owns the tenant
+    is_owner BOOLEAN NOT NULL DEFAULT false,
+    
+    -- Default workspace: only ONE per user (enforced by unique partial index)
+    is_default BOOLEAN NOT NULL DEFAULT false,
+    
+    -- Activity tracking for sorting (most recently used first)
+    last_accessed_at TIMESTAMPTZ,
+    
+    -- Membership lifecycle
+    joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    invited_by VARCHAR(255),  -- Email of inviter (null for owners/self-signup)
+    
+    -- Soft delete support (for invitation revocation / removal)
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    -- Valid values: ACTIVE, REMOVED, SUSPENDED
+    
+    -- Unique constraint: one membership per user-tenant pair
+    CONSTRAINT uk_user_tenant UNIQUE(user_email, tenant_id)
+);
+
+-- Performance indexes for common queries
+CREATE INDEX idx_utm_email ON user_tenant_memberships(LOWER(user_email)) 
+    WHERE status = 'ACTIVE';
+CREATE INDEX idx_utm_tenant ON user_tenant_memberships(tenant_id) 
+    WHERE status = 'ACTIVE';
+CREATE INDEX idx_utm_cognito ON user_tenant_memberships(cognito_user_id) 
+    WHERE cognito_user_id IS NOT NULL;
+CREATE INDEX idx_utm_owner ON user_tenant_memberships(tenant_id, is_owner) 
+    WHERE is_owner = true;
+CREATE INDEX idx_utm_last_accessed ON user_tenant_memberships(user_email, last_accessed_at DESC NULLS LAST)
+    WHERE status = 'ACTIVE';
+
+-- Ensure only one default workspace per user (partial unique index)
+CREATE UNIQUE INDEX idx_utm_single_default 
+    ON user_tenant_memberships(LOWER(user_email)) 
+    WHERE is_default = true AND status = 'ACTIVE';
+
+-- Comments for documentation
+COMMENT ON TABLE user_tenant_memberships IS 
+    'Maps users (by email) to their tenant memberships. Enables multi-tenant login flow.';
+COMMENT ON COLUMN user_tenant_memberships.role_hint IS 
+    'Display hint for tenant selector UI. Actual permissions are managed in tenant database.';
+COMMENT ON COLUMN user_tenant_memberships.is_owner IS 
+    'True if user created/owns this tenant. Personal tenant owner or organization founder.';
+COMMENT ON COLUMN user_tenant_memberships.is_default IS 
+    'Users default workspace. Auto-selected during login if only one tenant.';
+COMMENT ON COLUMN user_tenant_memberships.status IS 
+    'Membership status: ACTIVE, REMOVED (left/kicked), SUSPENDED (temporarily blocked).';

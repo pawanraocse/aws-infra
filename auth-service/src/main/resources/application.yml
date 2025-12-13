@@ -4,6 +4,12 @@ spring:
 
   # Tenant datasource routing is handled by TenantDataSourceRouter
   # Individual tenant connections are created dynamically
+  
+  # Default datasource for health checks and when no tenant context is set
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/awsinfra}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
 
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect

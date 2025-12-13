@@ -1,8 +1,6 @@
-package com.learning.backendservice.config;
+package com.learning.common.infra.tenant;
 
-import com.learning.backendservice.tenant.registry.TenantRegistryService;
 import com.learning.common.dto.TenantDbConfig;
-import com.learning.common.infra.tenant.TenantContext;
 import com.zaxxer.hikari.HikariDataSource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource;
@@ -16,6 +14,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * Routes database connections to tenant-specific databases based on
  * TenantContext.
  * Dynamically creates and caches data source connections for each tenant.
+ * 
+ * This is the core of multi-tenant database routing - all services that need
+ * tenant-specific databases should use this router.
  */
 @Slf4j
 public class TenantDataSourceRouter extends AbstractRoutingDataSource {
@@ -55,13 +56,14 @@ public class TenantDataSourceRouter extends AbstractRoutingDataSource {
         String tenantId = TenantContext.getCurrentTenant();
 
         if (tenantId == null) {
-            log.debug("No tenant context set, using default datasource");
+            log.info("TenantDataSourceRouter: No tenant context set, using default datasource");
             if (defaultDataSource == null) {
                 throw new IllegalStateException("No tenant context and no default datasource configured");
             }
             return defaultDataSource;
         }
 
+        log.info("TenantDataSourceRouter: Routing to tenant database: {}", tenantId);
         // Get or create data source for this tenant
         return tenantDataSources.computeIfAbsent(tenantId, this::createTenantDataSource);
     }
@@ -100,5 +102,12 @@ public class TenantDataSourceRouter extends AbstractRoutingDataSource {
             hikari.close();
             log.info("Evicted and closed data source for tenant: {}", tenantId);
         }
+    }
+
+    /**
+     * Get count of cached tenant data sources.
+     */
+    public int getActiveTenantCount() {
+        return tenantDataSources.size();
     }
 }

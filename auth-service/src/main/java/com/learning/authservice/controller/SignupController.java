@@ -4,6 +4,7 @@ import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.authservice.config.CognitoProperties;
 import com.learning.authservice.dto.VerifyRequestDto;
 import com.learning.common.dto.*;
+import com.learning.common.infra.tenant.TenantContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -120,11 +121,19 @@ public class SignupController {
                                         .findFirst()
                                         .orElseThrow(() -> new RuntimeException("Failed to get user sub from Cognito"));
 
-                        // Assign role in database for authorization checks
-                        userRoleService.assignRole(userId, role, "system");
+                        // Set tenant context for database routing
+                        log.info("Setting TenantContext for role assignment: tenantId={}", request.getTenantId());
+                        TenantContext.setCurrentTenant(request.getTenantId());
+                        try {
+                                // Assign role in database for authorization checks
+                                log.info("Assigning role in tenant DB: userId={} role={}", userId, role);
+                                userRoleService.assignRole(userId, role, "system");
 
-                        log.info("✅ Email verified and role assigned: email={} userId={} role={}",
-                                        request.getEmail(), userId, role);
+                                log.info("✅ Email verified and role assigned: email={} userId={} role={} tenantId={}",
+                                                request.getEmail(), userId, role, request.getTenantId());
+                        } finally {
+                                TenantContext.clear();
+                        }
 
                         return ResponseEntity.ok(
                                         SignupResponse.success("Email verified successfully. You can now log in.", null,
@@ -207,7 +216,7 @@ public class SignupController {
         // Helper: Call platform-service to provision tenant
         private void provisionTenant(ProvisionTenantRequest request) {
                 platformWebClient.post()
-                                .uri("/platform/internal/tenants")
+                                .uri("/internal/tenants")
                                 .bodyValue(request)
                                 .retrieve()
                                 .bodyToMono(Void.class)
@@ -299,11 +308,17 @@ public class SignupController {
                                         .orElseThrow(() -> new RuntimeException(
                                                         "Failed to get user sub from Cognito response"));
 
-                        // Assign role in database for authorization checks
-                        userRoleService.assignRole(userId, role, "system");
+                        // Set tenant context for database routing
+                        TenantContext.setCurrentTenant(tenantId);
+                        try {
+                                // Assign role in database for authorization checks
+                                userRoleService.assignRole(userId, role, "system");
 
-                        log.info("Cognito user created and role assigned: email={} role={} userId={}",
-                                        email, role, userId);
+                                log.info("Cognito user created and role assigned: email={} role={} userId={} tenantId={}",
+                                                email, role, userId, tenantId);
+                        } finally {
+                                TenantContext.clear();
+                        }
 
                 } catch (UsernameExistsException e) {
                         throw new IllegalArgumentException("User with email " + email + " already exists");

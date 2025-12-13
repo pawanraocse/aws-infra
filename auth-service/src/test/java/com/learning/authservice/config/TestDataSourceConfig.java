@@ -1,6 +1,7 @@
 package com.learning.authservice.config;
 
-import com.learning.authservice.tenant.AuthServiceTenantRegistry;
+import com.learning.common.infra.tenant.TenantDataSourceRouter;
+import com.learning.common.infra.tenant.TenantRegistryService;
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -31,7 +32,7 @@ public class TestDataSourceConfig {
      */
     @Bean(name = "tenantDataSource")
     @Primary
-    public DataSource tenantDataSource(AuthServiceTenantRegistry tenantRegistry) {
+    public DataSource tenantDataSource(TenantRegistryService tenantRegistry) {
         // Get reference to static Testcontainers instance
         var postgres = AbstractIntegrationTest.postgres;
 

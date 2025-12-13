@@ -1,4 +1,4 @@
-package com.learning.backendservice.config;
+package com.learning.authservice.config;
 
 import com.learning.common.infra.tenant.PlatformServiceTenantRegistry;
 import com.learning.common.infra.tenant.TenantDataSourceRouter;
@@ -23,23 +23,22 @@ import org.springframework.web.reactive.function.client.WebClient;
 import javax.sql.DataSource;
 
 /**
- * Configures tenant-aware data sources for multi-tenant architecture.
- * Uses shared TenantDataSourceRouter from common-infra to dynamically route
- * connections based on X-Tenant-Id header.
+ * Configures tenant-aware data sources for auth-service.
+ * Uses shared infrastructure from common-infra for multi-tenant routing.
  */
 @Configuration
 @EnableTransactionManagement
-@EnableJpaRepositories(basePackages = "com.learning.backendservice.repository", entityManagerFactoryRef = "tenantEntityManagerFactory", transactionManagerRef = "tenantTransactionManager")
+@EnableJpaRepositories(basePackages = "com.learning.authservice", entityManagerFactoryRef = "tenantEntityManagerFactory", transactionManagerRef = "tenantTransactionManager")
 @Slf4j
-public class DataSourceConfig {
+public class AuthDataSourceConfig {
 
-    @Value("${spring.datasource.url}")
+    @Value("${spring.datasource.url:jdbc:postgresql://localhost:5432/awsinfra}")
     private String defaultJdbcUrl;
 
-    @Value("${spring.datasource.username}")
+    @Value("${spring.datasource.username:postgres}")
     private String defaultUsername;
 
-    @Value("${spring.datasource.password}")
+    @Value("${spring.datasource.password:postgres}")
     private String defaultPassword;
 
     /**
@@ -76,7 +75,7 @@ public class DataSourceConfig {
         dataSource.setConnectionTimeout(30000);
         dataSource.setIdleTimeout(600000);
         dataSource.setMaxLifetime(1800000);
-        dataSource.setPoolName("backend-default-pool");
+        dataSource.setPoolName("auth-default-pool");
 
         return dataSource;
     }
@@ -89,7 +88,7 @@ public class DataSourceConfig {
     public DataSource tenantDataSource(
             TenantRegistryService tenantRegistryService,
             @Qualifier("defaultDataSource") DataSource defaultDataSource) {
-        log.info("Configuring tenant data source router for backend-service");
+        log.info("Configuring tenant data source router for auth-service");
         return new TenantDataSourceRouter(tenantRegistryService, defaultDataSource);
     }
 
@@ -102,14 +101,15 @@ public class DataSourceConfig {
             EntityManagerFactoryBuilder builder,
             @Qualifier("tenantDataSource") DataSource tenantDataSource) {
 
-        log.info("Configuring tenant EntityManagerFactory for backend-service");
+        log.info("Configuring tenant EntityManagerFactory for auth-service");
 
         return builder
                 .dataSource(tenantDataSource)
-                .packages("com.learning.backendservice.entity")
+                .packages("com.learning.authservice")
                 .persistenceUnit("tenant")
                 .properties(java.util.Map.of(
-                        "hibernate.hbm2ddl.auto", "none"))
+                        "hibernate.hbm2ddl.auto", "none",
+                        "hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect"))
                 .build();
     }
 

@@ -1,57 +1,182 @@
-<div class="flex justify-content-center align-items-center min-h-screen bg-blue-50"
-  style="background: linear-gradient(135deg, var(--surface-50) 0%, var(--primary-50) 100%);">
-
-  <div class="w-full" style="max-width: 450px;">
+<div class="login-container">
+  <div class="login-content">
+    <!-- Header -->
     <div class="text-center mb-5">
-      <div class="text-3xl font-bold text-900 mb-2">Welcome Back</div>
-      <div class="text-600 font-medium">Sign in to continue to your dashboard</div>
+      <div class="text-3xl font-bold text-900 mb-2">
+        @switch (currentStep()) {
+          @case ('email') { Welcome Back }
+          @case ('select-tenant') { Choose Your Workspace }
+          @case ('password') { Enter Your Password }
+        }
+      </div>
+      <div class="text-600 font-medium">
+        @switch (currentStep()) {
+          @case ('email') { Enter your email to continue }
+          @case ('select-tenant') { Select which workspace you want to access }
+          @case ('password') { Sign in to {{ getTenantDisplayName(selectedTenant()!) }} }
+        }
+      </div>
     </div>
 
-    <p-card styleClass="card-glass shadow-soft p-4">
-      <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="flex flex-column gap-4">
+    <p-card styleClass="login-card">
+      <!-- Messages -->
+      @if (error()) {
+        <p-message severity="error" [text]="error()!" styleClass="w-full mb-4"></p-message>
+      }
+      @if (success()) {
+        <p-message severity="success" [text]="success()!" styleClass="w-full mb-4"></p-message>
+      }
 
-        <div *ngIf="error()" class="mb-2">
-          <p-message severity="error" [text]="error()!" styleClass="w-full"></p-message>
-        </div>
+      <!-- Step 1: Email Entry -->
+      @if (currentStep() === 'email') {
+        <form [formGroup]="emailForm" (ngSubmit)="onEmailSubmit()" class="flex flex-column gap-4">
+          <div class="flex flex-column gap-2">
+            <label for="email" class="font-medium text-900">Email Address</label>
+            <span class="p-input-icon-left w-full">
+              <i class="pi pi-envelope"></i>
+              <input 
+                pInputText 
+                id="email" 
+                formControlName="email" 
+                class="w-full" 
+                placeholder="you@example.com"
+                autocomplete="email" />
+            </span>
+          </div>
 
-        <div class="flex flex-column gap-2">
-          <label for="username" class="font-medium text-900">Email Address</label>
-          <span class="p-input-icon-left w-full">
-            <i class="pi pi-envelope"></i>
-            <input pInputText id="username" formControlName="username" class="w-full" placeholder="you@example.com" />
-          </span>
-        </div>
+          <p-button 
+            type="submit" 
+            label="Continue" 
+            icon="pi pi-arrow-right" 
+            iconPos="right"
+            [loading]="loading()" 
+            [disabled]="emailForm.invalid"
+            styleClass="w-full p-button-lg">
+          </p-button>
+        </form>
+      }
 
-        <div class="flex flex-column gap-2">
-          <label for="password" class="font-medium text-900">Password</label>
-          <p-password id="password" formControlName="password" [feedback]="false" [toggleMask]="true"
-            styleClass="w-full" inputStyleClass="w-full" placeholder="••••••••">
-          </p-password>
-          <div class="flex justify-content-end">
-            <a class="text-sm font-medium cursor-pointer text-primary-600 hover:text-primary-800">Forgot password?</a>
+      <!-- Step 2: Tenant Selection -->
+      @if (currentStep() === 'select-tenant') {
+        <div class="tenant-selector">
+          <div class="tenant-list">
+            @for (tenant of lookupResult()?.tenants; track tenant.tenantId) {
+              <div 
+                class="tenant-card" 
+                [class.selected]="selectedTenant()?.tenantId === tenant.tenantId"
+                [class.default]="tenant.isDefault"
+                (click)="selectTenant(tenant)">
+                
+                <div class="tenant-icon">
+                  <i [class]="'pi ' + getTenantIcon(tenant)"></i>
+                </div>
+                
+                <div class="tenant-info">
+                  <div class="tenant-name">{{ getTenantDisplayName(tenant) }}</div>
+                  <div class="tenant-role">{{ getTenantSubtitle(tenant) }}</div>
+                </div>
+
+                @if (tenant.isDefault) {
+                  <span class="tenant-badge default">Default</span>
+                }
+                @if (tenant.ssoEnabled) {
+                  <span class="tenant-badge sso">SSO</span>
+                }
+                
+                <i class="pi pi-chevron-right tenant-arrow"></i>
+              </div>
+            }
+          </div>
+
+          <div class="mt-4">
+            <p-button 
+              label="Back" 
+              icon="pi pi-arrow-left"
+              styleClass="p-button-text p-button-secondary w-full"
+              (onClick)="goBackToEmail()">
+            </p-button>
           </div>
         </div>
+      }
 
-        <p-button type="submit" label="Sign In" [loading]="loading()" [disabled]="loginForm.invalid"
-          styleClass="w-full p-button-lg">
-        </p-button>
+      <!-- Step 3: Password Entry -->
+      @if (currentStep() === 'password') {
+        <form [formGroup]="passwordForm" (ngSubmit)="onPasswordSubmit()" class="flex flex-column gap-4">
+          <!-- Selected Tenant Display -->
+          @if (selectedTenant()) {
+            <div class="selected-tenant-display">
+              <div class="tenant-icon small">
+                <i [class]="'pi ' + getTenantIcon(selectedTenant()!)"></i>
+              </div>
+              <div class="tenant-info">
+                <div class="tenant-name">{{ getTenantDisplayName(selectedTenant()!) }}</div>
+                <div class="tenant-email">{{ emailForm.value.email }}</div>
+              </div>
+            </div>
+          }
 
-        <div class="text-center mt-3 text-600">
-          Don't have an account?
-        </div>
-
-        <div class="grid mt-1">
-          <div class="col-6">
-            <p-button label="Personal" icon="pi pi-user" styleClass="w-full p-button-outlined p-button-secondary"
-              routerLink="/auth/signup/personal"></p-button>
+          <div class="flex flex-column gap-2">
+            <label for="password" class="font-medium text-900">Password</label>
+            <p-password 
+              id="password" 
+              formControlName="password" 
+              [feedback]="false" 
+              [toggleMask]="true"
+              styleClass="w-full" 
+              inputStyleClass="w-full" 
+              placeholder="••••••••">
+            </p-password>
+            <div class="flex justify-content-end">
+              <a class="text-sm font-medium cursor-pointer text-primary-600 hover:text-primary-800">
+                Forgot password?
+              </a>
+            </div>
           </div>
-          <div class="col-6">
-            <p-button label="Organization" icon="pi pi-building"
-              styleClass="w-full p-button-outlined p-button-secondary"
-              routerLink="/auth/signup/organization"></p-button>
+
+          <p-button 
+            type="submit" 
+            label="Sign In" 
+            [loading]="loading()" 
+            [disabled]="passwordForm.invalid"
+            styleClass="w-full p-button-lg">
+          </p-button>
+
+          <p-button 
+            label="Back" 
+            icon="pi pi-arrow-left"
+            styleClass="p-button-text p-button-secondary w-full"
+            (onClick)="goBackToTenantSelection()">
+          </p-button>
+        </form>
+      }
+
+      <!-- Sign Up Options (only on email step) -->
+      @if (currentStep() === 'email') {
+        <div class="signup-section mt-5">
+          <div class="text-center text-600 mb-3">
+            Don't have an account?
+          </div>
+
+          <div class="grid">
+            <div class="col-6">
+              <p-button 
+                label="Personal" 
+                icon="pi pi-user" 
+                styleClass="w-full p-button-outlined p-button-secondary"
+                routerLink="/auth/signup/personal">
+              </p-button>
+            </div>
+            <div class="col-6">
+              <p-button 
+                label="Organization" 
+                icon="pi pi-building"
+                styleClass="w-full p-button-outlined p-button-secondary"
+                routerLink="/auth/signup/organization">
+              </p-button>
+            </div>
           </div>
         </div>
-      </form>
+      }
     </p-card>
 
     <div class="text-center mt-4 text-500 text-sm">

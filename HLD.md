@@ -59,6 +59,87 @@ Services available at:
 3. **Organization Signup (B2B):** Create org → Invite users → Login
 4. Access dashboard with your tenant's isolated data
 
+---
+
+## 🔧 Adding Your Own Service
+
+This template is designed to be extended. Here's how to add a new multi-tenant service:
+
+### Step 1: Copy Backend-Service as Starting Point
+```bash
+cp -r backend-service/ my-new-service/
+# Update pom.xml: artifactId, name
+# Update application.yml: server.port (e.g., 8084)
+```
+
+### Step 2: Add common-infra Dependency
+In your `pom.xml`:
+```xml
+<dependency>
+    <groupId>com.learning</groupId>
+    <artifactId>common-infra</artifactId>
+    <version>${project.version}</version>
+</dependency>
+```
+
+### Step 3: Configure Tenant Database Routing
+Create a `DataSourceConfig.java`:
+```java
+@Configuration
+public class DataSourceConfig {
+    @Bean
+    public TenantRegistryService tenantRegistryService(WebClient platformWebClient) {
+        return new PlatformServiceTenantRegistry(platformWebClient, new TenantLocalCache());
+    }
+    
+    @Bean
+    public DataSource dataSource(TenantRegistryService tenantRegistry, DataSource defaultDataSource) {
+        return new TenantDataSourceRouter(tenantRegistry, defaultDataSource);
+    }
+}
+```
+
+### Step 4: Add WebClient for Platform-Service
+```java
+@Bean
+public WebClient platformWebClient(WebClient.Builder builder) {
+    return builder.baseUrl("http://platform-service/platform").build();
+}
+```
+
+### Step 5: Register with Eureka
+In `application.yml`:
+```yaml
+spring.application.name: my-new-service
+eureka.client.service-url.defaultZone: http://eureka-server:8761/eureka
+```
+
+### Step 6: Add to docker-compose.yml
+```yaml
+my-new-service:
+  build: ./my-new-service
+  ports: ["8084:8084"]
+  depends_on:
+    eureka-server: {condition: service_healthy}
+    postgres: {condition: service_healthy}
+```
+
+### Step 7: Add Gateway Route
+In `gateway-service/application.yml`:
+```yaml
+- id: my-new-service
+  uri: lb://my-new-service
+  predicates:
+    - Path=/my-new/**
+```
+
+**Key Points:**
+- All services use `TenantContext` for tenant isolation
+- Internal APIs use `/internal/**` paths (no auth required)
+- Gateway handles all JWT validation - your service trusts `X-Tenant-Id` header
+
+---
+
 ## 🏗️ System Architecture
 
 ```mermaid
@@ -499,7 +580,56 @@ CREATE TABLE user_tenant_memberships (
 - `frontend/src/app/core/models/` - TypeScript interfaces and enums
 - `frontend/src/app/features/auth/login.component.*` - Multi-step UI
 
+---
 
+### B2B vs B2C Feature Differentiation
+
+**Tenant Type Storage:**
+- `tenant_type` is stored in **platform DB** (`awsinfra.tenant` table)
+- Values: `PERSONAL` (B2C) or `ORGANIZATION` (B2B)
+
+**JWT Contents (What's in the token):**
+| Claim | Example | Source | Note |
+|-------|---------|--------|------|
+| `custom:tenantId` | `user-john-12345` | PostConfirmation / PreTokenGeneration Lambda | **Required** - Used for routing |
+| `custom:role` | `owner` | PostConfirmation Lambda | **Legacy** - Display hint only, NOT for authorization |
+| `email` | `user@example.com` | Cognito standard | |
+
+> [!IMPORTANT]
+> **Authorization uses database, NOT JWT claims!** The `custom:role` in JWT is a legacy display hint. Real permissions are checked via `user_roles` table in tenant DB. Plan to remove `custom:role` from JWT (see ROADMAP).
+
+> **Note:** `tenant_type` is NOT in JWT. Must call API: `GET /platform/api/v1/tenants/{tenantId}`
+
+**Feature Matrix:**
+| Feature | PERSONAL (B2C) | ORGANIZATION (B2B) |
+|---------|----------------|-------------------|
+| Invite users | ❌ Hidden | ✅ Available |
+| Team management | ❌ Hidden | ✅ Available |
+| Role assignment | ❌ Hidden | ✅ Available |
+| Max users | 1 (fixed) | 5-1000 (by tier) |
+| Trial period | None | 30 days |
+| Billing | Free tier | Subscription |
+
+**Frontend Implementation:**
+```typescript
+// Check tenant type before showing features
+if (tenant.tenantType === 'ORGANIZATION') {
+  showTeamManagement();
+  showInviteButton();
+} else {
+  // PERSONAL - hide multi-user features
+}
+```
+
+**Backend Enforcement:**
+```java
+// InvitationController.java
+if (tenant.getTenantType() == TenantType.PERSONAL) {
+    throw new ForbiddenException("Invitations not available for personal accounts");
+}
+```
+
+---
 
 **Email Configuration Options:**
 
@@ -878,6 +1008,32 @@ sequenceDiagram
 3. For each role, check `role_permissions` and `permissions` tables
 4. Return `true` if any role grants the requested `resource:action` permission
 
+**Permission Single Source of Truth:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     auth-service                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │             PermissionService.hasPermission()        │  │
+│  │                 (queries user_roles table)           │  │
+│  └──────────────────────────────────────────────────────┘  │
+│              ▲                              ▲               │
+│     (direct call)                    (via HTTP)             │
+│              │                              │               │
+│  AuthServicePermissionEvaluator    PermissionController     │
+│       (used by auth-service)          /api/v1/permissions   │
+│                                             ▲               │
+└─────────────────────────────────────────────│───────────────┘
+                                              │
+                        RemotePermissionEvaluator (HTTP POST)
+                        (used by backend/platform services)
+```
+
+> [!IMPORTANT]
+> All permission checks route through auth-service's `PermissionService` which queries the tenant database. This ensures:
+> - **Single source of truth** - Permissions live in DB, not hardcoded
+> - **Real-time updates** - Role changes take effect immediately (after cache expires)
+> - **Consistent behavior** - All services use same permission logic
+
 ---
 
 ## 🔐 Roles and Permissions Model
@@ -1219,6 +1375,41 @@ graph TB
 - `TenantRegistry` - Fetches tenant JDBC URL + credentials from Platform Service
 - `LocalCache` - Caches tenant DB configs (Caffeine, 30min TTL)
 - `TenantMigrationService` - Runs Flyway migrations on tenant databases
+
+### Migration Orchestration (Each Service Owns Its Schema)
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                    Tenant Provisioning Flow                        │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  Platform-Service (TenantProvisioningServiceImpl)                  │
+│        │                                                           │
+│        ├─► 1. Create tenant record in awsinfra.tenant table       │
+│        │                                                           │
+│        ├─► 2. StorageProvisionAction: CREATE DATABASE tenant_xxx  │
+│        │                                                           │
+│        └─► 3. MigrationInvokeAction: Orchestrate migrations       │
+│                    │                                               │
+│                    ├─► POST auth-service/internal/migrate          │
+│                    │   └─► Auth runs its own Flyway (roles, etc.) │
+│                    │                                               │
+│                    └─► POST backend-service/internal/migrate       │
+│                        └─► Backend runs its Flyway (entries)       │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Principle: Service Owns Its Schema**
+- Each service has its own Flyway scripts in `src/main/resources/db/migration/tenant/`
+- Platform-Service **only orchestrates** - it does NOT run other services' migrations
+- This allows services to be independently versioned and deployed
+
+**Migration Locations:**
+| Service | Location | Tables |
+|---------|----------|--------|
+| auth-service | `migration/tenant/V1__authorization_schema.sql` | roles, permissions, user_roles |
+| backend-service | `migration/tenant/V1__initial_schema.sql` | entries |
 
 ---
 
@@ -1634,7 +1825,7 @@ AWS-Infra/
 ├── gateway-service/        # API gateway & security enforcement
 ├── eureka-server/          # Service discovery
 ├── common-dto/             # Shared DTOs across services
-├── common-infra/           # Shared utilities (JSON writer, etc.)
+├── common-infra/           # Shared multi-tenant infrastructure (TenantDataSourceRouter, TenantContext, etc.)
 ├── terraform/              # Infrastructure as Code
 │   ├── modules/
 │   │   ├── vpc/
@@ -1858,7 +2049,7 @@ AWS-Infra/
 ├── gateway-service/        # API gateway & security enforcement
 ├── eureka-server/          # Service discovery
 ├── common-dto/             # Shared DTOs across services
-├── common-infra/           # Shared utilities (JSON writer, etc.)
+├── common-infra/           # Shared multi-tenant infrastructure (TenantDataSourceRouter, TenantContext, etc.)
 ├── terraform/              # Infrastructure as Code
 │   ├── modules/
 │   │   ├── vpc/

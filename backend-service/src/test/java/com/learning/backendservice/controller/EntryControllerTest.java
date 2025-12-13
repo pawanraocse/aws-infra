@@ -4,6 +4,7 @@ import com.learning.backendservice.BaseControllerTest;
 import com.learning.backendservice.dto.EntryRequestDto;
 import com.learning.backendservice.entity.Entry;
 import com.learning.backendservice.repository.EntryRepository;
+import com.learning.common.infra.security.PermissionEvaluator;
 import com.learning.common.infra.tenant.TenantRegistryService;
 import com.learning.common.dto.TenantDbConfig;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +31,9 @@ class EntryControllerTest extends BaseControllerTest {
         @MockBean
         private TenantRegistryService tenantRegistry;
 
+        @MockBean
+        private PermissionEvaluator permissionEvaluator;
+
         @Value("${spring.datasource.url}")
         private String dbUrl;
 
@@ -44,6 +48,9 @@ class EntryControllerTest extends BaseControllerTest {
                 entryRepository.deleteAll();
                 when(tenantRegistry.load(anyString()))
                                 .thenReturn(new TenantDbConfig(dbUrl, dbUsername, dbPassword));
+                // Grant all permissions in tests
+                when(permissionEvaluator.hasPermission(anyString(), anyString(), anyString()))
+                                .thenReturn(true);
         }
 
         @Test

@@ -1,6 +1,9 @@
 package com.learning.backendservice.config;
 
+import com.learning.common.infra.security.PermissionEvaluator;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.orm.jpa.JpaVendorAdapter;
@@ -31,5 +34,26 @@ public class TestConfig {
         em.setJpaProperties(properties);
 
         return em;
+    }
+
+    /**
+     * Mock PermissionEvaluator for tests.
+     * Always grants permissions to avoid needing auth-service running.
+     */
+    @Bean
+    @Primary
+    public PermissionEvaluator permissionEvaluator() {
+        return (userId, resource, action) -> true;
+    }
+
+    /**
+     * In-memory CacheManager for tests.
+     * Provides the 'permissions' cache needed by @Cacheable on
+     * RemotePermissionEvaluator.
+     */
+    @Bean
+    @Primary
+    public CacheManager cacheManager() {
+        return new ConcurrentMapCacheManager("permissions");
     }
 }

@@ -2,6 +2,8 @@ package com.learning.backendservice.config;
 
 import com.learning.common.infra.http.HttpClientFactory;
 import com.learning.common.infra.log.ExchangeLoggingFilter;
+import com.learning.common.infra.security.PermissionEvaluator;
+import com.learning.common.infra.security.RemotePermissionEvaluator;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
@@ -62,5 +64,14 @@ public class WebClientConfig {
                 .filter(ExchangeLoggingFilter.logRequest())
                 .filter(ExchangeLoggingFilter.logResponse())
                 .build();
+    }
+
+    /**
+     * Permission evaluator that calls auth-service for DB-backed permission checks.
+     * Replaces the hardcoded LocalPermissionEvaluator.
+     */
+    @Bean
+    public PermissionEvaluator permissionEvaluator(WebClient authWebClient) {
+        return new RemotePermissionEvaluator(authWebClient);
     }
 }

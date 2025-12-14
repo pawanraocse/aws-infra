@@ -36,19 +36,16 @@ public class SignupController {
         private final CognitoIdentityProviderClient cognitoClient;
         private final CognitoProperties cognitoProperties;
         private final UserRoleService userRoleService;
-        private final com.learning.authservice.tenant.TenantLookupService tenantLookupService;
 
         public SignupController(
                         SignupService signupService,
                         CognitoIdentityProviderClient cognitoClient,
                         CognitoProperties cognitoProperties,
-                        UserRoleService userRoleService,
-                        com.learning.authservice.tenant.TenantLookupService tenantLookupService) {
+                        UserRoleService userRoleService) {
                 this.signupService = signupService;
                 this.cognitoClient = cognitoClient;
                 this.cognitoProperties = cognitoProperties;
                 this.userRoleService = userRoleService;
-                this.tenantLookupService = tenantLookupService;
         }
 
         /**

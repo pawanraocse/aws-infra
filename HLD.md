@@ -1,7 +1,7 @@
 # High-Level Design: Multi-Tenant SaaS Template System
 
-**Version:** 5.0  
-**Last Updated:** 2025-12-08  
+**Version:** 6.0  
+**Last Updated:** 2025-12-14  
 **Purpose:** Production-ready, reusable multi-tenant architecture template with RBAC authorization and complete database-per-tenant isolation
 
 
@@ -442,6 +442,7 @@ sequenceDiagram
 **Lambda Functions:**
 - `cognito-post-confirmation` - Sets custom attributes (`custom:tenantId`, `custom:role`) after email verification.
   - **Purpose:** Persists tenant context into the user profile so it's available in the JWT on every login without runtime latency.
+  - **Note:** `tenantType` is NOT stored in Cognito - frontend looks it up from platform DB (single source of truth)
   - Runtime: Python 3.11
   - Trigger: Cognito PostConfirmation event
   - Permissions: AdminUpdateUserAttributes on User Pool
@@ -598,7 +599,13 @@ CREATE TABLE user_tenant_memberships (
 > [!IMPORTANT]
 > **Authorization uses database, NOT JWT claims!** The `custom:role` in JWT is a legacy display hint. Real permissions are checked via `user_roles` table in tenant DB. Plan to remove `custom:role` from JWT (see ROADMAP).
 
-> **Note:** `tenant_type` is NOT in JWT. Must call API: `GET /platform/api/v1/tenants/{tenantId}`
+> [!NOTE]
+> **TenantType Architecture (v6.0):** `tenant_type` is NOT stored in Cognito or JWT. Frontend looks it up from platform DB after login:
+> ```typescript
+> // Frontend auth.service.ts
+> const tenantType = await this.lookupTenantType(tenantId);  // GET /platform/api/v1/tenants/{id}
+> ```
+> This ensures platform DB is the single source of truth for tenant metadata.
 
 **Feature Matrix:**
 | Feature | PERSONAL (B2C) | ORGANIZATION (B2B) |

@@ -40,15 +40,11 @@ class SignupControllerTest {
     @Mock
     private UserRoleService userRoleService;
 
-    @Mock
-    private com.learning.authservice.tenant.TenantLookupService tenantLookupService;
-
     private SignupController signupController;
 
     @BeforeEach
     void setUp() {
-        signupController = new SignupController(signupService, cognitoClient, cognitoProperties, userRoleService,
-                tenantLookupService);
+        signupController = new SignupController(signupService, cognitoClient, cognitoProperties, userRoleService);
     }
 
     @Test

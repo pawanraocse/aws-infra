@@ -59,6 +59,9 @@ export class AppLayoutComponent {
       });
     }
 
+    // Add Settings for all organization users
+    items.push({ label: 'Settings', icon: 'pi pi-cog', routerLink: '/app/settings/account' });
+
     return items;
   });
 

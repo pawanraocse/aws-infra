@@ -1,10 +1,12 @@
 package com.learning.platformservice.config;
 
+import com.learning.common.infra.config.ServicesProperties;
 import com.learning.common.infra.http.HttpClientFactory;
 import com.learning.common.infra.log.ExchangeLoggingFilter;
 import com.learning.common.infra.security.PermissionEvaluator;
 import com.learning.common.infra.security.RemotePermissionEvaluator;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,6 +14,7 @@ import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
 
 @Configuration
+@EnableConfigurationProperties(ServicesProperties.class)
 public class WebClientConfig {
 
     /**

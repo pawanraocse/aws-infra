@@ -34,7 +34,9 @@ public class TenantContextFilter extends OncePerRequestFilter {
             // Public auth endpoints (no tenant context known yet)
             "/api/v1/auth/signup", "/api/v1/auth/login", "/api/v1/auth/verify",
             "/api/v1/auth/lookup", "/api/v1/auth/last-accessed", "/api/v1/auth/resend-verification",
-            "/api/v1/invitations/validate", "/api/v1/invitations/accept"
+            "/api/v1/invitations/validate", "/api/v1/invitations/accept",
+            // Internal service-to-service permission checks (tenant in request body)
+            "/api/v1/permissions"
     };
 
     private final Environment environment;

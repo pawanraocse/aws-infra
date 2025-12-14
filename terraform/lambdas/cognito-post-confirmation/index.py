@@ -49,10 +49,10 @@ def lambda_handler(event, context):
             return event
         
         # Extract client metadata (passed during signup)
+        # NOTE: tenantType is NOT stored in Cognito - frontend looks it up from platform DB
         client_metadata = event.get('request', {}).get('clientMetadata', {})
         tenant_id = client_metadata.get('tenantId')
         role = client_metadata.get('role', 'tenant-admin')
-        tenant_type = client_metadata.get('tenantType', 'PERSONAL')
         
         # Validate required data
         if not tenant_id:
@@ -60,10 +60,10 @@ def lambda_handler(event, context):
             # Don't block user - they can still login, admin can fix manually
             return event
         
-        # Update user attributes with custom claims
-        update_user_attributes(user_pool_id, username, tenant_id, role, tenant_type)
+        # Update user attributes with custom claims (only tenantId and role)
+        update_user_attributes(user_pool_id, username, tenant_id, role)
         
-        logger.info(f"Successfully set attributes for user {username}: tenantId={tenant_id}, role={role}, tenantType={tenant_type}")
+        logger.info(f"Successfully set attributes for user {username}: tenantId={tenant_id}, role={role}")
         
     except Exception as e:
         # Log error but don't raise - we don't want to block user confirmation
@@ -73,16 +73,17 @@ def lambda_handler(event, context):
     return event
 
 
-def update_user_attributes(user_pool_id, username, tenant_id, role, tenant_type):
+def update_user_attributes(user_pool_id, username, tenant_id, role):
     """
     Update Cognito user with custom attributes.
+    
+    NOTE: tenantType is NOT stored in Cognito - frontend looks it up from platform DB.
     
     Args:
         user_pool_id: Cognito User Pool ID
         username: User's username (email)
         tenant_id: Tenant ID to assign
         role: Role to assign (default: tenant-admin)
-        tenant_type: Tenant type (PERSONAL or ORGANIZATION)
     
     Raises:
         ClientError: If Cognito API call fails
@@ -99,14 +100,10 @@ def update_user_attributes(user_pool_id, username, tenant_id, role, tenant_type)
                 {
                     'Name': 'custom:role',
                     'Value': role
-                },
-                {
-                    'Name': 'custom:tenantType',
-                    'Value': tenant_type
                 }
             ]
         )
-        logger.info(f"Updated attributes for user {username}: tenantId={tenant_id}, role={role}, tenantType={tenant_type}")
+        logger.info(f"Updated attributes for user {username}: tenantId={tenant_id}, role={role}")
         
     except ClientError as e:
         error_code = e.response['Error']['Code']

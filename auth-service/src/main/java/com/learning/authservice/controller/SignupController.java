@@ -3,6 +3,7 @@ package com.learning.authservice.controller;
 import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.authservice.config.CognitoProperties;
 import com.learning.authservice.dto.VerifyRequestDto;
+import com.learning.authservice.signup.*;
 import com.learning.common.dto.*;
 import com.learning.common.infra.tenant.TenantContext;
 import jakarta.validation.Valid;
@@ -11,82 +12,91 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.reactive.function.client.WebClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.*;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.Base64;
-import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.web.reactive.function.client.WebClient;
 
 /**
  * Controller for handling user signup flows (B2C and B2B).
- * Orchestrates tenant provisioning and Cognito user creation.
+ * Thin controller that delegates to SignupService.
  */
 @RestController
 @RequestMapping("/api/v1/auth/signup")
 @Slf4j
-@RequiredArgsConstructor
 public class SignupController {
 
+        private final SignupService signupService;
         private final CognitoIdentityProviderClient cognitoClient;
         private final CognitoProperties cognitoProperties;
-        private final WebClient platformWebClient;
         private final UserRoleService userRoleService;
+        private final com.learning.authservice.tenant.TenantLookupService tenantLookupService;
 
-        /**
-         * B2C Personal Signup Flow
-         * 1. Generate tenant ID
-         * 2. Provision tenant via platform-service
-         * 3. Create Cognito user with custom:tenantId
-         * 4. Return success
-         */
-        @PostMapping("/personal")
-        public ResponseEntity<SignupResponse> signupPersonal(@RequestBody @Valid PersonalSignupRequest request) {
-                String email = request.email();
-                log.info("B2C signup initiated: email={}", email);
-
-                try {
-                        // 1. Generate unique tenant ID
-                        String tenantId = generateTenantId(email);
-
-                        // 2. Provision tenant
-                        ProvisionTenantRequest tenantRequest = ProvisionTenantRequest.forPersonal(tenantId, email);
-                        provisionTenant(tenantRequest);
-
-                        // 3. Create Cognito user with tenant context
-                        // Use signUp API to valid email verification
-                        boolean userConfirmed = registerUserViaSignUp(
-                                        email,
-                                        request.password(),
-                                        request.name(),
-                                        tenantId,
-                                        "tenant-admin" // Personal user is admin of their own tenant
-                        );
-
-                        log.info("✅ B2C signup completed: email={} tenantId={}", email, tenantId);
-
-                        return ResponseEntity.status(HttpStatus.CREATED)
-                                        .body(SignupResponse.success(
-                                                        userConfirmed ? "Signup successful. Please log in."
-                                                                        : "Signup successful. Please verify your email.",
-                                                        tenantId,
-                                                        userConfirmed));
-
-                } catch (Exception e) {
-                        log.error("❌ B2C signup failed: email={} error={}", email, e.getMessage(), e);
-                        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                                        .body(SignupResponse.failure(e.getMessage()));
-                }
+        public SignupController(
+                        SignupService signupService,
+                        CognitoIdentityProviderClient cognitoClient,
+                        CognitoProperties cognitoProperties,
+                        UserRoleService userRoleService,
+                        com.learning.authservice.tenant.TenantLookupService tenantLookupService) {
+                this.signupService = signupService;
+                this.cognitoClient = cognitoClient;
+                this.cognitoProperties = cognitoProperties;
+                this.userRoleService = userRoleService;
+                this.tenantLookupService = tenantLookupService;
         }
 
         /**
-         * Verify Email with Code
-         * Confirms user signup after receiving verification code via email
+         * B2C Personal Signup Flow.
+         * Creates personal tenant with email verification.
+         */
+        @PostMapping("/personal")
+        public ResponseEntity<SignupResponse> signupPersonal(@RequestBody @Valid PersonalSignupRequest request) {
+                log.info("B2C signup initiated: email={}", request.email());
+
+                PersonalSignupData signupData = new PersonalSignupData(
+                                request.email(),
+                                request.password(),
+                                request.name());
+
+                SignupResponse response = signupService.signup(signupData);
+
+                HttpStatus status = response.success() ? HttpStatus.CREATED : HttpStatus.BAD_REQUEST;
+                return ResponseEntity.status(status).body(response);
+        }
+
+        /**
+         * B2B Organization Signup Flow.
+         * Creates organization tenant with email verification for admin.
+         */
+        @PostMapping("/organization")
+        public ResponseEntity<SignupResponse> signupOrganization(
+                        @RequestBody @Valid OrganizationSignupRequest request) {
+                log.info("B2B signup initiated: company={} admin={}", request.companyName(), request.adminEmail());
+
+                OrganizationSignupData signupData = new OrganizationSignupData(
+                                request.adminEmail(),
+                                request.password(),
+                                request.adminName(),
+                                request.companyName(),
+                                request.tier(),
+                                null // maxUsers - will use default
+                );
+
+                SignupResponse response = signupService.signup(signupData);
+
+                HttpStatus status = response.success() ? HttpStatus.CREATED : HttpStatus.BAD_REQUEST;
+                return ResponseEntity.status(status).body(response);
+        }
+
+        /**
+         * Verify Email with Code.
+         * Confirms user signup after receiving verification code via email.
          */
         @PostMapping("/verify")
         public ResponseEntity<SignupResponse> verifyEmail(@RequestBody @Valid VerifyRequestDto request) {
@@ -96,6 +106,8 @@ public class SignupController {
                         String secretHash = calculateSecretHash(request.getEmail());
                         String role = request.getRole() != null ? request.getRole() : "tenant-admin";
 
+                        // NOTE: tenantType is NOT stored in Cognito - frontend looks it up from
+                        // platform DB
                         ConfirmSignUpRequest confirmRequest = ConfirmSignUpRequest.builder()
                                         .clientId(cognitoProperties.getClientId())
                                         .username(request.getEmail())
@@ -156,179 +168,6 @@ public class SignupController {
                 }
         }
 
-        /**
-         * B2B Organization Signup Flow
-         * 1. Validate company domain
-         * 2. Generate tenant ID from company name
-         * 3. Provision organization tenant
-         * 4. Create admin Cognito user
-         * 5. Send admin notification
-         */
-        @PostMapping("/organization")
-        public ResponseEntity<SignupResponse> signupOrganization(
-                        @RequestBody @Valid OrganizationSignupRequest request) {
-                String adminEmail = request.adminEmail();
-                String companyName = request.companyName();
-
-                log.info("B2B signup initiated: company={} admin={}", companyName, adminEmail);
-
-                try {
-                        // 1. Validate corporate email (optional)
-                        // TODO: Re-enable for SSO/Enterprise tier - validateCorporateEmail(adminEmail);
-
-                        // 2. Generate tenant ID from company name
-                        String tenantId = slugify(companyName);
-
-                        // 3. Provision organization tenant
-                        ProvisionTenantRequest tenantRequest = ProvisionTenantRequest.forOrganization(
-                                        tenantId,
-                                        companyName,
-                                        adminEmail,
-                                        request.tier() != null ? request.tier() : "STANDARD");
-                        provisionTenant(tenantRequest);
-
-                        // 4. Create admin user
-                        createCognitoUser(
-                                        adminEmail,
-                                        request.password(),
-                                        request.adminName(),
-                                        tenantId,
-                                        TenantType.ORGANIZATION,
-                                        "tenant-admin" // Admin role
-                        );
-
-                        log.info("✅ B2B signup completed: company={} tenantId={} admin={}",
-                                        companyName, tenantId, adminEmail);
-
-                        return ResponseEntity.status(HttpStatus.CREATED)
-                                        .body(SignupResponse.success(
-                                                        "Organization created successfully. Admin user has been notified.",
-                                                        tenantId,
-                                                        true)); // Admin created via adminCreateUser is auto-verified
-
-                } catch (Exception e) {
-                        log.error("❌ B2B signup failed: company={} error={}", companyName, e.getMessage(), e);
-                        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                                        .body(SignupResponse.failure(e.getMessage()));
-                }
-        }
-
-        // Helper: Call platform-service to provision tenant
-        private void provisionTenant(ProvisionTenantRequest request) {
-                platformWebClient.post()
-                                .uri("/internal/tenants")
-                                .bodyValue(request)
-                                .retrieve()
-                                .bodyToMono(Void.class)
-                                .timeout(Duration.ofSeconds(60)) // Tenant provisioning can take time
-                                .block();
-
-                log.info("Tenant provisioned: tenantId={}", request.id());
-        }
-
-        // Helper: Register user via signUp (B2C) - Enforces email verification
-        private boolean registerUserViaSignUp(
-                        String email,
-                        String password,
-                        String name,
-                        String tenantId,
-                        String role) {
-                try {
-                        String secretHash = calculateSecretHash(email);
-
-                        SignUpRequest signUpRequest = SignUpRequest.builder()
-                                        .clientId(cognitoProperties.getClientId())
-                                        .username(email)
-                                        .password(password)
-                                        .secretHash(secretHash)
-                                        .userAttributes(
-                                                        AttributeType.builder().name("email").value(email).build(),
-                                                        AttributeType.builder().name("name").value(name).build())
-                                        .clientMetadata(Map.of(
-                                                        "tenantId", tenantId,
-                                                        "role", role))
-                                        .build();
-
-                        SignUpResponse response = cognitoClient.signUp(signUpRequest);
-
-                        log.info("Cognito user registered via signUp: email={} tenantId={} role={} confirmed={}",
-                                        email, tenantId, role, response.userConfirmed());
-
-                        return response.userConfirmed();
-
-                } catch (UsernameExistsException e) {
-                        throw new IllegalArgumentException("User with email " + email + " already exists");
-                } catch (CognitoIdentityProviderException e) {
-                        log.error("Cognito error: {}", e.awsErrorDetails().errorMessage());
-                        throw new RuntimeException("Failed to register user: " + e.awsErrorDetails().errorMessage());
-                }
-        }
-
-        // Helper: Create Cognito user with custom attributes
-        private void createCognitoUser(
-                        String email,
-                        String password,
-                        String name,
-                        String tenantId,
-                        TenantType tenantType,
-                        String role) {
-                try {
-                        // Create user
-                        AdminCreateUserRequest createRequest = AdminCreateUserRequest.builder()
-                                        .userPoolId(cognitoProperties.getUserPoolId())
-                                        .username(email)
-                                        .userAttributes(
-                                                        AttributeType.builder().name("email").value(email).build(),
-                                                        AttributeType.builder().name("name").value(name).build(),
-                                                        AttributeType.builder().name("email_verified").value("true")
-                                                                        .build(),
-                                                        AttributeType.builder().name("custom:tenantId").value(tenantId)
-                                                                        .build(),
-                                                        AttributeType.builder().name("custom:role").value(role).build(),
-                                                        AttributeType.builder().name("custom:tenantType")
-                                                                        .value(tenantType.name()).build())
-                                        .desiredDeliveryMediums(DeliveryMediumType.EMAIL)
-                                        .messageAction(MessageActionType.SUPPRESS) // We'll send custom email
-                                        .build();
-
-                        AdminCreateUserResponse createResponse = cognitoClient.adminCreateUser(createRequest);
-
-                        // Set permanent password
-                        cognitoClient.adminSetUserPassword(b -> b
-                                        .userPoolId(cognitoProperties.getUserPoolId())
-                                        .username(email)
-                                        .password(password)
-                                        .permanent(true));
-
-                        // Extract user's Cognito sub (unique ID) to use in user_roles table
-                        String userId = createResponse.user().attributes().stream()
-                                        .filter(attr -> "sub".equals(attr.name()))
-                                        .map(AttributeType::value)
-                                        .findFirst()
-                                        .orElseThrow(() -> new RuntimeException(
-                                                        "Failed to get user sub from Cognito response"));
-
-                        // Set tenant context for database routing
-                        TenantContext.setCurrentTenant(tenantId);
-                        try {
-                                // Assign role in database for authorization checks
-                                userRoleService.assignRole(userId, role, "system");
-
-                                log.info("Cognito user created and role assigned: email={} role={} userId={} tenantId={}",
-                                                email, role, userId, tenantId);
-                        } finally {
-                                TenantContext.clear();
-                        }
-
-                } catch (UsernameExistsException e) {
-                        throw new IllegalArgumentException("User with email " + email + " already exists");
-                } catch (CognitoIdentityProviderException e) {
-                        log.error("Cognito error: {}", e.awsErrorDetails().errorMessage());
-                        throw new RuntimeException("Failed to create user: " + e.awsErrorDetails().errorMessage());
-                }
-        }
-
-        // Helper: Calculate SECRET_HASH for Cognito API calls
         private String calculateSecretHash(String username) {
                 try {
                         String message = username + cognitoProperties.getClientId();
@@ -341,32 +180,6 @@ public class SignupController {
                         return Base64.getEncoder().encodeToString(rawHmac);
                 } catch (Exception e) {
                         throw new RuntimeException("Error calculating secret hash", e);
-                }
-        }
-
-        // Helper: Generate tenant ID for personal accounts
-        private String generateTenantId(String email) {
-                String username = email.split("@")[0];
-                String sanitized = username.replaceAll("[^a-zA-Z0-9]", "");
-                String timestamp = String.valueOf(System.currentTimeMillis()).substring(8);
-                return "user-" + sanitized + "-" + timestamp;
-        }
-
-        // Helper: Slugify company name for tenant ID
-        private String slugify(String companyName) {
-                return companyName.toLowerCase()
-                                .replaceAll("[^a-z0-9]+", "-")
-                                .replaceAll("^-|-$", "");
-        }
-
-        // Helper: Validate corporate email (optional)
-        private void validateCorporateEmail(String email) {
-                List<String> freeProviders = List.of("gmail.com", "yahoo.com", "hotmail.com");
-                String domain = email.substring(email.indexOf("@") + 1);
-
-                if (freeProviders.contains(domain.toLowerCase())) {
-                        throw new IllegalArgumentException(
-                                        "Please use a corporate email address for organization signup");
                 }
         }
 }

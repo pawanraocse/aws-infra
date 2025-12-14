@@ -131,7 +131,7 @@ class RemotePermissionEvaluatorTest {
         evaluator.hasPermission("test-user", "resource-type", "action-name");
 
         // Then - verify correct URI called
-        verify(requestBodyUriSpec).uri("/api/v1/permissions/check");
+        verify(requestBodyUriSpec).uri("/auth/api/v1/permissions/check");
         verify(requestBodySpec).contentType(MediaType.APPLICATION_JSON);
     }
 

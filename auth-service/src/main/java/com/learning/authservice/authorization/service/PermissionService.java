@@ -7,6 +7,7 @@ import com.learning.authservice.authorization.repository.RolePermissionRepositor
 import com.learning.authservice.authorization.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.learning.common.infra.cache.CacheNames;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,7 +41,7 @@ public class PermissionService {
      *                 "manage")
      * @return true if user has the permission, false otherwise
      */
-    @Cacheable(value = "userPermissions", key = "#userId + ':' + #resource + ':' + #action")
+    @Cacheable(value = CacheNames.USER_PERMISSIONS, key = "#userId + ':' + #resource + ':' + #action")
     public boolean hasPermission(String userId, String resource, String action) {
         log.debug("Checking permission: user={}, resource={}, action={}", userId, resource, action);
 
@@ -85,7 +86,7 @@ public class PermissionService {
      * @param userId Cognito user ID
      * @return Set of permission strings (e.g., {"entry:read", "entry:create"})
      */
-    @Cacheable(value = "userAllPermissions", key = "#userId")
+    @Cacheable(value = CacheNames.USER_ALL_PERMISSIONS, key = "#userId")
     public Set<String> getUserPermissions(String userId) {
         log.debug("Getting all permissions for user={}", userId);
 

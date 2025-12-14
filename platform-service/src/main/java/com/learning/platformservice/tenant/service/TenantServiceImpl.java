@@ -40,6 +40,7 @@ public class TenantServiceImpl implements TenantService {
         return new TenantDto(
                 t.getId(),
                 t.getName(),
+                t.getTenantType() != null ? t.getTenantType().name() : "PERSONAL",
                 t.getStatus(),
                 t.getStorageMode(),
                 t.getSlaTier(),

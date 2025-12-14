@@ -142,12 +142,25 @@ export class SignupOrganizationComponent {
 
     this.http.post(`${environment.apiUrl}/auth/api/v1/auth/signup/organization`, this.signupForm.value)
       .subscribe({
-        next: () => {
+        next: (response: any) => {
           this.loading.set(false);
-          // Email is auto-verified in backend, go straight to login
-          this.router.navigate(['/auth/login'], {
-            queryParams: { registered: 'true', message: 'Organization created successfully! You can now log in.' }
-          });
+
+          if (response.userConfirmed) {
+            // User is already confirmed (rare case), go to login
+            this.router.navigate(['/auth/login'], {
+              queryParams: { registered: 'true', message: 'Organization created successfully! You can now log in.' }
+            });
+          } else {
+            // Navigate to email verification page with org details
+            this.router.navigate(['/auth/verify-email'], {
+              state: {
+                email: this.signupForm.value.adminEmail,
+                tenantId: response.tenantId,
+                role: 'tenant-admin',
+                companyName: this.signupForm.value.companyName
+              }
+            });
+          }
         },
         error: (err) => {
           this.loading.set(false);

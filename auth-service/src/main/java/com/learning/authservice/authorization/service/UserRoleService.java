@@ -6,6 +6,7 @@ import com.learning.authservice.authorization.repository.RoleRepository;
 import com.learning.authservice.authorization.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.learning.common.infra.cache.CacheNames;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,7 +36,7 @@ public class UserRoleService {
      * @param roleId     Role ID (e.g., "tenant-admin", "tenant-user")
      * @param assignedBy User ID of the admin performing the assignment
      */
-    @CacheEvict(value = { "userPermissions", "userAllPermissions" }, key = "#userId")
+    @CacheEvict(value = { CacheNames.USER_PERMISSIONS, CacheNames.USER_ALL_PERMISSIONS }, key = "#userId")
     public void assignRole(String userId, String roleId, String assignedBy) {
         log.info("Assigning role {} to user {} by {}", roleId, userId, assignedBy);
 

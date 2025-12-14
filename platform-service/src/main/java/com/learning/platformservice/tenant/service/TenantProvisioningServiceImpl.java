@@ -158,7 +158,9 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         log.info("tenant_provisioned tenantId={} type={} owner={} maxUsers={} storageMode={} durationMs={}",
                 tenantId, request.tenantType(), request.ownerEmail(), request.maxUsers(),
                 request.storageMode(), System.currentTimeMillis() - start);
-        return new TenantDto(tenant.getId(), tenant.getName(), tenant.getStatus(), tenant.getStorageMode(),
+        return new TenantDto(tenant.getId(), tenant.getName(),
+                tenant.getTenantType() != null ? tenant.getTenantType().name() : "PERSONAL",
+                tenant.getStatus(), tenant.getStorageMode(),
                 tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
     }
 
@@ -167,7 +169,9 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new TenantNotFoundException(tenantId));
         if (!TenantStatus.MIGRATION_ERROR.name().equals(tenant.getStatus())) {
             log.info("tenant_retry_migration_noop tenantId={} status={}", tenantId, tenant.getStatus());
-            return new TenantDto(tenant.getId(), tenant.getName(), tenant.getStatus(), tenant.getStorageMode(),
+            return new TenantDto(tenant.getId(), tenant.getName(),
+                    tenant.getTenantType() != null ? tenant.getTenantType().name() : "PERSONAL",
+                    tenant.getStatus(), tenant.getStorageMode(),
                     tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
         }
         TenantProvisionContext ctx = new TenantProvisionContext(
@@ -205,7 +209,9 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         tenant.setUpdatedAt(OffsetDateTime.now());
         tenantRepository.save(tenant);
         log.info("tenant_retry_migration_success tenantId={} version={}", tenantId, tenant.getLastMigrationVersion());
-        return new TenantDto(tenant.getId(), tenant.getName(), tenant.getStatus(), tenant.getStorageMode(),
+        return new TenantDto(tenant.getId(), tenant.getName(),
+                tenant.getTenantType() != null ? tenant.getTenantType().name() : "PERSONAL",
+                tenant.getStatus(), tenant.getStorageMode(),
                 tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
     }
 

@@ -167,6 +167,7 @@ export class AuthService {
 
   /**
    * Check current authentication state and load user info.
+   * tenantType is looked up from platform-service (single source of truth).
    */
   async checkAuth(): Promise<boolean> {
     try {
@@ -175,12 +176,20 @@ export class AuthService {
       const idToken = session.tokens?.idToken?.payload;
 
       if (idToken) {
+        const tenantId = (idToken['custom:tenantId'] as string) || '';
+
+        // Lookup tenantType from platform-service (single source of truth)
+        let tenantType: 'PERSONAL' | 'ORGANIZATION' = 'PERSONAL';
+        if (tenantId) {
+          tenantType = await this.lookupTenantType(tenantId);
+        }
+
         this.setUserInfo({
           userId: currentUser.userId,
           email: currentUser.signInDetails?.loginId || '',
-          tenantId: (idToken['custom:tenantId'] as string) || '',
+          tenantId,
           role: (idToken['custom:role'] as string) || '',
-          tenantType: ((idToken['custom:tenantType'] as string) || 'PERSONAL') as 'PERSONAL' | 'ORGANIZATION',
+          tenantType,
           emailVerified: Boolean(idToken['email_verified'])
         });
         return true;
@@ -191,6 +200,25 @@ export class AuthService {
       return false;
     }
   }
+
+  /**
+   * Lookup tenant type from platform-service.
+   * Uses the tenant info endpoint which returns tenantType.
+   */
+  private async lookupTenantType(tenantId: string): Promise<'PERSONAL' | 'ORGANIZATION'> {
+    try {
+      const response = await firstValueFrom(
+        this.http.get<{ tenantType: string }>(
+          `${environment.apiUrl}/platform/api/v1/tenants/${tenantId}`
+        )
+      );
+      return (response?.tenantType === 'ORGANIZATION' ? 'ORGANIZATION' : 'PERSONAL');
+    } catch (error) {
+      console.warn('Failed to lookup tenantType, defaulting to PERSONAL', error);
+      return 'PERSONAL';
+    }
+  }
+
 
   /**
    * Get the current access token for API calls.

@@ -65,6 +65,12 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!-- Spring Cache abstraction with Caffeine integration -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+
         <!-- HikariCP for tenant data source pooling -->
         <dependency>
             <groupId>com.zaxxer</groupId>

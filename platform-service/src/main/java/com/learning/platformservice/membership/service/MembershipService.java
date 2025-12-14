@@ -36,6 +36,8 @@ public class MembershipService {
     private final TenantRepository tenantRepository;
 
     private static final String DELETED_STATUS = "DELETED";
+    private static final String DELETING_STATUS = "DELETING";
+    private static final String SUSPENDED_STATUS = "SUSPENDED";
 
     /**
      * Find all active tenants for a user by email.
@@ -178,7 +180,8 @@ public class MembershipService {
     private TenantLookupResponse toTenantLookupResponse(UserTenantMembership membership) {
         Tenant tenant = tenantRepository.findById(membership.getTenantId()).orElse(null);
 
-        if (tenant == null || DELETED_STATUS.equals(tenant.getStatus())) {
+        // Filter out tenants that are not accessible
+        if (tenant == null || !isTenantAccessible(tenant)) {
             return null;
         }
 
@@ -195,6 +198,17 @@ public class MembershipService {
                 .isDefault(Boolean.TRUE.equals(membership.getIsDefault()))
                 .lastAccessedAt(membership.getLastAccessedAt())
                 .build();
+    }
+
+    /**
+     * Check if a tenant is accessible for login.
+     * Filters out tenants that are deleted, being deleted, or suspended.
+     */
+    private boolean isTenantAccessible(Tenant tenant) {
+        String status = tenant.getStatus();
+        return !DELETED_STATUS.equals(status)
+                && !DELETING_STATUS.equals(status)
+                && !SUSPENDED_STATUS.equals(status);
     }
 
     private String maskEmail(String email) {

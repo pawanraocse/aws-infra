@@ -69,6 +69,13 @@
             <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
         </dependency>
 
+        <!-- Caffeine Cache for tenant status -->
+        <!-- TODO: Migrate to Redis for distributed caching (Phase 6) -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

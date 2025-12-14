@@ -182,3 +182,28 @@ COMMENT ON COLUMN user_tenant_memberships.is_default IS
     'Users default workspace. Auto-selected during login if only one tenant.';
 COMMENT ON COLUMN user_tenant_memberships.status IS 
     'Membership status: ACTIVE, REMOVED (left/kicked), SUSPENDED (temporarily blocked).';
+
+-- =====================================================
+-- DELETED ACCOUNTS AUDIT TABLE
+-- =====================================================
+-- Tracks deleted accounts for re-registration detection and audit.
+-- When a tenant is deleted, we keep a record here for:
+--   - Re-registration tracking (detect returning users)
+--   - Audit compliance (GDPR deletion records)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS deleted_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) NOT NULL,
+    original_tenant_id VARCHAR(64) NOT NULL,
+    tenant_type VARCHAR(20) NOT NULL,
+    tenant_name VARCHAR(255),
+    deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_by VARCHAR(255)
+);
+
+-- Index for fast lookup during re-registration
+CREATE INDEX idx_deleted_accounts_email ON deleted_accounts(email);
+CREATE INDEX idx_deleted_accounts_tenant_id ON deleted_accounts(original_tenant_id);
+
+COMMENT ON TABLE deleted_accounts IS 'Audit trail for deleted accounts, used for re-registration tracking';

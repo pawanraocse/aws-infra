@@ -346,7 +346,53 @@ sequenceDiagram
 - `LocalPermissionEvaluator` for Auth Service itself
 - Caffeine cache (10 min TTL) for permission checks
 
+### 6. Delete Account Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend
+    participant A as Auth Service
+    participant P as Platform Service
+    participant C as Cognito
+
+    Note over U,C: DELETE ACCOUNT FLOW
+    U->>F: Settings → Delete My Account
+    F->>F: Show confirmation dialog
+    U->>F: Type "DELETE" + Confirm
+    F->>A: POST /api/v1/account/delete
+    A->>P: DELETE /internal/tenants/{id}
+    P->>P: tenant.status = DELETING
+    P->>P: Insert deleted_accounts record
+    P->>P: memberships.status = REMOVED
+    P->>P: tenant.status = DELETED
+    Note over P: TODO: Publish to SNS (Phase 6)
+    P->>A: 200 OK
+    A->>C: adminDeleteUser
+    A->>F: 200 OK
+    F->>F: authService.logout()
+    F->>U: Redirect to login
+```
+
+**Key Design Decisions:**
+- **Soft-delete:** Tenant DB is NOT dropped (orphaned until async cleanup in Phase 6)
+- **Audit trail:** `deleted_accounts` table tracks all deletions for re-registration detection
+- **Atomic lock:** `DELETING` status prevents concurrent deletion attempts
+- **Future:** SNS/SQS-based async cleanup for multi-DB support (PostgreSQL, MongoDB, S3)
+
+> [!IMPORTANT]
+> **Platform-Service Context Path:** Platform-service uses context-path `/platform`. Internal API calls must use:
+> - `DELETE /platform/internal/tenants/{id}` (correct)
+> - NOT `/internal/tenants/{id}` (will return 404)
+
+**Verified Working (2025-12-14):**
+- ✅ Cognito user deleted via `adminDeleteUser`
+- ✅ `tenant.status` set to `DELETED`
+- ✅ `user_tenant_memberships.status` set to `REMOVED`
+- ✅ Audit record inserted into `deleted_accounts`
+
 ---
+
 
 ## 📋 Service Responsibilities
 
@@ -380,6 +426,10 @@ sequenceDiagram
   - B2C (personal) and B2B (organization) flows
   - Calls Platform Service for tenant provisioning
   - Creates Cognito users with custom attributes
+- ✅ **Account Deletion:**
+  - `POST /api/v1/account/delete` with "DELETE" confirmation
+  - Calls Platform Service for tenant soft-delete
+  - Deletes user from Cognito via `adminDeleteUser`
 - ✅ **Session Management** - Token issuance, refresh, logout
 - ✅ **MFA Support** - Via Cognito (SMS, TOTP)
 - ✅ **Trusts Gateway:** Relies on `X-User-Id` and `X-Tenant-Id` headers. **No local JWT validation.**
@@ -472,9 +522,10 @@ aws cognito-idp describe-user-pool --user-pool-id <ID> \
 }
 ```
 
-**Internal API for Tenant Provisioning:**
+**Internal API for Tenant Provisioning/Deletion:**
 - During signup, auth-service calls `POST /internal/tenants` to provision the tenant
-- This endpoint bypasses authentication (service-to-service call)
+- During account deletion, auth-service calls `DELETE /internal/tenants/{id}` to soft-delete
+- These endpoints bypass authentication (service-to-service calls)
 - Located in `TenantInternalController.java` in platform-service
 
 ---

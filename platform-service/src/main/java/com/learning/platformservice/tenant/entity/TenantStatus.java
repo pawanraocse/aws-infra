@@ -8,6 +8,8 @@ public enum TenantStatus {
     MIGRATING,
     ACTIVE,
     PROVISION_ERROR,
-    MIGRATION_ERROR;
+    MIGRATION_ERROR,
+    SUSPENDED, // Account suspended (can be reactivated)
+    DELETING, // Deletion in progress (atomic lock)
+    DELETED // Soft-deleted, DB dropped
 }
-

@@ -80,7 +80,7 @@
 **✅ Recent Completion (Dec 7):**
 - **Personal Signup Fixes:**
   - Created internal tenant provisioning endpoint (`TenantInternalController.java`)
-  - Personal users now assigned `tenant-admin` role (can manage own data)
+  - Personal users now assigned `admin` role (can manage own data)
   - Fixed Cognito `auto_verified_attributes` issue via terraform `null_resource`
 - **Terraform Improvements:**
   - Added `deletion_protection` for production safety

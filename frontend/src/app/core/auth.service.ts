@@ -163,17 +163,16 @@ export class AuthService {
     }
   }
 
-  // ========== Session Management ==========
-
   /**
    * Check current authentication state and load user info.
-   * tenantType is looked up from platform-service (single source of truth).
+   * Role is fetched from auth-service API (single source of truth).
    */
   async checkAuth(): Promise<boolean> {
     try {
       const currentUser = await getCurrentUser();
       const session = await fetchAuthSession();
       const idToken = session.tokens?.idToken?.payload;
+      const idTokenString = session.tokens?.idToken?.toString();
 
       if (idToken) {
         const tenantId = (idToken['custom:tenantId'] as string) || '';
@@ -184,11 +183,14 @@ export class AuthService {
           tenantType = await this.lookupTenantType(tenantId);
         }
 
+        // Fetch role from auth-service using the token we already have
+        const role = await this.lookupUserRole(idTokenString);
+
         this.setUserInfo({
           userId: currentUser.userId,
           email: currentUser.signInDetails?.loginId || '',
           tenantId,
-          role: (idToken['custom:role'] as string) || '',
+          role,
           tenantType,
           emailVerified: Boolean(idToken['email_verified'])
         });
@@ -200,6 +202,32 @@ export class AuthService {
       return false;
     }
   }
+
+  /**
+   * Lookup user role from auth-service.
+   * Role is stored in tenant DB, not in JWT.
+   * @param token Optional JWT token to use for authentication
+   */
+  private async lookupUserRole(token?: string): Promise<string> {
+    try {
+      // Build request options with optional auth header
+      const options = token
+        ? { headers: { Authorization: `Bearer ${token}` } }
+        : {};
+
+      const response = await firstValueFrom(
+        this.http.get<{ role: string }>(
+          `${environment.apiUrl}/auth/api/v1/auth/me`,
+          options
+        )
+      );
+      return response?.role || 'member';
+    } catch {
+      // Expected to fail during initial app load before user logs in
+      return 'member';
+    }
+  }
+
 
   /**
    * Lookup tenant type from platform-service.

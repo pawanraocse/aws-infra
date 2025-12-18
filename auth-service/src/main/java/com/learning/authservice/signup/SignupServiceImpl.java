@@ -64,10 +64,10 @@ public class SignupServiceImpl implements SignupService {
 
     /**
      * Determine the initial role for the user.
-     * Both personal and organization admins get tenant-admin role.
+     * Both personal and organization admins get admin role.
      */
     private String determineRole(SignupRequest request) {
-        // Both types get tenant-admin role initially
-        return "tenant-admin";
+        // Both types get admin role initially
+        return "admin";
     }
 }

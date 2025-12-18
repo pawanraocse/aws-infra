@@ -33,7 +33,7 @@ public class UserRoleService {
      * Tenant context is implicit via TenantDataSourceRouter.
      *
      * @param userId     Cognito user ID
-     * @param roleId     Role ID (e.g., "tenant-admin", "tenant-user")
+     * @param roleId     Role ID (e.g., "admin", "editor", "viewer")
      * @param assignedBy User ID of the admin performing the assignment
      */
     @CacheEvict(value = { CacheNames.USER_PERMISSIONS, CacheNames.USER_ALL_PERMISSIONS }, key = "#userId")

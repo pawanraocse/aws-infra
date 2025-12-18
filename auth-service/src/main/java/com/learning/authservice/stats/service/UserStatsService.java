@@ -52,8 +52,8 @@ public class UserStatsService {
                                 ));
 
                 // Extract specific role counts
-                long adminCount = roleDistribution.getOrDefault("tenant-admin", 0L);
-                long regularUserCount = roleDistribution.getOrDefault("tenant-user", 0L);
+                long adminCount = roleDistribution.getOrDefault("admin", 0L);
+                long regularUserCount = roleDistribution.getOrDefault("user", 0L);
 
                 UserStatsDTO stats = UserStatsDTO.builder()
                                 .totalUsers(totalUsers)

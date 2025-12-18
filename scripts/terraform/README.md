@@ -22,7 +22,7 @@ Deploys AWS Cognito User Pool with Lambda pre-token generation trigger.
 4. Deploys 23 resources:
    - Cognito User Pool with custom attributes
    - Lambda function for token customization
-   - User groups (admin, tenant-admin, user)
+   - User groups (admin, admin, user)
    - SSM parameters for configuration
 5. **Saves Configuration Locally**: Creates `cognito-config.env` with all Cognito details
 6. **Updates Frontend Environment Files**: Automatically updates `frontend/src/environments/environment*.ts` with Cognito configuration

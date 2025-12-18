@@ -49,6 +49,6 @@ public class Role {
      */
     public enum RoleScope {
         PLATFORM, // System-wide roles (e.g., super-admin)
-        TENANT // Tenant-scoped roles (e.g., tenant-admin, tenant-user)
+        TENANT // Tenant-scoped roles (e.g., admin, editor, viewer)
     }
 }

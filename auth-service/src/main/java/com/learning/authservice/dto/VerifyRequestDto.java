@@ -20,5 +20,5 @@ public class VerifyRequestDto {
     @NotBlank(message = "Tenant ID is required")
     private String tenantId;
 
-    private String role = "tenant-admin"; // Default role
+    private String role = "admin"; // Default role
 }

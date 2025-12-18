@@ -216,6 +216,7 @@ module "lambda_post_confirmation" {
 
 # Lambda Pre Token Generation Module (for multi-tenant login)
 # Injects selected tenant ID into JWT when user logs in with multiple tenants
+# Also handles SSO group extraction and sync
 module "lambda_pre_token_generation" {
   source = "./modules/cognito-pre-token-generation"
 
@@ -224,6 +225,11 @@ module "lambda_pre_token_generation" {
   aws_account_id = data.aws_caller_identity.current.account_id
   user_pool_id   = aws_cognito_user_pool.main.id
   user_pool_arn  = aws_cognito_user_pool.main.arn
+
+  # SSO Group Sync Configuration
+  platform_service_url = var.platform_service_url
+  auth_service_url     = var.auth_service_url
+  enable_group_sync    = var.enable_group_sync
 }
 
 # Break circular dependency by configuring trigger via CLI

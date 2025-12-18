@@ -101,7 +101,7 @@ public class SignupController {
 
                 try {
                         String secretHash = calculateSecretHash(request.getEmail());
-                        String role = request.getRole() != null ? request.getRole() : "tenant-admin";
+                        String role = request.getRole() != null ? request.getRole() : "admin";
 
                         // NOTE: tenantType is NOT stored in Cognito - frontend looks it up from
                         // platform DB

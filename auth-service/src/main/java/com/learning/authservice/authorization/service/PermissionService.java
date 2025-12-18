@@ -1,6 +1,7 @@
 package com.learning.authservice.authorization.service;
 
 import com.learning.authservice.authorization.domain.Permission;
+
 import com.learning.authservice.authorization.domain.UserRole;
 import com.learning.authservice.authorization.repository.PermissionRepository;
 import com.learning.authservice.authorization.repository.RolePermissionRepository;
@@ -19,7 +20,10 @@ import java.util.stream.Collectors;
 
 /**
  * Service for checking user permissions in the authorization system.
- * Implements Permission-Based Access Control (PBAC).
+ * Implements Permission-Based Access Control (PBAC) with support for:
+ * - Direct role assignments (user_roles table)
+ * - Group-based role assignments (via IdP groups and group_role_mappings)
+ * 
  * Tenant isolation is handled via TenantDataSourceRouter.
  */
 @Service
@@ -31,6 +35,7 @@ public class PermissionService {
     private final UserRoleRepository userRoleRepository;
     private final RolePermissionRepository rolePermissionRepository;
     private final PermissionRepository permissionRepository;
+    private final GroupRoleMappingService groupRoleMappingService;
 
     /**
      * Check if user has permission for a specific resource and action.
@@ -158,10 +163,10 @@ public class PermissionService {
      * Check if user is a tenant admin.
      *
      * @param userId User ID
-     * @return true if user has tenant-admin role
+     * @return true if user has admin role
      */
     public boolean isTenantAdmin(String userId) {
-        return userRoleRepository.existsByUserIdAndRoleId(userId, "tenant-admin");
+        return userRoleRepository.existsByUserIdAndRoleId(userId, "admin");
     }
 
     /**

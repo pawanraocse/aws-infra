@@ -1,10 +1,16 @@
 import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { TableModule } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
+import { DialogModule } from 'primeng/dialog';
+import { Select } from 'primeng/select';
+import { Checkbox } from 'primeng/checkbox';
+import { InputTextModule } from 'primeng/inputtext';
 import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
-import { RoleService, Role } from '../../../core/services/role.service';
+import { RoleService, Role, Permission } from '../../../core/services/role.service';
+import { UserRoleService } from '../../../core/services/user-role.service';
 import { PermissionViewerComponent } from './permission-viewer.component';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
@@ -12,22 +18,41 @@ import { ToastModule } from 'primeng/toast';
 @Component({
   selector: 'app-role-list',
   standalone: true,
-  imports: [CommonModule, TableModule, ButtonModule, TagModule, ToastModule],
+  imports: [
+    CommonModule, FormsModule, TableModule, ButtonModule, TagModule,
+    ToastModule, DialogModule, Select, InputTextModule, Checkbox
+  ],
   providers: [DialogService, MessageService],
   template: `
     <div class="card">
       <p-toast></p-toast>
+      
+      <!-- Header with Actions -->
       <div class="flex justify-content-between align-items-center mb-4">
         <h2 class="text-2xl font-bold m-0">Role Management</h2>
+        <div class="flex gap-2">
+          <p-button 
+            label="Assign Role to User" 
+            icon="pi pi-user-plus" 
+            severity="secondary"
+            (onClick)="showAssignDialog = true">
+          </p-button>
+          <p-button 
+            label="Create Role" 
+            icon="pi pi-plus" 
+            (onClick)="showCreateDialog = true">
+          </p-button>
+        </div>
       </div>
 
+      <!-- Roles Table -->
       <p-table [value]="roles" [tableStyle]="{ 'min-width': '50rem' }">
         <ng-template pTemplate="header">
           <tr>
             <th>Name</th>
             <th>Scope</th>
             <th>Description</th>
-            <th>Actions</th>
+            <th style="width: 200px">Actions</th>
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-role>
@@ -38,12 +63,20 @@ import { ToastModule } from 'primeng/toast';
             </td>
             <td>{{ role.description }}</td>
             <td>
-              <p-button 
-                label="View Permissions" 
-                icon="pi pi-eye" 
-                [text]="true" 
-                (onClick)="viewPermissions(role)">
-              </p-button>
+              <div class="flex gap-1">
+                <p-button 
+                  icon="pi pi-eye" 
+                  [text]="true" 
+                  pTooltip="View Permissions"
+                  (onClick)="viewPermissions(role)">
+                </p-button>
+                <p-button 
+                  icon="pi pi-users" 
+                  [text]="true" 
+                  pTooltip="Assign to User"
+                  (onClick)="openAssignDialog(role)">
+                </p-button>
+              </div>
             </td>
           </tr>
         </ng-template>
@@ -54,41 +87,181 @@ import { ToastModule } from 'primeng/toast';
         </ng-template>
       </p-table>
     </div>
+
+    <!-- Create Role Dialog -->
+    <p-dialog 
+      header="Create New Role" 
+      [(visible)]="showCreateDialog" 
+      [modal]="true" 
+      [style]="{ width: '500px' }"
+      [closable]="true">
+      <div class="flex flex-column gap-3">
+        <div>
+          <label for="roleName" class="block text-sm font-medium mb-1">Role Name</label>
+          <input id="roleName" type="text" pInputText [(ngModel)]="newRole.name" class="w-full" placeholder="e.g., project-lead" />
+        </div>
+        <div>
+          <label for="roleDesc" class="block text-sm font-medium mb-1">Description</label>
+          <input id="roleDesc" type="text" pInputText [(ngModel)]="newRole.description" class="w-full" placeholder="Role description" />
+        </div>
+        <div>
+          <label for="accessLevel" class="block text-sm font-medium mb-1">Access Level</label>
+          <p-select 
+            id="accessLevel"
+            [options]="accessLevels" 
+            [(ngModel)]="newRole.accessLevel" 
+            optionLabel="label" 
+            optionValue="value"
+            placeholder="Select access level"
+            appendTo="body"
+            [style]="{ width: '100%' }">
+          </p-select>
+          <small class="text-gray-500 mt-1 block">{{ getAccessLevelDescription(newRole.accessLevel) }}</small>
+        </div>
+      </div>
+      <ng-template pTemplate="footer">
+        <p-button label="Cancel" [text]="true" (onClick)="showCreateDialog = false"></p-button>
+        <p-button label="Create" icon="pi pi-check" (onClick)="createRole()" [disabled]="!newRole.name || !newRole.accessLevel"></p-button>
+      </ng-template>
+    </p-dialog>
+
+    <!-- Assign Role Dialog -->
+    <p-dialog 
+      header="Assign Role to User" 
+      [(visible)]="showAssignDialog" 
+      [modal]="true" 
+      [style]="{ width: '450px' }"
+      [closable]="true">
+      <div class="flex flex-column gap-3">
+        <div>
+          <label for="userId" class="block text-sm font-medium mb-1">User ID or Email</label>
+          <input id="userId" type="text" pInputText [(ngModel)]="assignData.userId" class="w-full" placeholder="Enter user ID or email" />
+        </div>
+        <div>
+          <label for="assignRole" class="block text-sm font-medium mb-1">Role</label>
+          <p-select 
+            id="assignRole"
+            [options]="roles" 
+            [(ngModel)]="assignData.roleId" 
+            optionLabel="name" 
+            optionValue="id"
+            placeholder="Select role"
+            appendTo="body"
+            [style]="{ width: '100%' }">
+          </p-select>
+        </div>
+      </div>
+      <ng-template pTemplate="footer">
+        <p-button label="Cancel" [text]="true" (onClick)="showAssignDialog = false"></p-button>
+        <p-button label="Assign" icon="pi pi-check" (onClick)="assignRole()"></p-button>
+      </ng-template>
+    </p-dialog>
   `
 })
 export class RoleListComponent implements OnInit {
   roles: Role[] = [];
   ref: DynamicDialogRef | undefined;
 
+  showCreateDialog = false;
+  showAssignDialog = false;
+
+  newRole: { name: string; description: string; accessLevel: string } = { name: '', description: '', accessLevel: '' };
+  assignData = { userId: '', roleId: '' };
+
+  // Access levels for simplified role-based model
+  accessLevels = [
+    { label: 'Admin - Full access', value: 'admin' },
+    { label: 'Editor - Read & write', value: 'editor' },
+    { label: 'Viewer - Read only', value: 'viewer' }
+  ];
+
+  getAccessLevelDescription(level: string): string {
+    switch (level) {
+      case 'admin': return 'Full access: manage users, settings, and all content';
+      case 'editor': return 'Read & write: create, edit, and delete content';
+      case 'viewer': return 'Read only: view content but cannot modify';
+      default: return 'Select an access level to define role capabilities';
+    }
+  }
+
+  permissions: Permission[] = [];
+  selectedPermissions: { [key: string]: boolean } = {};
+
   private roleService = inject(RoleService);
+  private userRoleService = inject(UserRoleService);
   private dialogService = inject(DialogService);
+  private messageService = inject(MessageService);
   private cdr = inject(ChangeDetectorRef);
 
   ngOnInit() {
     this.loadRoles();
+    // Granular permissions removed - using simplified role-based access
+  }
+
+  loadPermissions() {
+    // Granular permissions deprecated - using simplified role-based access
+    // Roles now have implicit access levels: admin (full), editor (read/write), viewer (read-only)
+    this.permissions = [];
   }
 
   loadRoles() {
     this.roleService.getRoles().subscribe({
       next: (data) => {
         this.roles = data;
-        this.cdr.detectChanges(); // Fix NG0100 - mark for check after async update
+        this.cdr.detectChanges();
       },
       error: (err) => console.error('Failed to load roles', err)
     });
   }
 
   viewPermissions(role: Role) {
-    const ref = this.dialogService.open(PermissionViewerComponent, {
-      header: `Permissions for ${role.name}`,
-      width: '70%',
-      contentStyle: { overflow: 'auto' },
+    this.dialogService.open(PermissionViewerComponent, {
+      header: `Access Levels for ${role.name}`,
+      width: '60%',
+      contentStyle: { overflow: 'visible' },
       baseZIndex: 10000,
-      data: {
-        roleId: role.id
+      closable: true,
+      closeOnEscape: true,
+      dismissableMask: true,
+      data: { roleId: role.id }
+    });
+  }
+
+  openAssignDialog(role: Role) {
+    this.assignData.roleId = role.id;
+    this.showAssignDialog = true;
+  }
+
+  createRole() {
+    const payload = {
+      ...this.newRole,
+      scope: 'TENANT'
+    };
+
+    this.roleService.createRole(payload).subscribe({
+      next: () => {
+        this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Role created successfully' });
+        this.showCreateDialog = false;
+        this.newRole = { name: '', description: '', accessLevel: '' };
+        this.loadRoles();
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to create role' });
       }
     });
-    this.ref = ref || undefined;
+  }
+
+  assignRole() {
+    this.userRoleService.assignRole(this.assignData.userId, this.assignData.roleId).subscribe({
+      next: () => {
+        this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Role assigned to user' });
+        this.showAssignDialog = false;
+        this.assignData = { userId: '', roleId: '' };
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to assign role' });
+      }
+    });
   }
 
   getSeverity(scope: string): 'success' | 'info' | 'warn' | 'danger' | undefined {
@@ -99,3 +272,4 @@ export class RoleListComponent implements OnInit {
     }
   }
 }
+

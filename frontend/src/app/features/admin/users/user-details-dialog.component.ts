@@ -52,7 +52,7 @@ export class UserDetailsDialogComponent implements OnInit {
 
     // TODO: Fetch roles from backend
     roles = [
-        { name: 'Tenant Admin', id: 'tenant-admin' },
+        { name: 'Admin', id: 'admin' },
         { name: 'User', id: 'user' }
     ];
 

@@ -38,17 +38,17 @@ public class UserStatsDTO {
     private Long revokedInvitations;
 
     /**
-     * Distribution of users by role (e.g., {"tenant-admin": 2, "tenant-user": 5})
+     * Distribution of users by role (e.g., {"admin": 2, "user": 5})
      */
     private Map<String, Long> roleDistribution;
 
     /**
-     * Number of users with tenant-admin role
+     * Number of users with admin role
      */
     private Long adminCount;
 
     /**
-     * Number of users with tenant-user role
+     * Number of users with user role (non-admin)
      */
     private Long regularUserCount;
 }

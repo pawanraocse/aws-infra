@@ -22,3 +22,23 @@ variable "aws_account_id" {
   description = "AWS account ID"
   type        = string
 }
+
+# ========== SSO Group Sync Variables ==========
+
+variable "platform_service_url" {
+  description = "URL of the platform service for group sync"
+  type        = string
+  default     = "http://localhost:8082"
+}
+
+variable "auth_service_url" {
+  description = "URL of the auth service for role resolution"
+  type        = string
+  default     = "http://localhost:8081"
+}
+
+variable "enable_group_sync" {
+  description = "Whether to enable SSO group sync during login"
+  type        = bool
+  default     = true
+}

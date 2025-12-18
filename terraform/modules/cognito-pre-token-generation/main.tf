@@ -31,13 +31,16 @@ resource "aws_lambda_function" "pre_token_generation" {
 
   handler = "handler.lambda_handler"
   runtime = "python3.11"
-  timeout = 5 # Token generation should be fast
+  timeout = 10 # Increased for group sync
 
   role = aws_iam_role.lambda_exec.arn
 
   environment {
     variables = {
-      ENVIRONMENT = var.environment
+      ENVIRONMENT          = var.environment
+      PLATFORM_SERVICE_URL = var.platform_service_url
+      AUTH_SERVICE_URL     = var.auth_service_url
+      ENABLE_GROUP_SYNC    = var.enable_group_sync ? "true" : "false"
     }
   }
 
@@ -45,7 +48,7 @@ resource "aws_lambda_function" "pre_token_generation" {
     Name        = "Cognito PreTokenGeneration Handler"
     Environment = var.environment
     ManagedBy   = "Terraform"
-    Purpose     = "Multi-tenant login: inject selected tenantId into JWT"
+    Purpose     = "Multi-tenant login: inject selected tenantId and IdP groups into JWT"
   }
 }
 

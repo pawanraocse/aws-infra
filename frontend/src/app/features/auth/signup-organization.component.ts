@@ -156,7 +156,7 @@ export class SignupOrganizationComponent {
               state: {
                 email: this.signupForm.value.adminEmail,
                 tenantId: response.tenantId,
-                role: 'tenant-admin',
+                role: 'admin',
                 companyName: this.signupForm.value.companyName
               }
             });

@@ -308,7 +308,7 @@ sequenceDiagram
     U->>F: Enter code
     F->>C: confirmSignUp
     C->>L: PostConfirmation trigger
-    L->>C: Set custom:tenantId, custom:role
+    L->>C: Set custom:tenantId
 
     Note over U,P: LOGIN FLOW
     U->>F: Enter credentials
@@ -434,55 +434,35 @@ sequenceDiagram
 - ✅ **MFA Support** - Via Cognito (SMS, TOTP)
 - ✅ **Trusts Gateway:** Relies on `X-User-Id` and `X-Tenant-Id` headers. **No local JWT validation.**
 
-#### Authorization (RBAC - Role-Based Access Control)
-- ✅ **Permission-Based Access Control (PBAC)** - Fine-grained permissions system
-  - Resource-action model (e.g., `entry:read`, `entry:create`, `tenant:delete`)
-  - Super-admin wildcard permission (`*:*`)
-- ✅ **Role Management** - Hierarchical role system
-  - Platform roles: `super-admin`, `platform-admin`
-  - Tenant roles: `tenant-admin`, `tenant-user`, `tenant-guest`
-  - Roles scoped to tenant or platform level
-- ✅ **Database Schema:**
-  - `roles` - Role definitions with scope (PLATFORM/TENANT)
-  - `permissions` - Granular permissions (resource + action)
-  - `role_permissions` - Maps roles to permissions
-  - `user_roles` - Assigns roles to users within tenant context
-- ✅ **Permission APIs:**
-  - `POST /api/v1/permissions/check` - Remote permission validation (used by other services)
-  - `GET /api/v1/permissions/user/{userId}/tenant/{tenantId}` - Get all user permissions
-  - `GET /api/v1/permissions` - List all defined permissions (resource + action)
-- ✅ **Role Assignment APIs:**
-  - `GET /api/v1/roles` - List all available roles (Platform & Tenant scopes)
-  - `POST /api/v1/roles/assign` - Assign role to user
-  - `POST /api/v1/roles/revoke` - Revoke role from user
-  - `PUT /api/v1/roles/users/{userId}` - Update user's role
-  - `GET /api/v1/roles/user/{userId}` - Get user's roles
-- ✅ **User Statistics APIs:**
-  - `GET /api/v1/stats/users` - Get aggregated user statistics for tenant
-    - Returns: total users, pending invitations, role distribution
-    - Aggregates from `invitations` and `user_roles` tables
-- ✅ **Invitation Management APIs:**
-  - `POST /api/v1/invitations` - Send invitation to new user
-  - `GET /api/v1/invitations/{tenantId}` - List all invitations for tenant
-  - `POST /api/v1/invitations/{token}/accept` - Accept invitation and join organization
-  - `DELETE /api/v1/invitations/{id}` - Revoke pending invitation
-  - `POST /api/v1/invitations/{id}/resend` - Resend invitation email
-- ✅ **Email Verification APIs:**
-  - `POST /api/v1/auth/resend-verification` - Resend verification email to user
-  - `POST /api/v1/auth/confirm-signup` - Confirm signup with verification code
-- ✅ **Invitation Schema:**
-  - Table: `invitations` (id, tenant_id, email, token, role_id, status, expires_at, invited_by)
-  - Statuses: PENDING, ACCEPTED, EXPIRED, REVOKED
+#### Authorization & Permissions
+
+> **📘 Full Documentation:** See [DESIGN_PERMISSIONS.md](./DESIGN_PERMISSIONS.md) for comprehensive details on the permission system.
+
+**Key Features:**
+- **4-Tier Role Hierarchy:** `system-admin` → `admin` → `editor` → `viewer`
+- **SSO Group Mapping:** Automatic role assignment based on IdP groups (Okta, Azure AD, Google)
+- **Permission-Based Access Control (PBAC):** Resource-action model (e.g., `entry:read`, `group:manage`)
+- **ACL Support:** Per-resource fine-grained sharing ("Google Drive" style)
+
+**Permission APIs:**
+- `POST /api/v1/permissions/check` - Remote permission validation
+- `GET /api/v1/groups/mappings` - Group-role mapping management
+
+**Role Assignment APIs:**
+- `GET /api/v1/roles` - List available roles
+- `POST /api/v1/roles/assign` - Assign role to user
+- `PUT /api/v1/roles/users/{userId}` - Update user's role
+
 
 **Technology:** AWS Cognito User Pools, Spring Security (OAuth2 Client only), JPA
 
 **Email Verification Flow (B2C Personal Signup):**
-1. User signs up → `signUp` API with `clientMetadata` (tenantId, role)
+1. User signs up → `signUp` API with `clientMetadata` (tenantId)
 2. Cognito sends verification **code** via email
 3. **Frontend** displays code input (VerifyEmailComponent)
-4. User enters code → `confirmSignUp` API with `clientMetadata` (tenantId, role)
-5. **Lambda PostConfirmation trigger** sets `custom:tenantId` and `custom:role`
-6. User redirected to login with full tenant context in JWT
+4. User enters code → `confirmSignUp` API with `clientMetadata` (tenantId)
+5. **Lambda PostConfirmation trigger** sets `custom:tenantId`
+6. User redirected to login with tenant context in JWT
 
 **Key Implementation Details:**
 - `clientMetadata` must be passed during BOTH `signUp` AND `confirmSignUp`
@@ -490,9 +470,9 @@ sequenceDiagram
 - Frontend stores `tenantId` in router state between signup and verify pages
 
 **Lambda Functions:**
-- `cognito-post-confirmation` - Sets custom attributes (`custom:tenantId`, `custom:role`) after email verification.
-  - **Purpose:** Persists tenant context into the user profile so it's available in the JWT on every login without runtime latency.
-  - **Note:** `tenantType` is NOT stored in Cognito - frontend looks it up from platform DB (single source of truth)
+- `cognito-post-confirmation` - Sets `custom:tenantId` after email verification.
+  - **Purpose:** Persists tenant context into the user profile so it's available in the JWT on every login.
+  - **Note:** Role is managed in tenant DB (`user_roles` table), not in Cognito.
   - Runtime: Python 3.11
   - Trigger: Cognito PostConfirmation event
   - Permissions: AdminUpdateUserAttributes on User Pool
@@ -570,8 +550,8 @@ aws cognito-idp describe-user-pool --user-pool-id <ID> \
 
 | Lambda | Trigger | Purpose |
 |--------|---------|---------|
-| **PostConfirmation** | After email verification | Sets initial `custom:tenantId`, `custom:role` during signup |
-| **PreTokenGeneration** | Before JWT issued | Overrides `custom:tenantId` based on selected tenant at login |
+| **PostConfirmation** | After email verification | Sets `custom:tenantId` during signup |
+| **PreTokenGeneration** | Before JWT issued | Overrides `custom:tenantId`, extracts SSO groups, syncs to platform |
 
 **Database Schema (Platform Service):**
 ```sql
@@ -644,11 +624,12 @@ CREATE TABLE user_tenant_memberships (
 | Claim | Example | Source | Note |
 |-------|---------|--------|------|
 | `custom:tenantId` | `user-john-12345` | PostConfirmation / PreTokenGeneration Lambda | **Required** - Used for routing |
-| `custom:role` | `owner` | PostConfirmation Lambda | **Legacy** - Display hint only, NOT for authorization |
+| `custom:tenantType` | `PERSONAL` | PreTokenGeneration Lambda | B2C or B2B designation |
+| `custom:groups` | `Engineering,Marketing` | PreTokenGeneration Lambda | SSO groups (optional) |
 | `email` | `user@example.com` | Cognito standard | |
 
 > [!IMPORTANT]
-> **Authorization uses database, NOT JWT claims!** The `custom:role` in JWT is a legacy display hint. Real permissions are checked via `user_roles` table in tenant DB. Plan to remove `custom:role` from JWT (see ROADMAP).
+> **Role is NOT in JWT!** Authorization uses `user_roles` table in tenant DB, queried via Auth Service.
 
 > [!NOTE]
 > **TenantType Architecture (v6.0):** `tenant_type` is NOT stored in Cognito or JWT. Frontend looks it up from platform DB after login:
@@ -735,8 +716,8 @@ if (tenant.getTenantType() == TenantType.PERSONAL) {
 #### System Administration
 - ✅ **Super Admin Bootstrapping:**
   - Created via `scripts/bootstrap-system-admin.sh`
-  - Attributes: `custom:role=super-admin`, `custom:tenantId=system`
-  - Access: Full control over all tenants (`*:*` permission)
+  - Cognito: `custom:tenantId=system`
+  - Database: `system-admin` role with `*:*` permission
 - ✅ **Organization Management Profile:**
   - `GET /api/v1/organizations` - Get organization profile for current tenant
 
@@ -864,9 +845,9 @@ INSERT INTO permissions (id, resource, action, description) VALUES
     (gen_random_uuid(), 'order', 'update', 'Update orders'),
     (gen_random_uuid(), 'order', 'delete', 'Delete orders');
 
--- Assign to tenant-admin role
+-- Assign to admin role
 INSERT INTO role_permissions (role_id, permission_id)
-SELECT 'tenant-admin', id FROM permissions WHERE resource = 'order';
+SELECT 'admin', id FROM permissions WHERE resource = 'order';
 ```
 
 ### Step 7: Update Gateway Routes
@@ -967,7 +948,7 @@ sequenceDiagram
     Platform->>TenantDB: CREATE DATABASE tenant_xyz
     Platform->>TenantDB: Run Flyway migrations
     Platform-->>Auth: Tenant ready
-    Auth->>Cognito: AdminCreateUser<br/>custom:tenantId=xyz<br/>custom:role=tenant-user
+    Auth->>Cognito: AdminCreateUser<br/>custom:tenantId=xyz
     Cognito-->>Auth: User created
     Auth-->>Gateway: Signup successful
     Gateway-->>User: 201 Created
@@ -1034,9 +1015,9 @@ sequenceDiagram
         Backend->>Auth: POST /api/v1/permissions/check<br/>{userId: "user-456", tenantId: "tenant-123",<br/>resource: "entry", action: "read"}
         
         Auth->>DB: Get user roles for user-456 in tenant-123
-        DB-->>Auth: [tenant-user]
+        DB-->>Auth: [user]
         
-        Auth->>DB: Check role permissions<br/>role=tenant-user, resource=entry, action=read
+        Auth->>DB: Check role permissions<br/>role=user, resource=entry, action=read
         DB-->>Auth: true (permission exists)
         
         Auth-->>Backend: {allowed: true}
@@ -1107,15 +1088,18 @@ graph TB
     end
     
     subgraph "Tenant Level"
-        TA[🟠 tenant-admin<br/>Organization Admin]
-        TU[🟢 tenant-user<br/>Standard User]
-        TG[⚪ tenant-guest<br/>Read-Only]
+        TA[🟠 admin<br/>Organization Admin]
+        TE[🟡 editor<br/>Content Manager]
+        TV[🔵 viewer<br/>Read-Only]
+        TU[🟢 user<br/>Standard User]
+        TG[⚪ guest<br/>Minimal Access]
     end
     
     SA -.->|manages| TA
+    TA -->|manages| TE
+    TA -->|manages| TV
     TA -->|manages| TU
     TA -->|manages| TG
-    TU -.->|can become| TA
 ```
 
 ### Role Definitions
@@ -1123,9 +1107,11 @@ graph TB
 | Role | Scope | Description | Typical Use Case |
 |------|-------|-------------|------------------|
 | **super-admin** | Platform | Full system access. Manages all tenants. | System operators, DevOps |
-| **tenant-admin** | Tenant | Full access within their organization. Can manage users and roles. | Organization owners, IT admins |
-| **tenant-user** | Tenant | Standard user within an organization. Full CRUD on business data. | Regular employees |
-| **tenant-guest** | Tenant | Read-only access to organization data. | External contractors, auditors |
+| **admin** | Tenant | Full access within organization. Manage users, roles, settings. | Organization owners, IT admins |
+| **editor** | Tenant | Create, edit, delete content. Cannot manage users. | Power users, content managers |
+| **viewer** | Tenant | Read-only access to organization data. | External contractors, auditors |
+| **user** | Tenant | Standard CRUD on business data. | Regular employees |
+| **guest** | Tenant | Minimal read-only access. | Limited external access |
 
 ### Permission Model
 
@@ -1149,7 +1135,7 @@ Examples:
 *:*                    → All permissions (wildcard)
 ```
 
-#### tenant-admin
+#### admin
 | Resource | Actions |
 |----------|---------|
 | entry | read, create, update, delete |
@@ -1158,12 +1144,24 @@ Examples:
 | organization | read, manage |
 | stats | read |
 
-#### tenant-user
+#### editor
+| Resource | Actions |
+|----------|---------|
+| entry | read, create, update, delete |
+| resources | read, create, edit, share |
+
+#### viewer
+| Resource | Actions |
+|----------|---------|
+| entry | read |
+| resources | read, view_metadata |
+
+#### user
 | Resource | Actions |
 |----------|---------|
 | entry | read, create, update, delete |
 
-#### tenant-guest
+#### guest
 | Resource | Actions |
 |----------|---------|
 | entry | read |
@@ -1212,7 +1210,7 @@ erDiagram
 |-------|---------|--------------|
 | `authGuard` | Requires authentication | `/auth/login` |
 | `guestGuard` | Only for unauthenticated users | `/app` |
-| `adminGuard` | Requires `tenant-admin` OR `super-admin` | `/app/dashboard` |
+| `adminGuard` | Requires `admin` OR `super-admin` | `/app/dashboard` |
 | `superAdminGuard` | Requires `super-admin` only | `/app/dashboard` |
 | `tenantUserGuard` | Blocks `super-admin` from tenant routes | `/app/admin/dashboard` |
 
@@ -1247,7 +1245,7 @@ VALUES (gen_random_uuid(), 'invoice', 'create', 'Create invoices');
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id 
 FROM roles r, permissions p
-WHERE r.name = 'tenant-admin' 
+WHERE r.name = 'admin' 
 AND p.resource = 'invoice' AND p.action = 'create';
 ```
 
@@ -1478,9 +1476,9 @@ Each tenant database is initialized with:
 ```sql
 -- Tenant-scoped roles
 INSERT INTO roles (id, name, description, scope) VALUES
-('tenant-admin', 'TENANT_ADMIN', 'Full control over tenant resources', 'TENANT'),
-('tenant-user', 'TENANT_USER', 'Standard user with CRUD access', 'TENANT'),
-('tenant-guest', 'TENANT_GUEST', 'Read-only access', 'TENANT');
+('admin', 'TENANT_ADMIN', 'Full control over tenant resources', 'TENANT'),
+('user', 'TENANT_USER', 'Standard user with CRUD access', 'TENANT'),
+('guest', 'TENANT_GUEST', 'Read-only access', 'TENANT');
 
 -- Standard permissions
 INSERT INTO permissions (id, resource, action, description) VALUES
@@ -1492,25 +1490,25 @@ INSERT INTO permissions (id, resource, action, description) VALUES
 ('user-manage', 'user', 'manage', 'Full user management');
 
 -- Role-permission mappings
--- tenant-admin gets everything
+-- admin gets everything
 INSERT INTO role_permissions (role_id, permission_id) VALUES
-('tenant-admin', 'entry-read'),
-('tenant-admin', 'entry-create'),
-('tenant-admin', 'entry-update'),
-('tenant-admin', 'entry-delete'),
-('tenant-admin', 'user-invite'),
-('tenant-admin', 'user-manage');
+('admin', 'entry-read'),
+('admin', 'entry-create'),
+('admin', 'entry-update'),
+('admin', 'entry-delete'),
+('admin', 'user-invite'),
+('admin', 'user-manage');
 
--- tenant-user gets CRUD on entries
+-- user gets CRUD on entries
 INSERT INTO role_permissions (role_id, permission_id) VALUES
-('tenant-user', 'entry-read'),
-('tenant-user', 'entry-create'),
-('tenant-user', 'entry-update'),
-('tenant-user', 'entry-delete');
+('user', 'entry-read'),
+('user', 'entry-create'),
+('user', 'entry-update'),
+('user', 'entry-delete');
 
--- tenant-guest gets read-only
+-- guest gets read-only
 INSERT INTO role_permissions (role_id, permission_id) VALUES
-('tenant-guest', 'entry-read');
+('guest', 'entry-read');
 ```
 
 
@@ -1534,7 +1532,7 @@ INSERT INTO role_permissions (role_id, permission_id) VALUES
   - Client-side login/signup with Cognito
   - **Public Client (SPA):** Uses `generate_secret = false` for secure browser auth
   - Direct username/password authentication
-  - Extract custom attributes from ID token (`custom:tenantId`, `custom:role`, `custom:tenantType`)
+  - Extract custom attributes from ID token (`custom:tenantId`, `custom:tenantType`)
   - Session management with Angular Signals
 - **API Client:** Angular HttpClient with functional interceptors
   - Auto-inject JWT tokens in Authorization header
@@ -1686,7 +1684,7 @@ The project includes automated deployment scripts that handle infrastructure pro
    - Cognito User Pool with custom attributes (`tenantId`, `role`, `tenantType`)
    - User Pool Client with OAuth2 configuration
    - Lambda triggers for token customization
-   - User groups (admin, tenant-admin, user)
+   - User groups (admin, admin, user)
    - SSM Parameter Store entries for all configuration
 
 2. **Stores Configuration in SSM:**

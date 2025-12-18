@@ -40,11 +40,11 @@ class PermissionServiceTest {
 
         @Test
         void hasPermission_WhenUserHasRoleWithPermission_ReturnsTrue() {
-                UserRole userRole = UserRole.builder().roleId("tenant-user").build();
+                UserRole userRole = UserRole.builder().roleId("user").build();
                 when(userRoleRepository.findActiveRolesByUserId(eq(userId), any(Instant.class)))
                                 .thenReturn(List.of(userRole));
 
-                when(rolePermissionRepository.existsByRoleIdAndResourceAndAction("tenant-user", resource, action))
+                when(rolePermissionRepository.existsByRoleIdAndResourceAndAction("user", resource, action))
                                 .thenReturn(true);
 
                 boolean result = permissionService.hasPermission(userId, resource, action);
@@ -64,11 +64,11 @@ class PermissionServiceTest {
 
         @Test
         void hasPermission_WhenUserHasRoleButNoPermission_ReturnsFalse() {
-                UserRole userRole = UserRole.builder().roleId("tenant-guest").build();
+                UserRole userRole = UserRole.builder().roleId("guest").build();
                 when(userRoleRepository.findActiveRolesByUserId(eq(userId), any(Instant.class)))
                                 .thenReturn(List.of(userRole));
 
-                when(rolePermissionRepository.existsByRoleIdAndResourceAndAction("tenant-guest", resource, action))
+                when(rolePermissionRepository.existsByRoleIdAndResourceAndAction("guest", resource, action))
                                 .thenReturn(false);
 
                 boolean result = permissionService.hasPermission(userId, resource, action);
@@ -89,11 +89,11 @@ class PermissionServiceTest {
 
         @Test
         void getUserPermissions_ReturnsAllPermissions() {
-                UserRole userRole = UserRole.builder().roleId("tenant-user").build();
+                UserRole userRole = UserRole.builder().roleId("user").build();
                 when(userRoleRepository.findActiveRolesByUserId(eq(userId), any(Instant.class)))
                                 .thenReturn(List.of(userRole));
 
-                when(rolePermissionRepository.findPermissionIdsByRoleId("tenant-user"))
+                when(rolePermissionRepository.findPermissionIdsByRoleId("user"))
                                 .thenReturn(List.of("entry:read", "entry:create"));
 
                 Set<String> permissions = permissionService.getUserPermissions(userId);

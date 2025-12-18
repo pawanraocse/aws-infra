@@ -2,6 +2,8 @@ package com.learning.authservice.service;
 
 import org.springframework.security.core.Authentication;
 
+import com.learning.authservice.authorization.domain.UserRole;
+import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.authservice.config.CognitoProperties;
 import com.learning.authservice.dto.AuthRequestDto;
 import com.learning.authservice.dto.AuthResponseDto;
@@ -32,6 +34,7 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.SignUpRespo
 import software.amazon.awssdk.services.cognitoidentityprovider.model.UserNotFoundException;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.UsernameExistsException;
 
+import java.util.List;
 import java.util.Map;
 
 @RequiredArgsConstructor
@@ -42,8 +45,9 @@ public class AuthServiceImpl implements AuthService {
         private final CognitoProperties cognitoProperties;
         private final HttpServletRequest request;
         private final HttpServletResponse response;
-        private final CognitoIdentityProviderClient cognitoClient; // NT-21 injected singleton bean
+        private final CognitoIdentityProviderClient cognitoClient;
         private final org.springframework.web.reactive.function.client.WebClient platformWebClient;
+        private final UserRoleService userRoleService;
 
         @Override
         @Transactional(readOnly = true)
@@ -58,9 +62,18 @@ public class AuthServiceImpl implements AuthService {
                 String email = request.getHeader("X-Email");
                 String name = request.getHeader("X-Username");
 
-                log.info("operation=getCurrentUser, userId={}, requestId={}, status=success", userId,
+                // Fetch role from database
+                List<UserRole> userRoles = userRoleService.getUserRoles(userId);
+                String role = userRoles.isEmpty() ? "member" : userRoles.get(0).getRoleId();
+
+                log.info("operation=getCurrentUser, userId={}, role={}, requestId={}, status=success", userId, role,
                                 request.getAttribute("X-Request-Id"));
-                return new UserInfoDto(userId, email, name);
+                return UserInfoDto.builder()
+                                .userId(userId)
+                                .email(email)
+                                .name(name)
+                                .role(role)
+                                .build();
         }
 
         @Override
@@ -132,7 +145,7 @@ public class AuthServiceImpl implements AuthService {
                                                                                                                    // for
                                                                                                                    // personal
                                                                                                                    // users
-                                                        "role", "tenant-admin"))
+                                                        "role", "admin"))
                                         .build();
 
                         SignUpResponse signUpResponse = cognitoClient.signUp(signUpRequest);
@@ -199,7 +212,7 @@ public class AuthServiceImpl implements AuthService {
                 log.info("operation=deleteAccount_init userId={} tenantId={} roles={}", userId, tenantId, roles);
 
                 // If user is a Tenant Admin, delete the entire tenant (Personal or Org)
-                if (roles != null && roles.contains("tenant-admin")) {
+                if (roles != null && roles.contains("admin")) {
                         try {
                                 log.info("operation=deleteAccount_tenant_deletion tenantId={}", tenantId);
                                 platformWebClient.delete()

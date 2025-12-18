@@ -6,20 +6,24 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Remote implementation of PermissionEvaluator that calls auth-service.
- * Uses the auth-service /api/v1/permissions/check endpoint which queries
- * the database for actual permissions.
+ * Permission evaluator that checks role-based access.
  * 
- * Caches permission check results for performance (configured in
- * CommonCacheConfiguration).
+ * With the simplified permission model:
+ * - Admin/Super-admin roles get full access (bypass)
+ * - Editor role can read/write resources
+ * - Viewer role can only read
+ * - Guest role has minimal access
  * 
- * Note: Super-admin bypass is handled in AuthorizationAspect before this is
- * called.
+ * Falls back to remote auth-service call for complex permission checks.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -27,12 +31,90 @@ public class RemotePermissionEvaluator implements PermissionEvaluator {
 
         private final WebClient authWebClient;
 
+        // Roles that have full access
+        private static final Set<String> ADMIN_ROLES = Set.of("admin", "super-admin");
+
+        // Roles that can read anything
+        private static final Set<String> READ_ROLES = Set.of("admin", "super-admin", "editor", "viewer");
+
+        // Roles that can write (create/update/delete)
+        private static final Set<String> WRITE_ROLES = Set.of("admin", "super-admin", "editor");
+
         @Override
         @Cacheable(value = CacheNames.PERMISSIONS, key = "#userId + ':' + #resource + ':' + #action")
         public boolean hasPermission(String userId, String resource, String action) {
                 String tenantId = TenantContext.getCurrentTenant();
-                log.debug("Checking permission via auth-service: user={}, resource={}, action={}, tenant={}",
-                                userId, resource, action, tenantId);
+
+                // Check role from request header (set by gateway)
+                String role = getRoleFromRequest();
+                log.debug("Checking permission: user={}, resource={}, action={}, role={}, tenant={}",
+                                userId, resource, action, role, tenantId);
+
+                // Admin/Super-admin bypass - full access to everything
+                if (role != null && ADMIN_ROLES.contains(role)) {
+                        log.debug("Admin bypass: user={}, role={}", userId, role);
+                        return true;
+                }
+
+                // Role-based access check for simplified model
+                if (role != null) {
+                        boolean allowed = checkRoleBasedAccess(role, action);
+                        if (allowed) {
+                                log.debug("Role-based access granted: user={}, role={}, action={}", userId, role,
+                                                action);
+                                return true;
+                        }
+                }
+
+                // Fallback to remote auth-service check for complex cases
+                return checkRemotePermission(userId, resource, action, tenantId);
+        }
+
+        /**
+         * Check access based on role and action type.
+         * Simplified model: admin=all, editor=read+write, viewer=read, guest=minimal
+         */
+        private boolean checkRoleBasedAccess(String role, String action) {
+                // Read actions
+                if ("read".equals(action) || "view".equals(action) || "list".equals(action)) {
+                        return READ_ROLES.contains(role);
+                }
+                // Write actions
+                if ("create".equals(action) || "update".equals(action) || "delete".equals(action) ||
+                                "write".equals(action) || "edit".equals(action)) {
+                        return WRITE_ROLES.contains(role);
+                }
+                // Share action - editor and above
+                if ("share".equals(action)) {
+                        return WRITE_ROLES.contains(role);
+                }
+                return false;
+        }
+
+        /**
+         * Get role from current request's X-Role header.
+         */
+        private String getRoleFromRequest() {
+                try {
+                        ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder
+                                        .getRequestAttributes();
+                        if (attrs != null) {
+                                HttpServletRequest request = attrs.getRequest();
+                                return request.getHeader("X-Role");
+                        }
+                } catch (Exception e) {
+                        log.debug("Could not get role from request: {}", e.getMessage());
+                }
+                return null;
+        }
+
+        /**
+         * Fallback to remote auth-service permission check.
+         * Used for complex permission rules that can't be resolved by role alone.
+         */
+        private boolean checkRemotePermission(String userId, String resource, String action, String tenantId) {
+                log.debug("Falling back to remote permission check: user={}, resource={}, action={}",
+                                userId, resource, action);
 
                 try {
                         WebClient.RequestBodySpec request = authWebClient.post()
@@ -54,12 +136,12 @@ public class RemotePermissionEvaluator implements PermissionEvaluator {
                                         .block();
 
                         boolean result = Boolean.TRUE.equals(allowed);
-                        log.debug("Permission check result: user={}, resource={}, action={}, allowed={}",
+                        log.debug("Remote permission check result: user={}, resource={}, action={}, allowed={}",
                                         userId, resource, action, result);
                         return result;
 
                 } catch (Exception e) {
-                        log.error("Permission check failed: user={}, resource={}, action={}, error={}",
+                        log.error("Remote permission check failed: user={}, resource={}, action={}, error={}",
                                         userId, resource, action, e.getMessage());
                         // Fail closed: deny access on error
                         return false;

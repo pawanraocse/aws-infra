@@ -51,7 +51,7 @@ class AuthorizationAspectTest {
     void checkPermission_WhenAuthorized_Proceeds() throws Throwable {
         // Setup Context
         when(request.getHeader("X-User-Id")).thenReturn(userId);
-        when(request.getHeader("X-Role")).thenReturn("tenant-user");
+        when(request.getHeader("X-Role")).thenReturn("user");
 
         // Setup Annotation
         RequirePermission annotation = mock(RequirePermission.class);
@@ -72,7 +72,7 @@ class AuthorizationAspectTest {
     void checkPermission_WhenUnauthorized_ThrowsException() throws Throwable {
         // Setup Context
         when(request.getHeader("X-User-Id")).thenReturn(userId);
-        when(request.getHeader("X-Role")).thenReturn("tenant-user");
+        when(request.getHeader("X-Role")).thenReturn("user");
 
         // Setup Annotation
         RequirePermission annotation = mock(RequirePermission.class);

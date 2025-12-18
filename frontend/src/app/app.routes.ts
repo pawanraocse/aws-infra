@@ -70,6 +70,16 @@ export const routes: Routes = [
         canActivate: [adminGuard]
       },
       {
+        path: 'admin/settings/sso',
+        loadComponent: () => import('./features/admin/settings/sso-config.component').then(m => m.SsoConfigComponent),
+        canActivate: [adminGuard]
+      },
+      {
+        path: 'admin/settings/group-mapping',
+        loadComponent: () => import('./features/admin/settings/group-mapping.component').then(m => m.GroupMappingComponent),
+        canActivate: [adminGuard]
+      },
+      {
         path: 'settings/account',
         loadComponent: () => import('./features/settings/account-settings.component').then(m => m.AccountSettingsComponent)
       }

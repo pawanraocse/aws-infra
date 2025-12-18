@@ -49,10 +49,18 @@ public class PermissionController {
 
     /**
      * Get all defined permissions.
+     * 
+     * @deprecated Granular permissions have been replaced with role-based access
+     *             (admin, editor, viewer).
+     *             This endpoint returns an empty list for backward compatibility.
      */
+    @Deprecated
     @GetMapping
     public ResponseEntity<List<Permission>> listPermissions() {
-        return ResponseEntity.ok(permissionService.getAllPermissions());
+        // Granular permissions removed - now using simplified role-based access
+        // Return empty list for backward compatibility
+        log.debug("listPermissions called - returning empty list (granular permissions deprecated)");
+        return ResponseEntity.ok(List.of());
     }
 
     /**

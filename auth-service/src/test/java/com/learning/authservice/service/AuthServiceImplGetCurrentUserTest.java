@@ -1,5 +1,6 @@
 package com.learning.authservice.service;
 
+import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.authservice.config.CognitoProperties;
 import com.learning.authservice.dto.UserInfoDto;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,11 +18,13 @@ import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
 
 /**
  * Unit tests for AuthServiceImpl.getCurrentUser (NT-19 coverage expansion).
@@ -38,9 +41,11 @@ class AuthServiceImplGetCurrentUserTest {
         CognitoIdentityProviderClient cognitoIdentityProviderClient = Mockito.mock(CognitoIdentityProviderClient.class);
         org.springframework.web.reactive.function.client.WebClient webClient = Mockito
                 .mock(org.springframework.web.reactive.function.client.WebClient.class);
+        UserRoleService userRoleService = Mockito.mock(UserRoleService.class);
+        Mockito.when(userRoleService.getUserRoles(anyString())).thenReturn(Collections.emptyList());
         // Note: Not calling props.validate() to avoid throwing during these tests; we
         // only test getCurrentUser.
-        return new AuthServiceImpl(props, req, resp, cognitoIdentityProviderClient, webClient);
+        return new AuthServiceImpl(props, req, resp, cognitoIdentityProviderClient, webClient, userRoleService);
     }
 
     private DefaultOidcUser oidcUser(String sub, String email, String name) {

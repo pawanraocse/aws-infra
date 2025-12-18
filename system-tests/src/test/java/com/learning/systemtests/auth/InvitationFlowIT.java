@@ -22,7 +22,7 @@ public class InvitationFlowIT extends BaseSystemTest {
 
         // 2. Send Invitation
         String email = "newuser_" + UUID.randomUUID() + "@example.com";
-        String roleId = "tenant-user";
+        String roleId = "user";
 
         given()
                 .header("Authorization", "Bearer " + adminToken)

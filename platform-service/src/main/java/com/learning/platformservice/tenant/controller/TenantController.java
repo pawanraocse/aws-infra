@@ -58,17 +58,31 @@ public class TenantController {
         return ResponseEntity.ok(tenantProvisioningService.provision(request));
     }
 
-    @Operation(summary = "Get tenant by ID", description = "Gets tenant details by ID")
+    @Operation(summary = "Get tenant by ID", description = "Gets tenant details. Users can read their own tenant, super-admin can read any.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Tenant found"),
-            @ApiResponse(responseCode = "404", description = "Tenant not found")
+            @ApiResponse(responseCode = "404", description = "Tenant not found"),
+            @ApiResponse(responseCode = "403", description = "Not authorized")
     })
     @GetMapping("/{id}")
-    @RequirePermission(resource = "tenant", action = "read")
-    public ResponseEntity<TenantDto> get(@PathVariable String id) {
-        return tenantService.getTenant(id)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public ResponseEntity<TenantDto> get(
+            @PathVariable String id,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String requestTenantId,
+            @RequestHeader(value = "X-Role", required = false) String role) {
+        // Super-admin can read any tenant
+        if ("super-admin".equals(role)) {
+            return tenantService.getTenant(id)
+                    .map(ResponseEntity::ok)
+                    .orElseGet(() -> ResponseEntity.notFound().build());
+        }
+        // Users can only read their own tenant (from JWT)
+        if (requestTenantId != null && requestTenantId.equals(id)) {
+            return tenantService.getTenant(id)
+                    .map(ResponseEntity::ok)
+                    .orElseGet(() -> ResponseEntity.notFound().build());
+        }
+        log.warn("Access denied to read tenant {}: userTenant={}, role={}", id, requestTenantId, role);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
     @Operation(summary = "Retry tenant migration", description = "Retries migration for a tenant in MIGRATION_ERROR state; no-op otherwise")

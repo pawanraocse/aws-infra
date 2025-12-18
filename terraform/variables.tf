@@ -21,6 +21,18 @@ variable "platform_service_url" {
   default     = "http://platform-service:8083/platform"
 }
 
+variable "auth_service_url" {
+  description = "Auth service URL for Lambda to resolve group-role mappings"
+  type        = string
+  default     = "http://auth-service:8081"
+}
+
+variable "enable_group_sync" {
+  description = "Enable SSO group sync during token generation"
+  type        = bool
+  default     = true
+}
+
 variable "project_name" {
   description = "Project name used in resource naming"
   type        = string

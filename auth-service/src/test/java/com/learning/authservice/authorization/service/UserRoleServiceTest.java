@@ -29,7 +29,7 @@ class UserRoleServiceTest {
     private UserRoleService userRoleService;
 
     private final String userId = "user-123";
-    private final String roleId = "tenant-admin";
+    private final String roleId = "admin";
     private final String assignedBy = "admin-user";
 
     @Test

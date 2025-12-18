@@ -53,7 +53,7 @@ describe('DashboardComponent', () => {
             pendingInvitations: 2,
             expiredInvitations: 0,
             revokedInvitations: 0,
-            roleDistribution: { 'tenant-admin': 2, 'tenant-user': 3 },
+            roleDistribution: { 'admin': 2, 'user': 3 },
             adminCount: 2,
             regularUserCount: 3
         }));

@@ -61,7 +61,7 @@ class EntryControllerTest extends BaseControllerTest {
                 // When/Then
                 mockMvc.perform(post("/api/v1/entries")
                                 .header("X-User-Id", "test-user")
-                                .header("X-Role", "tenant-admin")
+                                .header("X-Role", "admin")
                                 .header("X-Tenant-Id", "test-tenant")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request)))
@@ -82,7 +82,7 @@ class EntryControllerTest extends BaseControllerTest {
                 // When/Then
                 mockMvc.perform(post("/api/v1/entries")
                                 .header("X-User-Id", "test-user")
-                                .header("X-Role", "tenant-admin")
+                                .header("X-Role", "admin")
                                 .header("X-Tenant-Id", "test-tenant")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request)))
@@ -99,7 +99,7 @@ class EntryControllerTest extends BaseControllerTest {
                 // When/Then
                 mockMvc.perform(get("/api/v1/entries")
                                 .header("X-User-Id", "test-user")
-                                .header("X-Role", "tenant-admin")
+                                .header("X-Role", "admin")
                                 .header("X-Tenant-Id", "test-tenant"))
                                 .andDo(print())
                                 .andExpect(status().isOk())
@@ -116,7 +116,7 @@ class EntryControllerTest extends BaseControllerTest {
                 // When/Then
                 mockMvc.perform(get("/api/v1/entries/{id}", saved.getId())
                                 .header("X-User-Id", "test-user")
-                                .header("X-Role", "tenant-admin")
+                                .header("X-Role", "admin")
                                 .header("X-Tenant-Id", "test-tenant"))
                                 .andDo(print())
                                 .andExpect(status().isOk())
@@ -129,7 +129,7 @@ class EntryControllerTest extends BaseControllerTest {
         void shouldReturn404WhenEntryNotFound() throws Exception {
                 mockMvc.perform(get("/api/v1/entries/{id}", 99999L)
                                 .header("X-User-Id", "test-user")
-                                .header("X-Role", "tenant-admin")
+                                .header("X-Role", "admin")
                                 .header("X-Tenant-Id", "test-tenant"))
                                 .andDo(print())
                                 .andExpect(status().isNotFound());
@@ -144,7 +144,7 @@ class EntryControllerTest extends BaseControllerTest {
                 // When/Then
                 mockMvc.perform(put("/api/v1/entries/{id}", existing.getId())
                                 .header("X-User-Id", "test-user")
-                                .header("X-Role", "tenant-admin")
+                                .header("X-Role", "admin")
                                 .header("X-Tenant-Id", "test-tenant")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request)))
@@ -165,7 +165,7 @@ class EntryControllerTest extends BaseControllerTest {
                 // When/Then
                 mockMvc.perform(delete("/api/v1/entries/{id}", saved.getId())
                                 .header("X-User-Id", "test-user")
-                                .header("X-Role", "tenant-admin")
+                                .header("X-Role", "admin")
                                 .header("X-Tenant-Id", "test-tenant"))
                                 .andDo(print())
                                 .andExpect(status().isNoContent());
@@ -173,7 +173,7 @@ class EntryControllerTest extends BaseControllerTest {
                 // Verify deleted
                 mockMvc.perform(get("/api/v1/entries/{id}", saved.getId())
                                 .header("X-User-Id", "test-user")
-                                .header("X-Role", "tenant-admin")
+                                .header("X-Role", "admin")
                                 .header("X-Tenant-Id", "test-tenant"))
                                 .andExpect(status().isNotFound());
         }
@@ -182,7 +182,7 @@ class EntryControllerTest extends BaseControllerTest {
         void shouldReturn404WhenDeletingNonExistentEntry() throws Exception {
                 mockMvc.perform(delete("/api/v1/entries/{id}", 99999L)
                                 .header("X-User-Id", "test-user")
-                                .header("X-Role", "tenant-admin")
+                                .header("X-Role", "admin")
                                 .header("X-Tenant-Id", "test-tenant"))
                                 .andDo(print())
                                 .andExpect(status().isNotFound());
@@ -194,7 +194,7 @@ class EntryControllerTest extends BaseControllerTest {
                 EntryRequestDto request1 = new EntryRequestDto("duplicate-key", "value1");
                 mockMvc.perform(post("/api/v1/entries")
                                 .header("X-User-Id", "test-user")
-                                .header("X-Role", "tenant-admin")
+                                .header("X-Role", "admin")
                                 .header("X-Tenant-Id", "test-tenant")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request1)))
@@ -204,7 +204,7 @@ class EntryControllerTest extends BaseControllerTest {
                 EntryRequestDto request2 = new EntryRequestDto("duplicate-key", "value2");
                 mockMvc.perform(post("/api/v1/entries")
                                 .header("X-User-Id", "test-user")
-                                .header("X-Role", "tenant-admin")
+                                .header("X-Role", "admin")
                                 .header("X-Tenant-Id", "test-tenant")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request2)))
@@ -226,7 +226,7 @@ class EntryControllerTest extends BaseControllerTest {
                 // When/Then - Request page 0, size 10
                 mockMvc.perform(get("/api/v1/entries")
                                 .header("X-User-Id", "test-user")
-                                .header("X-Role", "tenant-admin")
+                                .header("X-Role", "admin")
                                 .header("X-Tenant-Id", "test-tenant")
                                 .param("page", "0")
                                 .param("size", "10"))

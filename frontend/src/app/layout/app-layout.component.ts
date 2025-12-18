@@ -21,7 +21,7 @@ export class AppLayoutComponent {
     const user = this.authService.user();
     const isOrganization = user?.tenantType === 'ORGANIZATION';
     const isSuperAdmin = user?.role === 'super-admin';
-    const isTenantAdmin = user?.role === 'tenant-admin';
+    const isTenantAdmin = user?.role === 'admin';
 
     // SUPER-ADMIN: Platform management menu (no personal data)
     if (isSuperAdmin) {

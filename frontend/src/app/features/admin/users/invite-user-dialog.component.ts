@@ -53,8 +53,8 @@ export class InviteUserDialogComponent {
 
   // TODO: Fetch roles from backend
   roles = [
-    { name: 'Tenant Admin', id: 'tenant-admin' },
-    { name: 'User', id: 'tenant-user' }
+    { name: 'Admin', id: 'admin' },
+    { name: 'User', id: 'user' }
   ];
 
   inviteForm = this.fb.group({

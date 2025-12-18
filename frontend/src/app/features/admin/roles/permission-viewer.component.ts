@@ -1,72 +1,84 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TableModule } from 'primeng/table';
-import { DynamicDialogConfig } from 'primeng/dynamicdialog';
-import { RoleService, Permission } from '../../../core/services/role.service';
+import { ButtonModule } from 'primeng/button';
+import { TagModule } from 'primeng/tag';
+import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { RoleService } from '../../../core/services/role.service';
+
+interface RoleBundle {
+  name: string;
+  description: string;
+  capabilities: string[];
+  color: 'success' | 'info' | 'warn' | 'danger';
+}
 
 @Component({
-    selector: 'app-permission-viewer',
-    standalone: true,
-    imports: [CommonModule, TableModule],
-    template: `
-    <div class="card">
-      <p-table [value]="permissions" [tableStyle]="{ 'min-width': '50rem' }" [loading]="loading">
-        <ng-template pTemplate="header">
-          <tr>
-            <th>Resource</th>
-            <th>Action</th>
-            <th>Description</th>
-            <th>Access</th>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-perm>
-          <tr>
-            <td class="font-bold">{{ perm.resource }}</td>
-            <td>{{ perm.action }}</td>
-            <td>{{ perm.description }}</td>
-            <td>
-              <i class="pi pi-check-circle text-green-500 text-xl" *ngIf="hasPermission(perm)"></i>
-              <i class="pi pi-times-circle text-gray-300 text-xl" *ngIf="!hasPermission(perm)"></i>
-            </td>
-          </tr>
-        </ng-template>
-      </p-table>
+  selector: 'app-permission-viewer',
+  standalone: true,
+  imports: [CommonModule, TableModule, ButtonModule, TagModule],
+  template: `
+    <div class="p-3">
+      <!-- Access Level Bundles -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div *ngFor="let bundle of roleBundles" 
+             class="border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow bg-white">
+          <div class="flex align-items-center gap-2 mb-2">
+            <p-tag [value]="bundle.name" [severity]="bundle.color"></p-tag>
+          </div>
+          <p class="text-sm text-gray-600 mb-2 mt-0">{{ bundle.description }}</p>
+          <ul class="text-xs text-gray-500 list-disc pl-4 m-0">
+            <li *ngFor="let cap of bundle.capabilities" class="mb-1">{{ cap }}</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Footer with Close Button -->
+      <div class="flex justify-content-end pt-4 mt-3 border-top-1 border-gray-200">
+        <p-button label="Close" icon="pi pi-times" (onClick)="close()" severity="secondary"></p-button>
+      </div>
     </div>
   `
 })
 export class PermissionViewerComponent implements OnInit {
-    permissions: Permission[] = [];
-    rolePermissions: string[] = []; // List of permission IDs for the role
-    loading = true;
+  loading = true;
 
-    private roleService = inject(RoleService);
-    private config = inject(DynamicDialogConfig);
-
-    ngOnInit() {
-        // In a real app, we would fetch permissions specifically for this role
-        // For now, we'll fetch ALL permissions and mock the selection logic
-        // or we need an endpoint to get permissions for a specific role.
-        // The backend PermissionService has 'getUserPermissions' but not 'getRolePermissions'.
-        // We might need to add that or just show all permissions for now.
-
-        // Let's fetch all permissions first
-        this.roleService.getPermissions().subscribe({
-            next: (data) => {
-                this.permissions = data;
-                this.loading = false;
-                // TODO: Fetch actual permissions for the role
-                // For MVP, we'll just show all available permissions
-            },
-            error: (err) => {
-                console.error('Failed to load permissions', err);
-                this.loading = false;
-            }
-        });
+  roleBundles: RoleBundle[] = [
+    {
+      name: 'VIEWER',
+      description: 'Read-only access to files and folders',
+      capabilities: ['View files', 'Download files', 'View metadata'],
+      color: 'info'
+    },
+    {
+      name: 'CONTRIBUTOR',
+      description: 'Can add new content but not modify existing',
+      capabilities: ['All Viewer capabilities', 'Upload new files', 'Create folders'],
+      color: 'success'
+    },
+    {
+      name: 'EDITOR',
+      description: 'Can modify and organize content',
+      capabilities: ['All Contributor capabilities', 'Edit files', 'Move/rename files', 'Delete own uploads'],
+      color: 'warn'
+    },
+    {
+      name: 'MANAGER',
+      description: 'Full control including sharing permissions',
+      capabilities: ['All Editor capabilities', 'Delete any files', 'Share with others', 'Manage access'],
+      color: 'danger'
     }
+  ];
 
-    hasPermission(perm: Permission): boolean {
-        // Placeholder logic: In real implementation, check if 'perm.id' is in 'rolePermissions'
-        // For now, return true to show the UI
-        return true;
-    }
+  private config = inject(DynamicDialogConfig);
+  private ref = inject(DynamicDialogRef);
+
+  ngOnInit() {
+    this.loading = false;
+  }
+
+  close() {
+    this.ref.close();
+  }
 }
+

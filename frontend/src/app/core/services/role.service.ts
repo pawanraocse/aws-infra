@@ -16,7 +16,7 @@ export interface Permission {
     resource: string;
     action: string;
     description: string;
-    fullPermission: string;
+    fullPermission?: string; // Optional for simplified permissions
 }
 
 export interface RoleAssignmentRequest {
@@ -51,5 +51,9 @@ export class RoleService {
 
     getUserRoles(userId: string): Observable<any[]> {
         return this.http.get<any[]>(`${this.rolesUrl}/user/${userId}`);
+    }
+
+    createRole(role: { name: string; description: string; scope: string }): Observable<Role> {
+        return this.http.post<Role>(this.rolesUrl, role);
     }
 }

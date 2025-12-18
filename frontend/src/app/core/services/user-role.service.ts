@@ -31,4 +31,9 @@ export class UserRoleService {
         const request: RoleAssignmentRequest = { userId, roleId };
         return this.http.put<void>(`${this.apiUrl}/users/${userId}`, request);
     }
+
+    assignRole(userId: string, roleId: string): Observable<void> {
+        const request: RoleAssignmentRequest = { userId, roleId };
+        return this.http.post<void>(`${this.apiUrl}/assign`, request);
+    }
 }

@@ -11,7 +11,7 @@ Production-ready Terraform configuration for AWS Cognito User Pool with **Modern
 - ✅ **Multi-tenant support** with custom attributes (`custom:tenantId`, `custom:role`)
 - ✅ **OAuth 2.0 / OIDC** compliant
 - ✅ **MFA support** (TOTP - Software Token, FREE)
-- ✅ **User groups** (admin, tenant-admin, user)
+- ✅ **User groups** (admin, admin, user)
 - ✅ **SSM Parameter Store** for secure configuration
 - ✅ **AWS Free Tier** optimized
 - ✅ **Terraform 1.9+** and AWS Provider 6.17+
@@ -84,7 +84,7 @@ https://cloud-infra-dev-XXXXXXXX.auth.us-east-1.amazoncognito.com/oauth2/authori
 | **Lambda Function** | `cloud-infra-dev-pre-token-generation` | Injects tenantId into JWT tokens |
 | **User Pool Domain** | `cloud-infra-dev-XXXXXXXX` | Hosted UI domain (Modern v2) |
 | **User Pool Client** | `cloud-infra-dev-native-client` | OAuth2 client (with secret) |
-| **User Groups** | admin, tenant-admin, user | Role-based groups |
+| **User Groups** | admin, admin, user | Role-based groups |
 | **SSM Parameters** | 11 parameters | Secure configuration storage |
 
 ---

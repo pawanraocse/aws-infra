@@ -1,5 +1,6 @@
--- V2: Authorization Schema for PBAC (Permission-Based Access Control)
--- Creates tables: roles, permissions, role_permissions, user_roles
+-- V1: Simplified Authorization Schema
+-- Predefined Role Bundles + Resource ACLs
+-- ============================================================================
 
 -- ============================================================================
 -- 1. ROLES TABLE
@@ -15,46 +16,11 @@ CREATE TABLE IF NOT EXISTS roles (
 
 CREATE INDEX idx_roles_scope ON roles(scope);
 
-COMMENT ON TABLE roles IS 'Defines user roles for authorization';
-COMMENT ON COLUMN roles.scope IS 'PLATFORM for super-admin, TENANT for tenant-level roles';
+COMMENT ON TABLE roles IS 'Predefined organization roles';
+COMMENT ON COLUMN roles.scope IS 'PLATFORM for super-admin, TENANT for tenant roles';
 
 -- ============================================================================
--- 2. PERMISSIONS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS permissions (
-    id VARCHAR(64) PRIMARY KEY,
-    resource VARCHAR(50) NOT NULL,
-    action VARCHAR(50) NOT NULL,
-    description TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(resource, action)
-);
-
-CREATE INDEX idx_permissions_resource ON permissions(resource);
-
-COMMENT ON TABLE permissions IS 'Defines granular permissions (resource:action format)';
-COMMENT ON COLUMN permissions.resource IS 'Resource type (e.g., entry, user, tenant, billing)';
-COMMENT ON COLUMN permissions.action IS 'Action type (e.g., read, create, update, delete, manage)';
-
--- ============================================================================
--- 3. ROLE_PERMISSIONS TABLE (Many-to-Many)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS role_permissions (
-    role_id VARCHAR(64) NOT NULL,
-    permission_id VARCHAR(64) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (role_id, permission_id),
-    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_role_permissions_role ON role_permissions(role_id);
-CREATE INDEX idx_role_permissions_permission ON role_permissions(permission_id);
-
-COMMENT ON TABLE role_permissions IS 'Maps roles to their granted permissions';
-
--- ============================================================================
--- 4. USER_ROLES TABLE (User Role Assignments per Tenant)
+-- 2. USER_ROLES TABLE (User Role Assignments)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS user_roles (
     id BIGSERIAL PRIMARY KEY,
@@ -70,110 +36,32 @@ CREATE TABLE IF NOT EXISTS user_roles (
 CREATE INDEX idx_user_roles_user ON user_roles(user_id);
 CREATE INDEX idx_user_roles_role ON user_roles(role_id);
 
-COMMENT ON TABLE user_roles IS 'Assigns roles to users (tenant isolation via database)';
-COMMENT ON COLUMN user_roles.user_id IS 'Cognito user ID (sub claim from JWT)';
-COMMENT ON COLUMN user_roles.assigned_by IS 'User ID who assigned this role';
-COMMENT ON COLUMN user_roles.expires_at IS 'Optional expiration timestamp for temporary role assignments';
+COMMENT ON TABLE user_roles IS 'Assigns roles to users';
+COMMENT ON COLUMN user_roles.user_id IS 'Cognito user ID (sub claim)';
 
 -- ============================================================================
--- 5. SEED DATA - ROLES
+-- 3. USERS TABLE (Tenant User Registry)
 -- ============================================================================
-INSERT INTO roles (id, name, description, scope) VALUES
-('super-admin', 'SUPER_ADMIN', 'Platform super administrator with full system access', 'PLATFORM'),
-('tenant-admin', 'TENANT_ADMIN', 'Tenant administrator with full control over tenant resources and users', 'TENANT'),
-('tenant-user', 'TENANT_USER', 'Standard tenant user with CRUD access to resources', 'TENANT'),
-('tenant-guest', 'TENANT_GUEST', 'Read-only guest user with limited access', 'TENANT')
-ON CONFLICT (id) DO NOTHING;
+CREATE TABLE IF NOT EXISTS users (
+    user_id VARCHAR(255) PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    name VARCHAR(255),
+    avatar_url TEXT,
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INVITED', 'DISABLED')),
+    source VARCHAR(32) NOT NULL DEFAULT 'COGNITO' CHECK (source IN ('COGNITO', 'SAML', 'OIDC', 'MANUAL', 'INVITATION')),
+    first_login_at TIMESTAMPTZ,
+    last_login_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
--- ============================================================================
--- 6. SEED DATA - PERMISSIONS
--- ============================================================================
--- Entry permissions
-INSERT INTO permissions (id, resource, action, description) VALUES
-('entry-read', 'entry', 'read', 'View entries'),
-('entry-create', 'entry', 'create', 'Create new entries'),
-('entry-update', 'entry', 'update', 'Update existing entries'),
-('entry-delete', 'entry', 'delete', 'Delete entries')
-ON CONFLICT (resource, action) DO NOTHING;
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_status ON users(status);
 
--- User management permissions
-INSERT INTO permissions (id, resource, action, description) VALUES
-('user-read', 'user', 'read', 'View user information'),
-('user-create', 'user', 'create', 'Create new users'),
-('user-update', 'user', 'update', 'Update user information'),
-('user-delete', 'user', 'delete', 'Delete users'),
-('user-manage', 'user', 'manage', 'Full user management (create, update, delete, assign roles)')
-ON CONFLICT (resource, action) DO NOTHING;
-
--- Tenant management permissions
-INSERT INTO permissions (id, resource, action, description) VALUES
-('tenant-read', 'tenant', 'read', 'View tenant settings and information'),
-('tenant-update', 'tenant', 'update', 'Update tenant settings'),
-('tenant-manage', 'tenant', 'manage', 'Full tenant management including settings and configuration')
-ON CONFLICT (resource, action) DO NOTHING;
-
--- Billing permissions
-INSERT INTO permissions (id, resource, action, description) VALUES
-('billing-read', 'billing', 'read', 'View billing information and invoices'),
-('billing-manage', 'billing', 'manage', 'Manage billing, subscriptions, and payment methods')
-ON CONFLICT (resource, action) DO NOTHING;
+COMMENT ON TABLE users IS 'Registry of all users in the tenant';
 
 -- ============================================================================
--- 7. SEED DATA - ROLE PERMISSIONS MAPPING
--- ============================================================================
--- SUPER_ADMIN gets all permissions (handled in code with wildcard)
-
--- TENANT_ADMIN permissions
-INSERT INTO role_permissions (role_id, permission_id) VALUES
-('tenant-admin', 'entry-read'),
-('tenant-admin', 'entry-create'),
-('tenant-admin', 'entry-update'),
-('tenant-admin', 'entry-delete'),
-('tenant-admin', 'user-read'),
-('tenant-admin', 'user-create'),
-('tenant-admin', 'user-update'),
-('tenant-admin', 'user-delete'),
-('tenant-admin', 'user-manage'),
-('tenant-admin', 'tenant-read'),
-('tenant-admin', 'tenant-update'),
-('tenant-admin', 'tenant-manage'),
-('tenant-admin', 'billing-read'),
-('tenant-admin', 'billing-manage')
-ON CONFLICT (role_id, permission_id) DO NOTHING;
-
--- TENANT_USER permissions (standard CRUD + read own user info)
-INSERT INTO role_permissions (role_id, permission_id) VALUES
-('tenant-user', 'entry-read'),
-('tenant-user', 'entry-create'),
-('tenant-user', 'entry-update'),
-('tenant-user', 'entry-delete'),
-('tenant-user', 'user-read')
-ON CONFLICT (role_id, permission_id) DO NOTHING;
-
--- TENANT_GUEST permissions (read-only)
-INSERT INTO role_permissions (role_id, permission_id) VALUES
-('tenant-guest', 'entry-read')
-ON CONFLICT (role_id, permission_id) DO NOTHING;
-
--- ============================================================================
--- 8. AUDIT TRIGGER (Optional - for tracking role/permission changes)
--- ============================================================================
--- Create updated_at trigger for roles table
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER update_roles_updated_at
-BEFORE UPDATE ON roles
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-
--- ============================================================================
--- 9. INVITATIONS TABLE (User Invitation System)
+-- 4. INVITATIONS TABLE
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS invitations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -192,96 +80,87 @@ CREATE INDEX idx_invitations_email ON invitations(email);
 CREATE INDEX idx_invitations_token ON invitations(token);
 CREATE INDEX idx_invitations_status ON invitations(status);
 
-COMMENT ON TABLE invitations IS 'Stores invitation tokens for inviting new users (tenant isolation via database)';
-COMMENT ON COLUMN invitations.email IS 'Email address of the invited user';
-COMMENT ON COLUMN invitations.role_id IS 'Role to be assigned to the user upon acceptance';
-COMMENT ON COLUMN invitations.token IS 'Secure random token used in the invitation link';
-COMMENT ON COLUMN invitations.status IS 'Current status of the invitation';
-COMMENT ON COLUMN invitations.invited_by IS 'User ID who created the invitation';
-COMMENT ON COLUMN invitations.expires_at IS 'Expiration timestamp for the invitation';
+-- ============================================================================
+-- 5. GROUP_ROLE_MAPPINGS TABLE (SSO Group to Role Mapping)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS group_role_mappings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    external_group_id VARCHAR(512) NOT NULL,
+    group_name VARCHAR(255) NOT NULL,
+    role_id VARCHAR(64) NOT NULL,
+    priority INTEGER DEFAULT 0,
+    auto_assign BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by VARCHAR(255),
+    UNIQUE(external_group_id),
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT
+);
 
--- Trigger to update updated_at column for invitations
+CREATE INDEX idx_grm_role ON group_role_mappings(role_id);
+CREATE INDEX idx_grm_group ON group_role_mappings(external_group_id);
+
+COMMENT ON TABLE group_role_mappings IS 'Maps SSO groups to roles for auto-assignment';
+
+-- ============================================================================
+-- 6. ACL_ENTRIES TABLE (Resource-Level Permissions)
+-- ============================================================================
+-- Google Drive style sharing for folders/files
+CREATE TABLE IF NOT EXISTS acl_entries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    resource_id UUID NOT NULL,
+    resource_type VARCHAR(64) NOT NULL,       -- FOLDER, FILE, PROJECT
+    principal_type VARCHAR(32) NOT NULL,      -- USER, GROUP, PUBLIC
+    principal_id VARCHAR(255),                -- User/Group ID or null for PUBLIC
+    role_bundle VARCHAR(32) NOT NULL,         -- VIEWER, CONTRIBUTOR, EDITOR, MANAGER
+    granted_by VARCHAR(255),
+    granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,
+    UNIQUE(resource_id, principal_type, principal_id)
+);
+
+CREATE INDEX idx_acl_resource ON acl_entries(resource_id);
+CREATE INDEX idx_acl_principal ON acl_entries(principal_id) WHERE principal_id IS NOT NULL;
+CREATE INDEX idx_acl_resource_type ON acl_entries(resource_type);
+
+COMMENT ON TABLE acl_entries IS 'Resource-level ACL for folder/file sharing';
+COMMENT ON COLUMN acl_entries.role_bundle IS 'VIEWER=read, CONTRIBUTOR=read+upload, EDITOR=edit, MANAGER=full+share';
+
+-- ============================================================================
+-- 7. SEED DATA - PREDEFINED ROLES
+-- ============================================================================
+INSERT INTO roles (id, name, description, scope) VALUES
+('super-admin', 'SUPER_ADMIN', 'Platform administrator with full system access', 'PLATFORM'),
+('admin', 'ADMIN', 'Tenant administrator with full tenant access', 'TENANT'),
+('editor', 'EDITOR', 'Can read, edit, delete, and share resources', 'TENANT'),
+('viewer', 'VIEWER', 'Read-only access to resources', 'TENANT'),
+('guest', 'GUEST', 'Limited access to shared resources only', 'TENANT')
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- 8. AUDIT TRIGGER
+-- ============================================================================
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_roles_updated_at
+BEFORE UPDATE ON roles
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_invitations_updated_at
 BEFORE UPDATE ON invitations
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
--- Add invite permission
-INSERT INTO permissions (id, resource, action, description) VALUES
-('user-invite', 'user', 'invite', 'Invite new users to the tenant')
-ON CONFLICT (resource, action) DO NOTHING;
-
--- Grant invite permission to tenant-admin role
-INSERT INTO role_permissions (role_id, permission_id) VALUES
-('tenant-admin', 'user-invite')
-ON CONFLICT (role_id, permission_id) DO NOTHING;
-
 -- ============================================================================
--- 10. SSO/IDP Management permissions (Organization tenants)
+-- SCHEMA COMPLETE - Simplified Permission Model
 -- ============================================================================
-INSERT INTO permissions (id, resource, action, description) VALUES
-('sso-read', 'sso', 'read', 'View SSO/IDP configuration'),
-('sso-manage', 'sso', 'manage', 'Configure SSO/IDP settings (SAML, OIDC, etc.)')
-ON CONFLICT (resource, action) DO NOTHING;
-
--- ============================================================================
--- 11. Role viewing permission
--- ============================================================================
-INSERT INTO permissions (id, resource, action, description) VALUES
-('role-read', 'role', 'read', 'View available roles and their permissions')
-ON CONFLICT (resource, action) DO NOTHING;
-
--- ============================================================================
--- 12. Platform-level permissions (super-admin only)
--- Note: These are checked in code for super-admin role, not assigned via role_permissions
--- ============================================================================
-INSERT INTO permissions (id, resource, action, description) VALUES
-('platform-tenant-list', 'platform', 'tenant:list', 'List all tenants in the system'),
-('platform-tenant-create', 'platform', 'tenant:create', 'Create/provision new tenants'),
-('platform-tenant-delete', 'platform', 'tenant:delete', 'Delete/deprovision tenants'),
-('platform-pipeline-run', 'platform', 'pipeline:run', 'Run platform maintenance pipelines')
-ON CONFLICT (resource, action) DO NOTHING;
-
--- ============================================================================
--- 13. Grant SSO, role viewing, and stats permissions to tenant-admin
--- ============================================================================
-INSERT INTO role_permissions (role_id, permission_id) VALUES
-('tenant-admin', 'sso-read'),
-('tenant-admin', 'sso-manage'),
-('tenant-admin', 'role-read')
-ON CONFLICT (role_id, permission_id) DO NOTHING;
-
--- Stats permission for tenant-admin
-INSERT INTO permissions (id, resource, action, description) VALUES
-('stats-read', 'stats', 'read', 'View tenant statistics')
-ON CONFLICT (resource, action) DO NOTHING;
-
-INSERT INTO role_permissions (role_id, permission_id) VALUES
-('tenant-admin', 'stats-read')
-ON CONFLICT (role_id, permission_id) DO NOTHING;
-
--- Organization management permission
-INSERT INTO permissions (id, resource, action, description) VALUES
-('org-read', 'organization', 'read', 'View organization profile'),
-('org-manage', 'organization', 'manage', 'Manage organization profile settings')
-ON CONFLICT (resource, action) DO NOTHING;
-
-INSERT INTO role_permissions (role_id, permission_id) VALUES
-('tenant-admin', 'org-read'),
-('tenant-admin', 'org-manage')
-ON CONFLICT (role_id, permission_id) DO NOTHING;
-
--- Role assignment permissions
-INSERT INTO permissions (id, resource, action, description) VALUES
-('role-assign', 'role', 'assign', 'Assign roles to users'),
-('role-revoke', 'role', 'revoke', 'Revoke roles from users')
-ON CONFLICT (resource, action) DO NOTHING;
-
-INSERT INTO role_permissions (role_id, permission_id) VALUES
-('tenant-admin', 'role-assign'),
-('tenant-admin', 'role-revoke')
-ON CONFLICT (role_id, permission_id) DO NOTHING;
-
--- ============================================================================
--- MIGRATION COMPLETE - V1 (Consolidated from V1 + V2)
+-- Org Roles: admin (full access), editor, viewer, guest (predefined capabilities)
+-- Resource ACLs: Fine-grained sharing via acl_entries table
+-- Admin Access: Checked by role, not granular permissions
 -- ============================================================================

@@ -67,6 +67,10 @@ public class SecurityConfiguration {
                                                                                 // service-to-service calls
                                                                 // Gateway-authenticated endpoints (X-User-Id header
                                                                 // trusted)
+                                                                "/api/v1/auth/me", // Current user info (gateway
+                                                                                   // validates JWT)
+                                                                "/api/v1/acl/**", // ACL management (gateway validates
+                                                                                  // JWT)
                                                                 "/api/v1/roles/**",
                                                                 "/api/v1/invitations/**",
                                                                 "/api/v1/users/**",

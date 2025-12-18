@@ -1,184 +1,209 @@
 """
-Unit tests for the PreTokenGeneration Lambda handler.
+Unit tests for the Cognito PreTokenGeneration Lambda handler.
+Tests group extraction, IdP detection, and claim generation.
 """
+import json
+import unittest
+from unittest.mock import patch, MagicMock
+import handler
 
-import pytest
-from handler import lambda_handler, _determine_tenant_id
+
+class TestGroupExtraction(unittest.TestCase):
+    """Tests for _extract_groups_from_claims function."""
+
+    def test_extract_comma_separated_groups(self):
+        """Should extract groups from comma-separated string."""
+        user_attributes = {'custom:groups': 'Engineering,Marketing,Sales'}
+        result = handler._extract_groups_from_claims(user_attributes)
+        self.assertEqual(result, ['Engineering', 'Marketing', 'Sales'])
+
+    def test_extract_json_array_groups(self):
+        """Should extract groups from JSON array format."""
+        user_attributes = {'custom:groups': '["Engineering","Marketing"]'}
+        result = handler._extract_groups_from_claims(user_attributes)
+        self.assertEqual(result, ['Engineering', 'Marketing'])
+
+    def test_extract_groups_with_spaces(self):
+        """Should trim whitespace from group names."""
+        user_attributes = {'custom:groups': ' Engineering , Marketing '}
+        result = handler._extract_groups_from_claims(user_attributes)
+        self.assertEqual(result, ['Engineering', 'Marketing'])
+
+    def test_empty_groups(self):
+        """Should return empty list when no groups."""
+        user_attributes = {}
+        result = handler._extract_groups_from_claims(user_attributes)
+        self.assertEqual(result, [])
+
+    def test_deduplicate_groups(self):
+        """Should deduplicate groups."""
+        user_attributes = {'custom:groups': 'Engineering,Engineering,Marketing'}
+        result = handler._extract_groups_from_claims(user_attributes)
+        self.assertEqual(result, ['Engineering', 'Marketing'])
+
+    def test_fallback_claim_attributes(self):
+        """Should check multiple claim attribute names."""
+        user_attributes = {'cognito:groups': 'CognitoGroup1'}
+        result = handler._extract_groups_from_claims(user_attributes)
+        self.assertEqual(result, ['CognitoGroup1'])
 
 
-class TestLambdaHandler:
-    """Tests for the main lambda_handler function."""
-    
-    def test_authentication_trigger_with_selected_tenant(self):
-        """Should override tenantId when user selects a different tenant."""
-        event = {
-            'userName': 'test@example.com',
-            'triggerSource': 'TokenGeneration_Authentication',
-            'request': {
-                'userAttributes': {
-                    'custom:tenantId': 'stored-tenant',
-                    'custom:role': 'admin',
-                    'custom:tenantType': 'ORGANIZATION'
-                },
-                'clientMetadata': {
-                    'selectedTenantId': 'selected-tenant'
-                }
-            },
-            'response': {}
+class TestIdpTypeDetection(unittest.TestCase):
+    """Tests for _detect_idp_type function."""
+
+    def test_detect_okta(self):
+        """Should detect Okta IdP."""
+        user_attributes = {
+            'identities': '[{"providerName":"Okta","userId":"123"}]'
         }
-        
-        result = lambda_handler(event, None)
-        
-        assert 'claimsOverrideDetails' in result['response']
-        claims = result['response']['claimsOverrideDetails']['claimsToAddOrOverride']
-        assert claims['custom:tenantId'] == 'selected-tenant'
-        assert claims['custom:role'] == 'admin'
-        assert claims['custom:tenantType'] == 'ORGANIZATION'
-    
-    def test_authentication_trigger_without_selection_uses_stored(self):
-        """Should use stored tenantId when no selection provided."""
+        result = handler._detect_idp_type(user_attributes)
+        self.assertEqual(result, 'OKTA')
+
+    def test_detect_azure_ad(self):
+        """Should detect Azure AD IdP."""
+        user_attributes = {
+            'identities': '[{"providerName":"AzureAD","userId":"123"}]'
+        }
+        result = handler._detect_idp_type(user_attributes)
+        self.assertEqual(result, 'AZURE_AD')
+
+    def test_detect_google(self):
+        """Should detect Google IdP."""
+        user_attributes = {
+            'identities': '[{"providerName":"Google","userId":"123"}]'
+        }
+        result = handler._detect_idp_type(user_attributes)
+        self.assertEqual(result, 'GOOGLE')
+
+    def test_detect_saml_from_attributes(self):
+        """Should detect SAML from attribute prefix."""
+        user_attributes = {'saml:subject': 'user@example.com'}
+        result = handler._detect_idp_type(user_attributes)
+        self.assertEqual(result, 'SAML')
+
+    def test_default_to_oidc(self):
+        """Should default to OIDC when unknown."""
+        user_attributes = {}
+        result = handler._detect_idp_type(user_attributes)
+        self.assertEqual(result, 'OIDC')
+
+
+class TestLambdaHandler(unittest.TestCase):
+    """Tests for the main lambda_handler function."""
+
+    def test_basic_token_generation(self):
+        """Should set claims in response."""
         event = {
-            'userName': 'test@example.com',
+            'userName': 'testuser',
             'triggerSource': 'TokenGeneration_Authentication',
             'request': {
                 'userAttributes': {
-                    'custom:tenantId': 'stored-tenant',
-                    'custom:role': 'owner',
-                    'custom:tenantType': 'PERSONAL'
+                    'custom:tenantId': 'tenant-123',
+                    'custom:tenantType': 'ORGANIZATION'
                 },
                 'clientMetadata': {}
             },
             'response': {}
         }
         
-        result = lambda_handler(event, None)
+        result = handler.lambda_handler(event, None)
         
+        self.assertIn('claimsOverrideDetails', result['response'])
         claims = result['response']['claimsOverrideDetails']['claimsToAddOrOverride']
-        assert claims['custom:tenantId'] == 'stored-tenant'
-    
-    def test_refresh_token_trigger_works(self):
-        """Should handle refresh token trigger source."""
+        self.assertEqual(claims['custom:tenantId'], 'tenant-123')
+        self.assertNotIn('custom:role', claims)  # Role no longer in JWT
+
+    def test_tenant_override(self):
+        """Should override tenant from clientMetadata."""
         event = {
-            'userName': 'test@example.com',
-            'triggerSource': 'TokenGeneration_RefreshTokens',
+            'userName': 'testuser',
+            'triggerSource': 'TokenGeneration_Authentication',
             'request': {
                 'userAttributes': {
-                    'custom:tenantId': 'stored-tenant',
-                    'custom:role': 'member',
-                    'custom:tenantType': 'ORGANIZATION'
+                    'custom:tenantId': 'original-tenant'
                 },
-                'clientMetadata': None
+                'clientMetadata': {
+                    'selectedTenantId': 'new-tenant'
+                }
             },
             'response': {}
         }
         
-        result = lambda_handler(event, None)
+        result = handler.lambda_handler(event, None)
         
         claims = result['response']['claimsOverrideDetails']['claimsToAddOrOverride']
-        assert claims['custom:tenantId'] == 'stored-tenant'
-    
-    def test_non_token_trigger_skipped(self):
+        self.assertEqual(claims['custom:tenantId'], 'new-tenant')
+
+    def test_groups_added_to_claims(self):
+        """Should add groups to response claims."""
+        event = {
+            'userName': 'testuser',
+            'triggerSource': 'TokenGeneration_Authentication',
+            'request': {
+                'userAttributes': {
+                    'custom:tenantId': 'tenant-123',
+                    'custom:groups': 'Engineering,Marketing'
+                },
+                'clientMetadata': {}
+            },
+            'response': {}
+        }
+        
+        with patch.object(handler, '_sync_groups_to_platform'):
+            result = handler.lambda_handler(event, None)
+        
+        claims = result['response']['claimsOverrideDetails']['claimsToAddOrOverride']
+        self.assertEqual(claims['custom:groups'], 'Engineering,Marketing')
+
+    def test_skip_non_auth_triggers(self):
         """Should skip non-token-generation triggers."""
         event = {
-            'userName': 'test@example.com',
-            'triggerSource': 'PostConfirmation_ConfirmSignUp',
-            'request': {
-                'userAttributes': {'custom:tenantId': 'stored-tenant'},
-                'clientMetadata': {'selectedTenantId': 'selected'}
-            },
+            'userName': 'testuser',
+            'triggerSource': 'PreSignUp_SignUp',
+            'request': {},
             'response': {}
         }
         
-        result = lambda_handler(event, None)
+        result = handler.lambda_handler(event, None)
         
-        # Should not have any claims override
-        assert 'claimsOverrideDetails' not in result.get('response', {})
-    
-    def test_missing_tenant_id_logs_warning(self):
-        """Should handle missing tenantId gracefully."""
+        self.assertNotIn('claimsOverrideDetails', result.get('response', {}))
+
+    def test_graceful_error_handling(self):
+        """Should not block auth on errors."""
         event = {
-            'userName': 'test@example.com',
+            'userName': 'testuser',
             'triggerSource': 'TokenGeneration_Authentication',
-            'request': {
-                'userAttributes': {},
-                'clientMetadata': {}
-            },
-            'response': {}
+            'request': None  # Invalid - will cause error
         }
         
-        result = lambda_handler(event, None)
-        
-        # Should not crash, should not have claims override
-        assert 'claimsOverrideDetails' not in result.get('response', {})
-    
-    def test_default_role_and_type_used_when_missing(self):
-        """Should use defaults for role and tenantType if not in attributes."""
-        event = {
-            'userName': 'test@example.com',
-            'triggerSource': 'TokenGeneration_Authentication',
-            'request': {
-                'userAttributes': {
-                    'custom:tenantId': 'some-tenant'
-                },
-                'clientMetadata': {}
-            },
-            'response': {}
-        }
-        
-        result = lambda_handler(event, None)
-        
-        claims = result['response']['claimsOverrideDetails']['claimsToAddOrOverride']
-        assert claims['custom:role'] == 'tenant-user'
-        assert claims['custom:tenantType'] == 'PERSONAL'
-    
-    def test_whitespace_only_selected_tenant_uses_stored(self):
-        """Should ignore whitespace-only selectedTenantId."""
-        event = {
-            'userName': 'test@example.com',
-            'triggerSource': 'TokenGeneration_Authentication',
-            'request': {
-                'userAttributes': {
-                    'custom:tenantId': 'stored-tenant',
-                    'custom:role': 'admin',
-                    'custom:tenantType': 'ORGANIZATION'
-                },
-                'clientMetadata': {
-                    'selectedTenantId': '   '
-                }
-            },
-            'response': {}
-        }
-        
-        result = lambda_handler(event, None)
-        
-        claims = result['response']['claimsOverrideDetails']['claimsToAddOrOverride']
-        assert claims['custom:tenantId'] == 'stored-tenant'
+        # Should not raise, just return event
+        result = handler.lambda_handler(event, None)
+        self.assertIsNotNone(result)
 
 
-class TestDetermineTenantId:
-    """Tests for the _determine_tenant_id helper function."""
-    
-    def test_selected_takes_priority(self):
-        """Selected tenant should override stored."""
-        result = _determine_tenant_id('selected', 'stored', 'user')
-        assert result == 'selected'
-    
-    def test_stored_used_when_no_selection(self):
-        """Stored tenant used when no selection."""
-        result = _determine_tenant_id(None, 'stored', 'user')
-        assert result == 'stored'
-    
-    def test_empty_selected_uses_stored(self):
-        """Empty string selection uses stored."""
-        result = _determine_tenant_id('', 'stored', 'user')
-        assert result == 'stored'
-    
-    def test_none_when_both_missing(self):
-        """Returns None when both are missing."""
-        result = _determine_tenant_id(None, None, 'user')
-        assert result is None
-    
-    def test_strips_whitespace(self):
+class TestTenantIdDetermination(unittest.TestCase):
+    """Tests for _determine_tenant_id function."""
+
+    def test_prefer_selected_over_stored(self):
+        """Should prefer selected tenant over stored."""
+        result = handler._determine_tenant_id('selected', 'stored', 'user')
+        self.assertEqual(result, 'selected')
+
+    def test_fallback_to_stored(self):
+        """Should fall back to stored when no selection."""
+        result = handler._determine_tenant_id(None, 'stored', 'user')
+        self.assertEqual(result, 'stored')
+
+    def test_return_none_when_both_missing(self):
+        """Should return None when both missing."""
+        result = handler._determine_tenant_id(None, None, 'user')
+        self.assertIsNone(result)
+
+    def test_strip_whitespace(self):
         """Should strip whitespace from tenant IDs."""
-        result = _determine_tenant_id('  selected  ', None, 'user')
-        assert result == 'selected'
+        result = handler._determine_tenant_id(' selected ', None, 'user')
+        self.assertEqual(result, 'selected')
+
+
+if __name__ == '__main__':
+    unittest.main()

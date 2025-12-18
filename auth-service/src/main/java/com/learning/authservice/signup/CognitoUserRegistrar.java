@@ -36,7 +36,7 @@ public class CognitoUserRegistrar {
      * @param password user's password
      * @param name     user's display name
      * @param tenantId tenant ID to associate with user
-     * @param role     initial role (e.g., "tenant-admin")
+     * @param role     initial role (e.g., "admin")
      * @return true if user was auto-confirmed, false if email verification is
      *         pending
      */

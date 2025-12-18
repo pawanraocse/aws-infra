@@ -207,3 +207,44 @@ CREATE INDEX idx_deleted_accounts_email ON deleted_accounts(email);
 CREATE INDEX idx_deleted_accounts_tenant_id ON deleted_accounts(original_tenant_id);
 
 COMMENT ON TABLE deleted_accounts IS 'Audit trail for deleted accounts, used for re-registration tracking';
+
+-- =====================================================
+-- IDP_GROUPS TABLE (SSO Group Sync)
+-- =====================================================
+-- Stores groups synced from external Identity Providers.
+-- When users login via SSO, their groups are extracted from the 
+-- SAML assertion or OIDC token and stored here for mapping to roles.
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS idp_groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- Tenant relationship
+    tenant_id VARCHAR(64) NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    
+    -- Group identification from IdP
+    external_group_id VARCHAR(512) NOT NULL,   -- Original group ID from IdP
+    group_name VARCHAR(255) NOT NULL,           -- Human-readable display name
+    
+    -- IdP metadata
+    idp_type VARCHAR(64) NOT NULL,              -- SAML, OIDC, OKTA, AZURE_AD, GOOGLE, PING
+    
+    -- Sync tracking
+    member_count INTEGER DEFAULT 0,             -- Approximate member count (from IdP if available)
+    last_synced_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- Ensure unique groups per tenant
+    UNIQUE(tenant_id, external_group_id)
+);
+
+-- Performance indexes
+CREATE INDEX idx_idpg_tenant ON idp_groups(tenant_id);
+CREATE INDEX idx_idpg_external_id ON idp_groups(external_group_id);
+CREATE INDEX idx_idpg_type ON idp_groups(idp_type);
+
+-- Documentation
+COMMENT ON TABLE idp_groups IS 'Groups synced from external Identity Providers for SSO role mapping';
+COMMENT ON COLUMN idp_groups.external_group_id IS 'Group identifier from IdP (e.g., SAML DN or OIDC groups claim value)';
+COMMENT ON COLUMN idp_groups.idp_type IS 'Identity provider type: SAML, OIDC, OKTA, AZURE_AD, GOOGLE, PING';
+COMMENT ON COLUMN idp_groups.last_synced_at IS 'Last time this group was seen in an SSO login';

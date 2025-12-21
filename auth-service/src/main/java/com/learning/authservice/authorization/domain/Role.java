@@ -36,6 +36,15 @@ public class Role {
     @Column(nullable = false, length = 32)
     private RoleScope scope;
 
+    /**
+     * Access level for custom roles (admin, editor, viewer).
+     * Default roles (admin, editor, viewer, guest) use their ID as the access
+     * level.
+     * Custom roles should specify this to inherit capabilities.
+     */
+    @Column(name = "access_level", length = 32)
+    private String accessLevel;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

@@ -46,10 +46,11 @@ import { ToastModule } from 'primeng/toast';
       </div>
 
       <!-- Roles Table -->
-      <p-table [value]="roles" [tableStyle]="{ 'min-width': '50rem' }">
+      <p-table [value]="roles" [tableStyle]="{ 'min-width': '60rem' }">
         <ng-template pTemplate="header">
           <tr>
             <th>Name</th>
+            <th>Access Level</th>
             <th>Scope</th>
             <th>Description</th>
             <th style="width: 200px">Actions</th>
@@ -58,6 +59,9 @@ import { ToastModule } from 'primeng/toast';
         <ng-template pTemplate="body" let-role>
           <tr>
             <td class="font-bold">{{ role.name }}</td>
+            <td>
+              <p-tag [value]="getAccessLevelLabel(role)" [severity]="getAccessLevelSeverity(role)"></p-tag>
+            </td>
             <td>
               <p-tag [value]="role.scope" [severity]="getSeverity(role.scope)"></p-tag>
             </td>
@@ -76,17 +80,25 @@ import { ToastModule } from 'primeng/toast';
                   pTooltip="Assign to User"
                   (onClick)="openAssignDialog(role)">
                 </p-button>
+                <p-button 
+                  *ngIf="isCustomRole(role)"
+                  icon="pi pi-pencil" 
+                  [text]="true" 
+                  pTooltip="Edit Role"
+                  (onClick)="openEditDialog(role)">
+                </p-button>
               </div>
             </td>
           </tr>
         </ng-template>
         <ng-template pTemplate="emptymessage">
           <tr>
-            <td colspan="4" class="text-center p-4">No roles found.</td>
+            <td colspan="5" class="text-center p-4">No roles found.</td>
           </tr>
         </ng-template>
       </p-table>
     </div>
+
 
     <!-- Create Role Dialog -->
     <p-dialog 
@@ -270,6 +282,65 @@ export class RoleListComponent implements OnInit {
       case 'TENANT': return 'info';
       default: return undefined;
     }
+  }
+
+  // Default role IDs that cannot be edited
+  private defaultRoles = ['admin', 'editor', 'viewer', 'guest', 'super-admin'];
+
+  /**
+   * Check if a role is a custom role (can be edited)
+   */
+  isCustomRole(role: Role): boolean {
+    return !this.defaultRoles.includes(role.id);
+  }
+
+  /**
+   * Get the access level label for display
+   * - Default roles: Use their ID as the access level
+   * - Custom roles: Use stored accessLevel or show as "Custom"
+   */
+  getAccessLevelLabel(role: Role): string {
+    if (!this.isCustomRole(role)) {
+      // Default roles - use role ID as access level
+      return role.id.toUpperCase();
+    }
+    // Custom roles - use stored accessLevel or "Custom"
+    if (role.accessLevel) {
+      return role.accessLevel.toUpperCase();
+    }
+    return 'CUSTOM';
+  }
+
+  /**
+   * Get the severity/color for access level tag
+   */
+  getAccessLevelSeverity(role: Role): 'success' | 'info' | 'warn' | 'danger' {
+    const level = role.accessLevel || role.id;
+    switch (level.toLowerCase()) {
+      case 'admin':
+      case 'super-admin':
+        return 'danger';
+      case 'editor':
+        return 'warn';
+      case 'viewer':
+        return 'info';
+      case 'guest':
+        return 'success';
+      default:
+        return 'info';
+    }
+  }
+
+  /**
+   * Open edit dialog for custom roles
+   */
+  openEditDialog(role: Role) {
+    // TODO: Implement edit role dialog
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Coming Soon',
+      detail: 'Edit role functionality will be available in a future update'
+    });
   }
 }
 

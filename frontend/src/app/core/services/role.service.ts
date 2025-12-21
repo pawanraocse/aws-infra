@@ -8,6 +8,7 @@ export interface Role {
     name: string;
     description: string;
     scope: 'PLATFORM' | 'TENANT';
+    accessLevel?: string; // admin, editor, viewer - for custom roles
     createdAt: string;
 }
 

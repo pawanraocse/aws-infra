@@ -131,4 +131,53 @@ public class UserRoleService {
     public List<Role> getAllRoles() {
         return roleRepository.findAll();
     }
+
+    /**
+     * Create a new custom role.
+     *
+     * @param name        Role display name (e.g., "Project Manager")
+     * @param description Optional description
+     * @param scopeStr    Scope string ("TENANT" or "PLATFORM")
+     * @param accessLevel Access level (admin, editor, viewer) - defines
+     *                    capabilities
+     * @return Created role
+     */
+    public Role createRole(String name, String description, String scopeStr, String accessLevel) {
+        log.info("Creating role: name={}, scope={}, accessLevel={}", name, scopeStr, accessLevel);
+
+        // Generate ID from name (slug format)
+        String id = name.toLowerCase()
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-|-$", "");
+
+        // Validate uniqueness
+        if (roleRepository.existsById(id)) {
+            throw new IllegalArgumentException("Role with ID '" + id + "' already exists");
+        }
+        if (roleRepository.existsByName(name)) {
+            throw new IllegalArgumentException("Role with name '" + name + "' already exists");
+        }
+
+        // Parse scope
+        Role.RoleScope scope;
+        try {
+            scope = Role.RoleScope.valueOf(scopeStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid scope: " + scopeStr + ". Must be TENANT or PLATFORM");
+        }
+
+        // Create and save role
+        Role role = Role.builder()
+                .id(id)
+                .name(name)
+                .description(description)
+                .scope(scope)
+                .accessLevel(accessLevel != null ? accessLevel.toLowerCase() : "viewer") // Default to viewer
+                .build();
+
+        Role saved = roleRepository.save(role);
+        log.info("Created role: id={}, name={}, accessLevel={}", saved.getId(), saved.getName(),
+                saved.getAccessLevel());
+        return saved;
+    }
 }

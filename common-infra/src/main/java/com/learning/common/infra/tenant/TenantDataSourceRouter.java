@@ -21,6 +21,13 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class TenantDataSourceRouter extends AbstractRoutingDataSource {
 
+    /**
+     * Special tenant ID for super-admin users.
+     * Super-admins do not have a dedicated tenant database - they use the
+     * default/platform datasource.
+     */
+    public static final String SYSTEM_TENANT_ID = "system";
+
     private final TenantRegistryService tenantRegistry;
     private final Map<String, DataSource> tenantDataSources = new ConcurrentHashMap<>();
     private final DataSource defaultDataSource;
@@ -55,10 +62,20 @@ public class TenantDataSourceRouter extends AbstractRoutingDataSource {
     protected DataSource determineTargetDataSource() {
         String tenantId = TenantContext.getCurrentTenant();
 
+        // No tenant context - use default
         if (tenantId == null) {
             log.info("TenantDataSourceRouter: No tenant context set, using default datasource");
             if (defaultDataSource == null) {
                 throw new IllegalStateException("No tenant context and no default datasource configured");
+            }
+            return defaultDataSource;
+        }
+
+        // System tenant (super-admin) - use default/platform datasource
+        if (SYSTEM_TENANT_ID.equals(tenantId)) {
+            log.debug("TenantDataSourceRouter: System tenant (super-admin) context, using default datasource");
+            if (defaultDataSource == null) {
+                throw new IllegalStateException("System tenant requires default datasource but none configured");
             }
             return defaultDataSource;
         }

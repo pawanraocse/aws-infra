@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS roles (
     name VARCHAR(100) NOT NULL UNIQUE,
     description TEXT,
     scope VARCHAR(32) NOT NULL CHECK (scope IN ('PLATFORM', 'TENANT')),
+    access_level VARCHAR(32), -- admin, editor, viewer - for custom roles
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -18,6 +19,7 @@ CREATE INDEX idx_roles_scope ON roles(scope);
 
 COMMENT ON TABLE roles IS 'Predefined organization roles';
 COMMENT ON COLUMN roles.scope IS 'PLATFORM for super-admin, TENANT for tenant roles';
+COMMENT ON COLUMN roles.access_level IS 'Access level (admin, editor, viewer) - for custom roles';
 
 -- ============================================================================
 -- 2. USER_ROLES TABLE (User Role Assignments)
@@ -128,12 +130,12 @@ COMMENT ON COLUMN acl_entries.role_bundle IS 'VIEWER=read, CONTRIBUTOR=read+uplo
 -- ============================================================================
 -- 7. SEED DATA - PREDEFINED ROLES
 -- ============================================================================
-INSERT INTO roles (id, name, description, scope) VALUES
-('super-admin', 'SUPER_ADMIN', 'Platform administrator with full system access', 'PLATFORM'),
-('admin', 'ADMIN', 'Tenant administrator with full tenant access', 'TENANT'),
-('editor', 'EDITOR', 'Can read, edit, delete, and share resources', 'TENANT'),
-('viewer', 'VIEWER', 'Read-only access to resources', 'TENANT'),
-('guest', 'GUEST', 'Limited access to shared resources only', 'TENANT')
+INSERT INTO roles (id, name, description, scope, access_level) VALUES
+('super-admin', 'SUPER_ADMIN', 'Platform administrator with full system access', 'PLATFORM', 'admin'),
+('admin', 'ADMIN', 'Tenant administrator with full tenant access', 'TENANT', 'admin'),
+('editor', 'EDITOR', 'Can read, edit, delete, and share resources', 'TENANT', 'editor'),
+('viewer', 'VIEWER', 'Read-only access to resources', 'TENANT', 'viewer'),
+('guest', 'GUEST', 'Limited access to shared resources only', 'TENANT', 'guest')
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================================

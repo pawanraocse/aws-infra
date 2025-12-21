@@ -33,6 +33,20 @@ public class UserRoleController {
         return ResponseEntity.ok(userRoleService.getAllRoles());
     }
 
+    /**
+     * Create a new custom role.
+     * Only admins can create new roles within their tenant.
+     */
+    @PostMapping
+    @RequirePermission(resource = "role", action = "manage")
+    public ResponseEntity<Role> createRole(@RequestBody @Valid CreateRoleRequest request) {
+        log.info("Creating new role: name={}, scope={}, accessLevel={}", request.getName(), request.getScope(),
+                request.getAccessLevel());
+        Role role = userRoleService.createRole(request.getName(), request.getDescription(), request.getScope(),
+                request.getAccessLevel());
+        return ResponseEntity.ok(role);
+    }
+
     @PostMapping("/assign")
     @RequirePermission(resource = "user", action = "manage")
     public ResponseEntity<Void> assignRole(
@@ -98,5 +112,18 @@ public class UserRoleController {
 
         @NotBlank(message = "Role ID is required")
         private String roleId;
+    }
+
+    @Data
+    public static class CreateRoleRequest {
+        @NotBlank(message = "Role name is required")
+        private String name;
+
+        private String description;
+
+        @NotBlank(message = "Scope is required")
+        private String scope; // "TENANT" or "PLATFORM"
+
+        private String accessLevel; // "admin", "editor", or "viewer" - defines capabilities
     }
 }

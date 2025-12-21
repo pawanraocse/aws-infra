@@ -303,6 +303,45 @@ export class AuthService {
     }
   }
 
+  // ========== Forgot Password Flow ==========
+
+  /**
+   * Initiate forgot password flow.
+   * Sends a 6-digit verification code to the user's email.
+   */
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ message: string }>(
+          `${environment.apiUrl}/auth/api/v1/auth/forgot-password`,
+          { email }
+        )
+      );
+      return response;
+    } catch (error) {
+      console.error('Forgot password failed', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reset password with verification code.
+   */
+  async resetPassword(email: string, code: string, newPassword: string): Promise<{ message: string }> {
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ message: string }>(
+          `${environment.apiUrl}/auth/api/v1/auth/reset-password`,
+          { email, code, newPassword }
+        )
+      );
+      return response;
+    } catch (error) {
+      console.error('Reset password failed', error);
+      throw error;
+    }
+  }
+
   // ========== Private Helpers ==========
 
   private setUserInfo(info: UserInfo) {

@@ -44,6 +44,9 @@ public class SecurityConfig {
                                                                 "/auth/api/v1/auth/tokens", "/auth/api/v1/auth/logout",
                                                                 "/auth/api/v1/auth/verify",
                                                                 "/auth/api/v1/auth/resend-verification",
+                                                                // Forgot password endpoints
+                                                                "/auth/api/v1/auth/forgot-password",
+                                                                "/auth/api/v1/auth/reset-password",
                                                                 // Multi-tenant login endpoints
                                                                 "/auth/api/v1/auth/lookup",
                                                                 "/auth/api/v1/auth/last-accessed",

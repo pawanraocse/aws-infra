@@ -94,12 +94,12 @@ public class MembershipService {
         boolean shouldBeDefault = Boolean.TRUE.equals(request.isDefault())
                 || membershipRepository.countActiveByEmail(request.email()) == 0;
 
-        // If setting as default, clear existing defaults
+        // If setting as default, clear existing defaults first
         if (shouldBeDefault) {
             membershipRepository.findDefaultByEmail(request.email())
                     .ifPresent(existing -> {
                         existing.clearDefault();
-                        membershipRepository.save(existing);
+                        membershipRepository.saveAndFlush(existing); // Flush to ensure constraint is satisfied
                     });
         }
 

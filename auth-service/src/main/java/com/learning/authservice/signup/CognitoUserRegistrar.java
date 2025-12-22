@@ -15,7 +15,8 @@ import java.util.Map;
 
 /**
  * Handles user registration in Cognito.
- * ALWAYS uses signUp API to enforce email verification.
+ * Supports multi-account per email by checking if user exists before
+ * registration.
  */
 @Component
 @Slf4j
@@ -24,6 +25,74 @@ public class CognitoUserRegistrar {
 
     private final CognitoIdentityProviderClient cognitoClient;
     private final CognitoProperties cognitoProperties;
+
+    /**
+     * Result of registration attempt.
+     */
+    public enum RegistrationResult {
+        /** New user created, may need email verification */
+        CREATED,
+        /** User already exists in Cognito, skipped creation */
+        ALREADY_EXISTS
+    }
+
+    /**
+     * Check if a user exists in Cognito.
+     * 
+     * @param email user's email address
+     * @return true if user exists, false otherwise
+     */
+    public boolean userExists(String email) {
+        log.debug("Checking if user exists in Cognito: email={}", email);
+
+        try {
+            AdminGetUserRequest request = AdminGetUserRequest.builder()
+                    .userPoolId(cognitoProperties.getUserPoolId())
+                    .username(email)
+                    .build();
+
+            cognitoClient.adminGetUser(request);
+            log.debug("User exists in Cognito: email={}", email);
+            return true;
+
+        } catch (UserNotFoundException e) {
+            log.debug("User does not exist in Cognito: email={}", email);
+            return false;
+        } catch (CognitoIdentityProviderException e) {
+            log.error("Error checking user existence: email={} error={}",
+                    email, e.awsErrorDetails().errorMessage());
+            throw new RuntimeException("Failed to check user existence: " + e.awsErrorDetails().errorMessage());
+        }
+    }
+
+    /**
+     * Register a user in Cognito if they don't exist.
+     * If user already exists, returns ALREADY_EXISTS without error.
+     * 
+     * This enables multi-account per email feature where the same user
+     * can own multiple organizations.
+     * 
+     * @param email    user's email
+     * @param password user's password (ignored if user exists)
+     * @param name     user's display name
+     * @param tenantId tenant ID for the new workspace
+     * @param role     initial role (e.g., "admin")
+     * @return RegistrationResult indicating if user was created or already existed
+     */
+    public RegistrationResult registerIfNotExists(String email, String password, String name,
+            String tenantId, String role) {
+        log.info("RegisterIfNotExists: email={} tenantId={}", email, tenantId);
+
+        // Check if user already exists
+        if (userExists(email)) {
+            log.info("User already exists, skipping Cognito registration: email={}", email);
+            return RegistrationResult.ALREADY_EXISTS;
+        }
+
+        // User doesn't exist, register them
+        register(email, password, name, tenantId, role);
+        return RegistrationResult.CREATED;
+    }
 
     /**
      * Register a user in Cognito via signUp API.

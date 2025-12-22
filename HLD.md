@@ -1,7 +1,7 @@
 # High-Level Design: Multi-Tenant SaaS Template System
 
-**Version:** 6.1  
-**Last Updated:** 2025-12-21  
+**Version:** 6.2  
+**Last Updated:** 2025-12-22  
 **Purpose:** Production-ready, reusable multi-tenant architecture template with RBAC authorization and complete database-per-tenant isolation
 
 
@@ -1015,6 +1015,44 @@ sequenceDiagram
     Gateway-->>Frontend: Success
     Frontend->>Frontend: Redirect to login
 ```
+
+### Multi-Account Per Email
+Users can own multiple tenants (workspaces) using the same email address:
+- One personal workspace per email
+- Multiple organization workspaces (as owner or member)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Auth
+    participant Platform
+    participant Cognito
+    participant TenantDB
+
+    Note over User,TenantDB: Existing User Creates New Organization
+
+    User->>Auth: POST /signup/organization<br/>{email, companyName}
+    Auth->>Platform: Provision new tenant (org2)
+    Platform->>TenantDB: CREATE DATABASE, migrations
+    Platform->>Platform: Create membership record
+    Platform-->>Auth: Tenant ready
+    
+    Auth->>Cognito: AdminGetUser (check exists)
+    Cognito-->>Auth: User exists ✓
+    
+    Note over Auth: Skip Cognito registration<br/>Assign role directly
+    
+    Auth->>Cognito: Get user sub (userId)
+    Auth->>TenantDB: assignRole(userId, "admin", org2)
+    
+    Auth-->>User: "New workspace created!"
+```
+
+**Key Components:**
+- `CognitoUserRegistrar.registerIfNotExists()` - Checks if user exists before registration
+- `SignupServiceImpl.assignRoleForExistingUser()` - Assigns admin role for existing users
+- `MembershipService` - Tracks user-tenant relationships in `user_tenant_memberships`
+
 
 ### Authorization Flow (Permission Check)
 ```mermaid

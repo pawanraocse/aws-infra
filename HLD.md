@@ -1,7 +1,7 @@
 # High-Level Design: Multi-Tenant SaaS Template System
 
-**Version:** 6.0  
-**Last Updated:** 2025-12-14  
+**Version:** 6.1  
+**Last Updated:** 2025-12-21  
 **Purpose:** Production-ready, reusable multi-tenant architecture template with RBAC authorization and complete database-per-tenant isolation
 
 
@@ -983,6 +983,37 @@ sequenceDiagram
     TenantDB-->>Backend: Query results
     Backend-->>Gateway: Response
     Gateway-->>User: Response
+```
+
+### Forgot Password Flow
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant Gateway
+    participant Auth
+    participant Cognito
+
+    Note over User,Cognito: Step 1: Request Password Reset
+    User->>Frontend: Click "Forgot Password?"
+    Frontend->>Gateway: POST /auth/api/v1/auth/forgot-password<br/>{email}
+    Gateway->>Auth: Forward request
+    Auth->>Cognito: ForgotPassword API<br/>(username, clientId, secretHash)
+    Cognito->>User: Send 6-digit code via email
+    Cognito-->>Auth: CodeDeliveryDetails
+    Auth-->>Gateway: 200 OK (generic message)
+    Gateway-->>Frontend: Success
+    Frontend->>Frontend: Show code + password form
+
+    Note over User,Cognito: Step 2: Reset Password
+    User->>Frontend: Enter code + new password
+    Frontend->>Gateway: POST /auth/api/v1/auth/reset-password<br/>{email, code, newPassword}
+    Gateway->>Auth: Forward request
+    Auth->>Cognito: ConfirmForgotPassword API<br/>(code, newPassword, secretHash)
+    Cognito-->>Auth: Password reset success
+    Auth-->>Gateway: 200 OK
+    Gateway-->>Frontend: Success
+    Frontend->>Frontend: Redirect to login
 ```
 
 ### Authorization Flow (Permission Check)

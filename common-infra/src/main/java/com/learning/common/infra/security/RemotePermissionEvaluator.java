@@ -6,30 +6,39 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * Permission evaluator that checks role-based access.
  * 
- * With the simplified permission model:
- * - Admin/Super-admin roles get full access (bypass)
- * - Editor role can read/write resources
- * - Viewer role can only read
- * - Guest role has minimal access
+ * <p>
+ * Role lookup is done via RoleLookupService which queries the database,
+ * replacing the previous X-Role header approach for better security.
+ * </p>
  * 
+ * <p>
+ * With the simplified permission model:
+ * </p>
+ * <ul>
+ * <li>Admin/Super-admin roles get full access (bypass)</li>
+ * <li>Editor role can read/write resources</li>
+ * <li>Viewer role can only read</li>
+ * <li>Guest role has minimal access</li>
+ * </ul>
+ * 
+ * <p>
  * Falls back to remote auth-service call for complex permission checks.
+ * </p>
  */
 @Slf4j
 @RequiredArgsConstructor
 public class RemotePermissionEvaluator implements PermissionEvaluator {
 
         private final WebClient authWebClient;
+        private final RoleLookupService roleLookupService;
 
         // Roles that have full access
         private static final Set<String> ADMIN_ROLES = Set.of("admin", "super-admin");
@@ -45,8 +54,8 @@ public class RemotePermissionEvaluator implements PermissionEvaluator {
         public boolean hasPermission(String userId, String resource, String action) {
                 String tenantId = TenantContext.getCurrentTenant();
 
-                // Check role from request header (set by gateway)
-                String role = getRoleFromRequest();
+                // Look up role from database via RoleLookupService
+                String role = roleLookupService.getUserRole(userId, tenantId).orElse(null);
                 log.debug("Checking permission: user={}, resource={}, action={}, role={}, tenant={}",
                                 userId, resource, action, role, tenantId);
 
@@ -89,23 +98,6 @@ public class RemotePermissionEvaluator implements PermissionEvaluator {
                         return WRITE_ROLES.contains(role);
                 }
                 return false;
-        }
-
-        /**
-         * Get role from current request's X-Role header.
-         */
-        private String getRoleFromRequest() {
-                try {
-                        ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder
-                                        .getRequestAttributes();
-                        if (attrs != null) {
-                                HttpServletRequest request = attrs.getRequest();
-                                return request.getHeader("X-Role");
-                        }
-                } catch (Exception e) {
-                        log.debug("Could not get role from request: {}", e.getMessage());
-                }
-                return null;
         }
 
         /**

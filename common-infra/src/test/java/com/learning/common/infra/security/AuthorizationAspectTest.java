@@ -23,6 +23,9 @@ class AuthorizationAspectTest {
     private PermissionEvaluator permissionEvaluator;
 
     @Mock
+    private RoleLookupService roleLookupService;
+
+    @Mock
     private ProceedingJoinPoint joinPoint;
 
     @Mock
@@ -32,6 +35,7 @@ class AuthorizationAspectTest {
     private AuthorizationAspect authorizationAspect;
 
     private final String userId = "user-123";
+    private final String tenantId = "tenant-1";
     private final String resource = "entry";
     private final String action = "read";
 
@@ -51,7 +55,10 @@ class AuthorizationAspectTest {
     void checkPermission_WhenAuthorized_Proceeds() throws Throwable {
         // Setup Context
         when(request.getHeader("X-User-Id")).thenReturn(userId);
-        when(request.getHeader("X-Role")).thenReturn("user");
+        when(request.getHeader("X-Tenant-Id")).thenReturn(tenantId);
+
+        // Setup role lookup - user role (not super-admin)
+        when(roleLookupService.isSuperAdmin(userId, tenantId)).thenReturn(false);
 
         // Setup Annotation
         RequirePermission annotation = mock(RequirePermission.class);
@@ -72,7 +79,10 @@ class AuthorizationAspectTest {
     void checkPermission_WhenUnauthorized_ThrowsException() throws Throwable {
         // Setup Context
         when(request.getHeader("X-User-Id")).thenReturn(userId);
-        when(request.getHeader("X-Role")).thenReturn("user");
+        when(request.getHeader("X-Tenant-Id")).thenReturn(tenantId);
+
+        // Setup role lookup - user role (not super-admin)
+        when(roleLookupService.isSuperAdmin(userId, tenantId)).thenReturn(false);
 
         // Setup Annotation
         RequirePermission annotation = mock(RequirePermission.class);
@@ -92,7 +102,10 @@ class AuthorizationAspectTest {
     void checkPermission_WhenSuperAdmin_Proceeds() throws Throwable {
         // Setup Context
         when(request.getHeader("X-User-Id")).thenReturn(userId);
-        when(request.getHeader("X-Role")).thenReturn("super-admin");
+        when(request.getHeader("X-Tenant-Id")).thenReturn(tenantId);
+
+        // Setup role lookup - super-admin role
+        when(roleLookupService.isSuperAdmin(userId, tenantId)).thenReturn(true);
 
         // Setup Annotation
         RequirePermission annotation = mock(RequirePermission.class);

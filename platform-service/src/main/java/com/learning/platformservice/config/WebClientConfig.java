@@ -5,6 +5,7 @@ import com.learning.common.infra.http.HttpClientFactory;
 import com.learning.common.infra.log.ExchangeLoggingFilter;
 import com.learning.common.infra.security.PermissionEvaluator;
 import com.learning.common.infra.security.RemotePermissionEvaluator;
+import com.learning.common.infra.security.RoleLookupService;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
@@ -68,10 +69,10 @@ public class WebClientConfig {
 
     /**
      * Permission evaluator that calls auth-service for DB-backed permission checks.
-     * Replaces the hardcoded LocalPermissionEvaluator.
+     * Uses RoleLookupService for role-based access instead of X-Role header.
      */
     @Bean
-    public PermissionEvaluator permissionEvaluator(WebClient authWebClient) {
-        return new RemotePermissionEvaluator(authWebClient);
+    public PermissionEvaluator permissionEvaluator(WebClient authWebClient, RoleLookupService roleLookupService) {
+        return new RemotePermissionEvaluator(authWebClient, roleLookupService);
     }
 }

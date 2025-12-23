@@ -11,9 +11,11 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
@@ -28,6 +30,9 @@ class RemotePermissionEvaluatorTest {
 
     @Mock
     private WebClient authWebClient;
+
+    @Mock
+    private RoleLookupService roleLookupService;
 
     @Mock
     private WebClient.RequestBodyUriSpec requestBodyUriSpec;
@@ -45,8 +50,10 @@ class RemotePermissionEvaluatorTest {
 
     @BeforeEach
     void setUp() {
-        evaluator = new RemotePermissionEvaluator(authWebClient);
+        evaluator = new RemotePermissionEvaluator(authWebClient, roleLookupService);
         setupWebClientMocks();
+        // Default: no role found, so it falls back to remote check
+        when(roleLookupService.getUserRole(anyString(), any())).thenReturn(Optional.empty());
     }
 
     @SuppressWarnings("unchecked")

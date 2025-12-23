@@ -16,6 +16,12 @@ import java.util.List;
  * NT-02 HeaderSanitizingGlobalFilter
  * Removes any inbound spoofable identity / authorization headers before JWT
  * processing.
+ * 
+ * <p>
+ * Note: X-Role removed from this list - gateway no longer sets X-Role header.
+ * Downstream services now lookup roles directly from the database.
+ * </p>
+ * 
  * Runs at highest precedence. Controlled by feature flag
  * security.gateway.sanitize-headers (default true).
  */
@@ -28,7 +34,6 @@ public class HeaderSanitizingGlobalFilter implements GlobalFilter, Ordered {
             "X-Username",
             "X-Email",
             "X-Tenant-Id",
-            "X-Role",
             "X-Authorities",
             "X-Auth-Signature");
 

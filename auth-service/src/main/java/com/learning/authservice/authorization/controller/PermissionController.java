@@ -1,6 +1,8 @@
 package com.learning.authservice.authorization.controller;
 
+import com.learning.authservice.authorization.domain.UserRole;
 import com.learning.authservice.authorization.service.PermissionService;
+import com.learning.authservice.authorization.service.UserRoleService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,8 +15,16 @@ import java.util.Set;
 
 /**
  * Controller for checking permissions.
- * Used by other services (via internal calls) and potentially by frontend.
+ * 
+ * <p>
+ * Role lookup is now done via UserRoleService (database) instead of X-Role
+ * header
+ * for better security.
+ * </p>
+ * 
+ * <p>
  * Tenant context is implicit via TenantDataSourceRouter.
+ * </p>
  */
 @RestController
 @RequestMapping("/api/v1/permissions")
@@ -23,15 +33,17 @@ import java.util.Set;
 public class PermissionController {
 
     private final PermissionService permissionService;
+    private final UserRoleService userRoleService;
 
     /**
      * Check if a user has a specific permission.
-     * Super-admin (role from X-Role header) gets automatic access to all resources.
+     * Super-admin (from database) gets automatic access to all resources.
      */
     @PostMapping("/check")
-    public ResponseEntity<Boolean> checkPermission(
-            @RequestHeader(value = "X-Role", required = false) String role,
-            @RequestBody PermissionCheckRequest request) {
+    public ResponseEntity<Boolean> checkPermission(@RequestBody PermissionCheckRequest request) {
+        // Lookup role from database
+        List<UserRole> userRoles = userRoleService.getUserRoles(request.getUserId());
+        String role = userRoles.isEmpty() ? null : userRoles.get(0).getRoleId();
 
         // Super-admin bypass: grant all permissions
         if ("super-admin".equals(role)) {

@@ -2,6 +2,7 @@ package com.learning.platformservice.tenant.controller;
 
 import com.learning.common.dto.ProvisionTenantRequest;
 import com.learning.common.infra.security.RequirePermission;
+import com.learning.common.infra.security.RoleLookupService;
 import com.learning.platformservice.tenant.dto.TenantDto;
 import com.learning.platformservice.tenant.service.TenantProvisioningService;
 import com.learning.platformservice.tenant.service.TenantService;
@@ -14,6 +15,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * Tenant management controller.
+ * 
+ * <p>
+ * Role lookup is now done via RoleLookupService (database) instead of X-Role
+ * header
+ * for better security.
+ * </p>
+ */
 @RestController
 @RequestMapping("/api/v1/tenants")
 @Slf4j
@@ -21,10 +31,14 @@ public class TenantController {
 
     private final TenantService tenantService;
     private final TenantProvisioningService tenantProvisioningService;
+    private final RoleLookupService roleLookupService;
 
-    public TenantController(TenantService tenantService, TenantProvisioningService tenantProvisioningService) {
+    public TenantController(TenantService tenantService,
+            TenantProvisioningService tenantProvisioningService,
+            RoleLookupService roleLookupService) {
         this.tenantService = tenantService;
         this.tenantProvisioningService = tenantProvisioningService;
+        this.roleLookupService = roleLookupService;
     }
 
     @Operation(summary = "List all tenants", description = "Lists all tenants in the system. Super-admin only.")
@@ -34,15 +48,16 @@ public class TenantController {
     })
     @GetMapping
     public ResponseEntity<java.util.List<TenantDto>> listAll(
-            @RequestHeader(value = "X-Role", required = false) String role) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId) {
 
-        // Direct super-admin check - bypass complex permission framework
-        if (!"super-admin".equals(role)) {
-            log.warn("Access denied to tenant list: role={}", role);
+        // Direct super-admin check via database lookup
+        if (!roleLookupService.isSuperAdmin(userId, tenantId)) {
+            log.warn("Access denied to tenant list: userId={}", userId);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
-        log.debug("Super-admin listing all tenants");
+        log.debug("Super-admin listing all tenants: userId={}", userId);
         return ResponseEntity.ok(tenantService.getAllTenants());
     }
 
@@ -68,9 +83,10 @@ public class TenantController {
     public ResponseEntity<TenantDto> get(
             @PathVariable String id,
             @RequestHeader(value = "X-Tenant-Id", required = false) String requestTenantId,
-            @RequestHeader(value = "X-Role", required = false) String role) {
-        // Super-admin can read any tenant
-        if ("super-admin".equals(role)) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+
+        // Super-admin can read any tenant (via database lookup)
+        if (roleLookupService.isSuperAdmin(userId, requestTenantId)) {
             return tenantService.getTenant(id)
                     .map(ResponseEntity::ok)
                     .orElseGet(() -> ResponseEntity.notFound().build());
@@ -81,7 +97,7 @@ public class TenantController {
                     .map(ResponseEntity::ok)
                     .orElseGet(() -> ResponseEntity.notFound().build());
         }
-        log.warn("Access denied to read tenant {}: userTenant={}, role={}", id, requestTenantId, role);
+        log.warn("Access denied to read tenant {}: userTenant={}, userId={}", id, requestTenantId, userId);
         return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -105,11 +121,12 @@ public class TenantController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(
             @PathVariable String id,
-            @RequestHeader(value = "X-Role", required = false) String role) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId) {
 
-        // Direct super-admin check for tenant deletion
-        if (!"super-admin".equals(role)) {
-            log.warn("Access denied to delete tenant {}: role={}", id, role);
+        // Direct super-admin check via database lookup
+        if (!roleLookupService.isSuperAdmin(userId, tenantId)) {
+            log.warn("Access denied to delete tenant {}: userId={}", id, userId);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 

@@ -1,10 +1,7 @@
 package com.learning.gateway.filter;
 
 import com.learning.gateway.support.BaseGatewayFilterTest;
-import okhttp3.mockwebserver.MockResponse;
-import okhttp3.mockwebserver.MockWebServer;
 import org.assertj.core.api.Assertions;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,45 +13,34 @@ import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Tests for JwtAuthenticationGatewayFilterFactory.
+ * 
+ * <p>
+ * Note: Role lookup has been removed from gateway - downstream services
+ * now lookup roles directly from the database via RoleLookupService.
+ * These tests verify headers are enriched WITHOUT X-Role.
+ * </p>
+ */
 class JwtAuthenticationGatewayFilterFactoryTest extends BaseGatewayFilterTest {
 
-        private MockWebServer mockAuthService;
         private JwtAuthenticationGatewayFilterFactory factory;
 
         @BeforeEach
-        void setUp() throws IOException {
-                mockAuthService = new MockWebServer();
-                mockAuthService.start();
-
-                String authServiceUrl = "http://localhost:" + mockAuthService.getPort();
-                factory = new JwtAuthenticationGatewayFilterFactory(WebClient.builder(), authServiceUrl);
-        }
-
-        @AfterEach
-        void tearDown() throws IOException {
-                mockAuthService.shutdown();
-        }
-
-        private void enqueueRoleResponse(String roleId) {
-                mockAuthService.enqueue(new MockResponse()
-                                .setResponseCode(200)
-                                .setHeader("Content-Type", "application/json")
-                                .setBody("{\"roleId\":\"" + roleId + "\"}"));
+        void setUp() {
+                factory = new JwtAuthenticationGatewayFilterFactory();
         }
 
         @Test
         @DisplayName("enriches headers when tenant resolved from cognito groups")
         void enrichesHeadersFromCognitoGroups() {
-                enqueueRoleResponse("admin");
                 GatewayFilter filter = factory.apply(new JwtAuthenticationGatewayFilterFactory.Config());
 
                 var request = get("/api/items").build();
@@ -79,14 +65,14 @@ class JwtAuthenticationGatewayFilterFactoryTest extends BaseGatewayFilterTest {
                 Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Username")).isEqualTo("jane.doe");
                 Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Email")).isEqualTo("jane@example.com");
                 Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Tenant-Id")).isEqualTo("acme");
-                Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Role")).isEqualTo("admin");
+                // NOTE: X-Role is no longer set by gateway - services lookup roles directly
+                Assertions.assertThat(mutatedRequest.getHeaders().containsKey("X-Role")).isFalse();
                 Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Authorities")).isEqualTo("ROLE_USER");
         }
 
         @Test
         @DisplayName("enriches headers when tenant resolved from custom claim")
         void enrichesHeadersFromCustomClaim() {
-                enqueueRoleResponse("editor");
                 GatewayFilter filter = factory.apply(new JwtAuthenticationGatewayFilterFactory.Config());
 
                 var request = get("/api/items").build();
@@ -108,14 +94,13 @@ class JwtAuthenticationGatewayFilterFactoryTest extends BaseGatewayFilterTest {
                 var mutatedRequest = chain.lastRequest();
                 Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-User-Id")).isEqualTo("user-456");
                 Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Tenant-Id")).isEqualTo("tenant_xyz");
-                Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Role")).isEqualTo("editor");
+                Assertions.assertThat(mutatedRequest.getHeaders().containsKey("X-Role")).isFalse();
                 Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Authorities")).isEqualTo("ROLE_ADMIN");
         }
 
         @Test
         @DisplayName("enriches headers when tenant resolved from custom:tenantId claim (camelCase)")
         void enrichesHeadersFromCustomTenantIdClaim() {
-                enqueueRoleResponse("viewer");
                 GatewayFilter filter = factory.apply(new JwtAuthenticationGatewayFilterFactory.Config());
 
                 var request = get("/api/items").build();
@@ -127,8 +112,7 @@ class JwtAuthenticationGatewayFilterFactoryTest extends BaseGatewayFilterTest {
                                 jwt(Map.of(
                                                 "sub", "user-789",
                                                 "email", "alice@acme.com",
-                                                "custom:tenantId", "acme-corp" // camelCase format from Signup
-                                )),
+                                                "custom:tenantId", "acme-corp")),
                                 List.of(new SimpleGrantedAuthority("ROLE_TENANT_ADMIN")));
 
                 Mono<Void> result = filter.filter(webExchange, chain);
@@ -140,7 +124,7 @@ class JwtAuthenticationGatewayFilterFactoryTest extends BaseGatewayFilterTest {
                 Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-User-Id")).isEqualTo("user-789");
                 Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Email")).isEqualTo("alice@acme.com");
                 Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Tenant-Id")).isEqualTo("acme-corp");
-                Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Role")).isEqualTo("viewer");
+                Assertions.assertThat(mutatedRequest.getHeaders().containsKey("X-Role")).isFalse();
                 Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Authorities"))
                                 .isEqualTo("ROLE_TENANT_ADMIN");
         }
@@ -217,39 +201,6 @@ class JwtAuthenticationGatewayFilterFactoryTest extends BaseGatewayFilterTest {
 
                 Assertions.assertThat(chain.lastRequest()).isNotNull();
                 Assertions.assertThat(chain.lastRequest().getHeaders().containsKey("X-Tenant-Id")).isFalse();
-        }
-
-        @Test
-        @DisplayName("falls back to empty role when auth-service returns error")
-        void fallsBackToEmptyRoleOnError() {
-                // Simulate auth-service returning 500
-                mockAuthService.enqueue(new MockResponse()
-                                .setResponseCode(500)
-                                .setBody("Internal Server Error"));
-
-                GatewayFilter filter = factory.apply(new JwtAuthenticationGatewayFilterFactory.Config());
-
-                var request = get("/api/items").build();
-                var webExchange = exchange(request);
-                var chain = chain();
-
-                JwtAuthenticationToken authentication = jwtAuthentication(
-                                jwt(Map.of(
-                                                "sub", "user-123",
-                                                "email", "test@example.com",
-                                                "custom:tenantId", "test-tenant")),
-                                List.of(new SimpleGrantedAuthority("ROLE_USER")));
-
-                Mono<Void> result = filter.filter(webExchange, chain);
-
-                StepVerifier.create(withAuthentication(result, authentication))
-                                .verifyComplete();
-
-                var mutatedRequest = chain.lastRequest();
-                Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-User-Id")).isEqualTo("user-123");
-                Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Tenant-Id")).isEqualTo("test-tenant");
-                Assertions.assertThat(mutatedRequest.getHeaders().getFirst("X-Role")).isEqualTo(""); // Fallback to
-                                                                                                     // empty
         }
 
         private Jwt jwt(Map<String, Object> claims) {

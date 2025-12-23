@@ -14,8 +14,15 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 /**
  * Aspect to intercept methods annotated with @RequirePermission and enforce
  * access control.
- * Relies on Gateway to inject trusted X-User-Id header.
+ * 
+ * <p>
+ * Role lookup is done via RoleLookupService which queries the database,
+ * replacing the previous X-Role header approach for better security.
+ * </p>
+ * 
+ * <p>
  * Tenant isolation is handled via TenantDataSourceRouter.
+ * </p>
  */
 @Aspect
 @Component
@@ -24,25 +31,27 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 public class AuthorizationAspect {
 
     private final PermissionEvaluator permissionEvaluator;
+    private final RoleLookupService roleLookupService;
+
     private static final String USER_HEADER = "X-User-Id";
-    private static final String ROLE_HEADER = "X-Role";
+    private static final String TENANT_HEADER = "X-Tenant-Id";
 
     @Around("@annotation(requirePermission)")
     public Object checkPermission(ProceedingJoinPoint joinPoint, RequirePermission requirePermission) throws Throwable {
         // 1. Get current request
         HttpServletRequest request = getCurrentHttpRequest();
 
-        // 2. Get current user from header
+        // 2. Get current user and tenant from headers
         String userId = request != null ? request.getHeader(USER_HEADER) : null;
+        String tenantId = request != null ? request.getHeader(TENANT_HEADER) : null;
 
         if (userId == null || userId.isBlank()) {
             log.warn("No user ID found in request header: {}", USER_HEADER);
             throw new PermissionDeniedException("User is not authenticated (missing " + USER_HEADER + ")");
         }
 
-        // 3. Check for super-admin bypass
-        String role = request.getHeader(ROLE_HEADER);
-        if ("super-admin".equals(role)) {
+        // 3. Check for super-admin bypass via database lookup
+        if (roleLookupService.isSuperAdmin(userId, tenantId)) {
             log.debug("Super-admin access granted for user={}", userId);
             return joinPoint.proceed();
         }

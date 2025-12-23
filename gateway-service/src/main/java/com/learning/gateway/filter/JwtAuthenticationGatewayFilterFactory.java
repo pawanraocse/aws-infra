@@ -1,14 +1,12 @@
 package com.learning.gateway.filter;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -17,14 +15,21 @@ import reactor.core.publisher.Mono;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+/**
+ * JWT Authentication filter that extracts user/tenant info from JWT token.
+ * 
+ * <p>
+ * Role lookup has been removed from gateway - downstream services now
+ * lookup roles directly from the database via RoleLookupService for better
+ * security.
+ * </p>
+ */
 @Slf4j
 @Component
 public class JwtAuthenticationGatewayFilterFactory
@@ -33,17 +38,9 @@ public class JwtAuthenticationGatewayFilterFactory
     private static final String TENANT_GROUP_PREFIX = "tenant_";
     private static final Pattern TENANT_ID_PATTERN = Pattern.compile("^[a-zA-Z0-9_-]{3,64}$");
     private static final String REQUEST_ID_HEADER = "X-Request-Id";
-    private static final Duration ROLE_LOOKUP_TIMEOUT = Duration.ofSeconds(2);
 
-    private final WebClient webClient;
-    private final String authServiceUrl;
-
-    public JwtAuthenticationGatewayFilterFactory(
-            WebClient.Builder webClientBuilder,
-            @Value("${auth.service.url:http://auth-service:8081}") String authServiceUrl) {
+    public JwtAuthenticationGatewayFilterFactory() {
         super(Config.class);
-        this.webClient = webClientBuilder.build();
-        this.authServiceUrl = authServiceUrl;
     }
 
     @Override
@@ -68,52 +65,23 @@ public class JwtAuthenticationGatewayFilterFactory
                             .map(Object::toString)
                             .collect(Collectors.joining(","));
 
-                    // Lookup role from auth-service
-                    return lookupRole(userId, tenantId)
-                            .map(role -> {
-                                var builder = exchange.getRequest().mutate()
-                                        .header("X-User-Id", userId)
-                                        .header("X-Username", username != null ? username : "")
-                                        .header("X-Email", email != null ? email : "")
-                                        .header("X-Tenant-Id", tenantId)
-                                        .header("X-Role", role);
-                                if (!authorities.isBlank()) {
-                                    builder.header("X-Authorities", authorities);
-                                }
+                    // NOTE: Role lookup removed - downstream services now lookup roles directly
+                    // from the database via RoleLookupService for better security
+                    var builder = exchange.getRequest().mutate()
+                            .header("X-User-Id", userId)
+                            .header("X-Username", username != null ? username : "")
+                            .header("X-Email", email != null ? email : "")
+                            .header("X-Tenant-Id", tenantId);
+                    if (!authorities.isBlank()) {
+                        builder.header("X-Authorities", authorities);
+                    }
 
-                                log.debug("NT-01 allow path={} userId={} tenantId={} role={}",
-                                        exchange.getRequest().getPath(), userId, tenantId, role);
-                                return exchange.mutate().request(builder.build()).build();
-                            })
-                            .flatMap(chain::filter);
+                    log.debug("NT-01 allow path={} userId={} tenantId={}",
+                            exchange.getRequest().getPath(), userId, tenantId);
+                    var mutatedExchange = exchange.mutate().request(builder.build()).build();
+                    return chain.filter(mutatedExchange);
                 })
                 .switchIfEmpty(chain.filter(exchange));
-    }
-
-    /**
-     * Lookup user's role from auth-service.
-     * Falls back to empty role if lookup fails.
-     */
-    private Mono<String> lookupRole(String userId, String tenantId) {
-        String url = authServiceUrl + "/auth/internal/users/" + userId + "/role";
-        log.debug("Looking up role: url={} tenantId={}", url, tenantId);
-
-        return webClient.get()
-                .uri(url)
-                .header("X-Tenant-Id", tenantId) // Auth-service needs tenant context
-                .retrieve()
-                .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, String>>() {
-                })
-                .map(response -> {
-                    String roleId = response.getOrDefault("roleId", "");
-                    log.debug("Role lookup success: userId={} roleId={}", userId, roleId);
-                    return roleId;
-                })
-                .timeout(ROLE_LOOKUP_TIMEOUT)
-                .onErrorResume(e -> {
-                    log.warn("Role lookup failed for userId={}: {}", userId, e.getMessage());
-                    return Mono.just(""); // Fallback to empty role
-                });
     }
 
     private TenantExtractionResult extractTenantId(Jwt jwt) {

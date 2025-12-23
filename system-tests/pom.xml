@@ -92,6 +92,22 @@
             <artifactId>postgresql</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- AWS SDK for Cognito cleanup (AdminDeleteUser) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>cognitoidentityprovider</artifactId>
+            <version>2.29.1</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- AWS SDK for SSM (Parameter Store) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssm</artifactId>
+            <version>2.29.1</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

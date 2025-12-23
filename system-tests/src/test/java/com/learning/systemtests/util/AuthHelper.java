@@ -1,47 +1,46 @@
 package com.learning.systemtests.util;
 
+import com.learning.common.dto.PersonalSignupRequest;
+import com.learning.common.dto.SignupResponse;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.learning.systemtests.config.TestConfig.*;
+
 /**
  * Utility class to handle authentication for E2E tests.
  * <p>
- * This class provides methods to programmatically login and retrieve JWT tokens
- * from the Auth Service running on localhost.
+ * IMPORTANT: All requests go through the Gateway (port 8080), not directly to
+ * auth-service.
+ * This tests the real production routing.
  * </p>
  */
 public class AuthHelper {
 
     private static final Logger log = LoggerFactory.getLogger(AuthHelper.class);
 
-    private static final String AUTH_SERVICE_URL = "http://localhost:8081/auth";
+    private static final int MAX_RETRIES = 3;
+    private static final int RETRY_DELAY_MS = 2000;
 
-    // Test user credentials (should match a user in your Cognito user pool)
-    // TODO: Replace with actual test user credentials or load from environment
-    // variables
-    private static final String TEST_USER_EMAIL = System.getenv().getOrDefault("TEST_USER_EMAIL", "test@example.com");
-    private static final String TEST_USER_PASSWORD = System.getenv().getOrDefault("TEST_USER_PASSWORD", "Test123!");
-
-    /**
-     * Authenticates the test user and returns a valid JWT access token.
-     *
-     * @return JWT access token
-     * @throws RuntimeException if login fails
-     */
-    public static String getAccessToken() {
-        return login(TEST_USER_EMAIL, TEST_USER_PASSWORD);
+    private AuthHelper() {
+        // Utility class
     }
+
+    // ============================================================
+    // Login Methods
+    // ============================================================
 
     /**
      * Authenticates with the given credentials and returns a JWT access token.
+     * Routes through Gateway to test real production flow.
      *
      * @param email    User email
      * @param password User password
      * @return JWT access token
-     * @throws RuntimeException if login fails
+     * @throws RuntimeException if login fails after retries
      */
     public static String login(String email, String password) {
         log.info("Attempting login for user: {}", email);
@@ -53,15 +52,15 @@ public class AuthHelper {
                 }
                 """, email, password);
 
-        Response response = RestAssured.given()
-                .baseUri(AUTH_SERVICE_URL)
+        Response response = executeWithRetry(() -> RestAssured.given()
+                .baseUri(GATEWAY_URL)
                 .contentType(ContentType.JSON)
                 .body(loginPayload)
                 .when()
-                .post("/login")
+                .post(AUTH_API + "/login")
                 .then()
                 .extract()
-                .response();
+                .response());
 
         if (response.getStatusCode() != 200) {
             String errorMessage = String.format(
@@ -77,22 +76,105 @@ public class AuthHelper {
             throw new RuntimeException("Access token not found in login response");
         }
 
-        log.info("Login successful for user: {}", email);
+        log.info("✅ Login successful for user: {}", email);
         return accessToken;
     }
 
     /**
-     * Returns a complete authentication response including access token, ID token,
-     * etc.
-     *
-     * @return AuthResponse object
+     * Login with default test credentials from environment.
      */
-    public static AuthResponse getFullAuthResponse() {
-        return getFullAuthResponse(TEST_USER_EMAIL, TEST_USER_PASSWORD);
+    public static String getAccessToken() {
+        String email = System.getenv().getOrDefault("TEST_USER_EMAIL", "test@example.com");
+        String password = System.getenv().getOrDefault("TEST_USER_PASSWORD", DEFAULT_TEST_PASSWORD);
+        return login(email, password);
+    }
+
+    // ============================================================
+    // Signup Methods
+    // ============================================================
+
+    /**
+     * Signs up a new user with random credentials and returns the credentials.
+     * Routes through Gateway to test real production flow.
+     *
+     * @return UserCredentials containing email and password
+     */
+    public static UserCredentials signup() {
+        String email = TestDataFactory.randomEmail();
+        String password = DEFAULT_TEST_PASSWORD;
+        String name = TestDataFactory.randomName();
+
+        PersonalSignupRequest request = new PersonalSignupRequest(email, password, name);
+
+        log.info("Attempting signup for user: {}", email);
+
+        Response response = executeWithRetry(() -> RestAssured.given()
+                .baseUri(GATEWAY_URL)
+                .contentType(ContentType.JSON)
+                .body(request)
+                .when()
+                .post(AUTH_API + "/signup/personal")
+                .then()
+                .extract()
+                .response());
+
+        if (response.getStatusCode() != 201) {
+            String errorMessage = String.format(
+                    "Signup failed with status %d: %s",
+                    response.getStatusCode(),
+                    response.getBody().asString());
+            log.error(errorMessage);
+            throw new RuntimeException(errorMessage);
+        }
+
+        SignupResponse signupResponse = response.as(SignupResponse.class);
+        log.info("✅ Signup successful. TenantId: {}", signupResponse.tenantId());
+
+        return new UserCredentials(email, password, signupResponse.tenantId());
     }
 
     /**
-     * Returns a complete authentication response for the given credentials.
+     * Signs up with specified email and returns credentials.
+     */
+    public static UserCredentials signupWithEmail(String email) {
+        String password = DEFAULT_TEST_PASSWORD;
+        String name = TestDataFactory.randomName();
+
+        PersonalSignupRequest request = new PersonalSignupRequest(email, password, name);
+
+        log.info("Attempting signup for user: {}", email);
+
+        Response response = executeWithRetry(() -> RestAssured.given()
+                .baseUri(GATEWAY_URL)
+                .contentType(ContentType.JSON)
+                .body(request)
+                .when()
+                .post(AUTH_API + "/signup/personal")
+                .then()
+                .extract()
+                .response());
+
+        if (response.getStatusCode() != 201) {
+            String errorMessage = String.format(
+                    "Signup failed with status %d: %s",
+                    response.getStatusCode(),
+                    response.getBody().asString());
+            log.error(errorMessage);
+            throw new RuntimeException(errorMessage);
+        }
+
+        SignupResponse signupResponse = response.as(SignupResponse.class);
+        log.info("✅ Signup successful. TenantId: {}", signupResponse.tenantId());
+
+        return new UserCredentials(email, password, signupResponse.tenantId());
+    }
+
+    // ============================================================
+    // Full Auth Response
+    // ============================================================
+
+    /**
+     * Returns a complete authentication response including all tokens.
      *
      * @param email    User email
      * @param password User password
@@ -109,11 +191,11 @@ public class AuthHelper {
                 """, email, password);
 
         Response response = RestAssured.given()
-                .baseUri(AUTH_SERVICE_URL)
+                .baseUri(GATEWAY_URL)
                 .contentType(ContentType.JSON)
                 .body(loginPayload)
                 .when()
-                .post("/login")
+                .post(AUTH_API + "/login")
                 .then()
                 .statusCode(200)
                 .extract()
@@ -129,8 +211,121 @@ public class AuthHelper {
                 response.jsonPath().getString("email"));
     }
 
+    // ============================================================
+    // Account Operations
+    // ============================================================
+
     /**
-     * Simple DTO to hold authentication response data.
+     * Delete account for the authenticated user.
+     *
+     * @param token        JWT access token
+     * @param confirmation Must be "DELETE" to confirm
+     * @return Response object
+     */
+    public static Response deleteAccount(String token, String confirmation) {
+        log.info("Attempting to delete account with confirmation: {}", confirmation);
+
+        String payload = String.format("""
+                {
+                    "confirmation": "%s"
+                }
+                """, confirmation);
+
+        return RestAssured.given()
+                .baseUri(GATEWAY_URL)
+                .header("Authorization", "Bearer " + token)
+                .contentType(ContentType.JSON)
+                .body(payload)
+                .when()
+                .post(ACCOUNT_API + "/delete")
+                .then()
+                .extract()
+                .response();
+    }
+
+    // ============================================================
+    // Password Reset
+    // ============================================================
+
+    /**
+     * Request password reset for an email.
+     *
+     * @param email User email
+     * @return Response object
+     */
+    public static Response forgotPassword(String email) {
+        log.info("Requesting password reset for: {}", email);
+
+        String payload = String.format("""
+                {
+                    "email": "%s"
+                }
+                """, email);
+
+        return RestAssured.given()
+                .baseUri(GATEWAY_URL)
+                .contentType(ContentType.JSON)
+                .body(payload)
+                .when()
+                .post(AUTH_API + "/forgot-password")
+                .then()
+                .extract()
+                .response();
+    }
+
+    // ============================================================
+    // Retry Helper
+    // ============================================================
+
+    /**
+     * Execute a request with retry logic for transient failures.
+     */
+    private static Response executeWithRetry(java.util.function.Supplier<Response> request) {
+        Response response = null;
+        Exception lastException = null;
+
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                response = request.get();
+                // If we get a response (even error), return it
+                if (response != null) {
+                    return response;
+                }
+            } catch (Exception e) {
+                lastException = e;
+                log.warn("Request attempt {} failed: {}", attempt, e.getMessage());
+                if (attempt < MAX_RETRIES) {
+                    try {
+                        Thread.sleep(RETRY_DELAY_MS);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Interrupted during retry", ie);
+                    }
+                }
+            }
+        }
+
+        throw new RuntimeException("Request failed after " + MAX_RETRIES + " attempts", lastException);
+    }
+
+    // ============================================================
+    // DTOs
+    // ============================================================
+
+    /**
+     * User credentials with tenant ID.
+     */
+    public record UserCredentials(String email, String password, String tenantId) {
+        /**
+         * Constructor without tenantId for backward compatibility.
+         */
+        public UserCredentials(String email, String password) {
+            this(email, password, null);
+        }
+    }
+
+    /**
+     * Complete authentication response.
      */
     public record AuthResponse(
             String accessToken,
@@ -140,41 +335,5 @@ public class AuthHelper {
             Long expiresIn,
             String userId,
             String email) {
-    }
-
-    /**
-     * Signs up a new user and returns the email and password.
-     *
-     * @return A pair of email and password
-     */
-    public static UserCredentials signup() {
-        String email = "test.user." + java.util.UUID.randomUUID().toString().substring(0, 8) + "@example.com";
-        String password = "TestPassword123!";
-        String name = "Test User";
-
-        String signupPayload = String.format("""
-                {
-                    "email": "%s",
-                    "password": "%s",
-                    "name": "%s"
-                }
-                """, email, password, name);
-
-        Response response = RestAssured.given()
-                .baseUri(AUTH_SERVICE_URL)
-                .contentType(ContentType.JSON)
-                .body(signupPayload)
-                .when()
-                .post("/signup/personal")
-                .then()
-                .statusCode(201)
-                .extract()
-                .response();
-
-        log.info("Signup successful for user: {}", email);
-        return new UserCredentials(email, password);
-    }
-
-    public record UserCredentials(String email, String password) {
     }
 }

@@ -1,7 +1,9 @@
 spring:
   application:
     name: auth-service-test
-  
+  autoconfigure:
+    exclude:
+      - org.redisson.spring.starter.RedissonAutoConfigurationV2
   flyway:
     enabled: false
   jpa:

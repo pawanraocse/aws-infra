@@ -1,9 +1,11 @@
 spring:
   application:
     name: platform-service-test
-
   main:
     allow-bean-definition-overriding: true
+  autoconfigure:
+    exclude:
+      - org.redisson.spring.starter.RedissonAutoConfigurationV2
 
   cloud:
     discovery:

@@ -1,6 +1,9 @@
 spring:
   main:
     allow-bean-definition-overriding: true
+  autoconfigure:
+    exclude:
+      - org.redisson.spring.starter.RedissonAutoConfigurationV2
 
 # Disable Eureka interactions for tests
 eureka:

@@ -3,6 +3,9 @@ spring:
     allow-bean-definition-overriding: true
   application:
     name: backend-service-test
+  autoconfigure:
+    exclude:
+      - org.redisson.spring.starter.RedissonAutoConfigurationV2
 
   jpa:
     hibernate:

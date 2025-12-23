@@ -34,6 +34,11 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.SignUpRespo
 import software.amazon.awssdk.services.cognitoidentityprovider.model.UserNotFoundException;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.UsernameExistsException;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -79,15 +84,27 @@ public class AuthServiceImpl implements AuthService {
         @Override
         @Transactional
         public AuthResponseDto login(AuthRequestDto requestDto) {
-                // changed: removed try-with-resources, use injected cognitoClient
                 try {
+                        // Build auth parameters with SECRET_HASH if client secret is configured
+                        Map<String, String> authParams = new HashMap<>();
+                        authParams.put("USERNAME", requestDto.getEmail());
+                        authParams.put("PASSWORD", requestDto.getPassword());
+
+                        // Add SECRET_HASH if client secret is configured
+                        String clientSecret = cognitoProperties.getClientSecret();
+                        if (clientSecret != null && !clientSecret.isEmpty()) {
+                                String secretHash = computeSecretHash(
+                                                requestDto.getEmail(),
+                                                cognitoProperties.getClientId(),
+                                                clientSecret);
+                                authParams.put("SECRET_HASH", secretHash);
+                        }
+
                         AdminInitiateAuthRequest authRequest = AdminInitiateAuthRequest.builder()
                                         .userPoolId(cognitoProperties.getUserPoolId())
                                         .clientId(cognitoProperties.getClientId())
                                         .authFlow(AuthFlowType.ADMIN_USER_PASSWORD_AUTH)
-                                        .authParameters(Map.of(
-                                                        "USERNAME", requestDto.getEmail(),
-                                                        "PASSWORD", requestDto.getPassword()))
+                                        .authParameters(authParams)
                                         .build();
                         AdminInitiateAuthResponse cognitoResponse = cognitoClient.adminInitiateAuth(authRequest);
                         var result = cognitoResponse.authenticationResult();
@@ -115,6 +132,25 @@ public class AuthServiceImpl implements AuthService {
                                         e.awsErrorDetails().errorCode());
                         throw new AuthLoginException("LOGIN_FAILED",
                                         "Login failed: " + e.awsErrorDetails().errorMessage(), e);
+                }
+        }
+
+        /**
+         * Compute SECRET_HASH for Cognito authentication.
+         * Required when the app client is configured with a client secret.
+         */
+        private String computeSecretHash(String username, String clientId, String clientSecret) {
+                try {
+                        String message = username + clientId;
+                        Mac mac = Mac.getInstance("HmacSHA256");
+                        SecretKeySpec secretKeySpec = new SecretKeySpec(
+                                        clientSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+                        mac.init(secretKeySpec);
+                        byte[] rawHmac = mac.doFinal(message.getBytes(StandardCharsets.UTF_8));
+                        return Base64.getEncoder().encodeToString(rawHmac);
+                } catch (Exception e) {
+                        log.error("Failed to compute SECRET_HASH: {}", e.getMessage());
+                        throw new RuntimeException("Failed to compute SECRET_HASH", e);
                 }
         }
 

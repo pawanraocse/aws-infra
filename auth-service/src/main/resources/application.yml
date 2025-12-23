@@ -28,6 +28,19 @@ spring:
   flyway:
     enabled: false  # Disabled - using custom Flyway configuration for platform and tenant databases
 
+  # Redis configuration (for Redisson distributed caching/locking)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+
+  # Exclude Redisson auto-config in tests or when Redis unavailable
+  autoconfigure:
+    exclude:
+      - ${REDISSON_EXCLUDE:}
+
   security:
     oauth2:
       client:

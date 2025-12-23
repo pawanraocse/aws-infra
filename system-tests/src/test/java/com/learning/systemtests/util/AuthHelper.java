@@ -7,6 +7,10 @@ import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminConfirmSignUpRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UserNotFoundException;
 
 import static com.learning.systemtests.config.TestConfig.*;
 
@@ -24,6 +28,8 @@ public class AuthHelper {
 
     private static final int MAX_RETRIES = 3;
     private static final int RETRY_DELAY_MS = 2000;
+
+    private static CognitoIdentityProviderClient cognitoClient;
 
     private AuthHelper() {
         // Utility class
@@ -87,6 +93,104 @@ public class AuthHelper {
         String email = System.getenv().getOrDefault("TEST_USER_EMAIL", "test@example.com");
         String password = System.getenv().getOrDefault("TEST_USER_PASSWORD", DEFAULT_TEST_PASSWORD);
         return login(email, password);
+    }
+
+    // ============================================================
+    // Cognito Admin Operations
+    // ============================================================
+
+    /**
+     * Confirm a user in Cognito using AdminConfirmSignUp and set their password.
+     * This bypasses email verification and ensures the user can login.
+     *
+     * @param email    User email to confirm
+     * @param password Password to set for the user
+     * @return true if confirmed successfully, false otherwise
+     */
+    public static boolean confirmUser(String email, String password) {
+        if (COGNITO_USER_POOL_ID == null || COGNITO_USER_POOL_ID.isEmpty()) {
+            log.warn("Cognito User Pool ID not configured, cannot confirm user: {}", email);
+            return false;
+        }
+
+        try {
+            CognitoIdentityProviderClient client = getCognitoClient();
+
+            // Step 1: Confirm the user (bypass email verification)
+            client.adminConfirmSignUp(AdminConfirmSignUpRequest.builder()
+                    .userPoolId(COGNITO_USER_POOL_ID)
+                    .username(email)
+                    .build());
+            log.info("✅ Confirmed Cognito user: {}", email);
+
+            // Step 2: Set the password as permanent (required for login after admin
+            // confirm)
+            client.adminSetUserPassword(
+                    software.amazon.awssdk.services.cognitoidentityprovider.model.AdminSetUserPasswordRequest.builder()
+                            .userPoolId(COGNITO_USER_POOL_ID)
+                            .username(email)
+                            .password(password)
+                            .permanent(true)
+                            .build());
+            log.info("✅ Set permanent password for user: {}", email);
+
+            // Wait for Cognito to propagate changes (eventual consistency)
+            Thread.sleep(2000);
+
+            return true;
+        } catch (UserNotFoundException e) {
+            log.warn("User not found in Cognito: {}", email);
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return true; // Still succeeded, just interrupted
+        } catch (Exception e) {
+            log.warn("Failed to confirm user {}: {}", email, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Confirm a user with the default test password.
+     */
+    public static boolean confirmUser(String email) {
+        return confirmUser(email, DEFAULT_TEST_PASSWORD);
+    }
+
+    /**
+     * Signup a new user AND confirm them in Cognito.
+     * This is the preferred method for tests that need to login.
+     *
+     * @return UserCredentials for the confirmed user
+     */
+    public static UserCredentials signupAndConfirm() {
+        UserCredentials creds = signup();
+        confirmUser(creds.email(), creds.password());
+        // Register for cleanup
+        CleanupHelper.registerUserForCleanup(creds.email());
+        CleanupHelper.registerTenantForCleanup(creds.tenantId());
+        return creds;
+    }
+
+    /**
+     * Signup with specified email AND confirm in Cognito.
+     */
+    public static UserCredentials signupAndConfirmWithEmail(String email) {
+        UserCredentials creds = signupWithEmail(email);
+        confirmUser(email, creds.password());
+        // Register for cleanup
+        CleanupHelper.registerUserForCleanup(email);
+        CleanupHelper.registerTenantForCleanup(creds.tenantId());
+        return creds;
+    }
+
+    private static CognitoIdentityProviderClient getCognitoClient() {
+        if (cognitoClient == null) {
+            cognitoClient = CognitoIdentityProviderClient.builder()
+                    .region(Region.of(AWS_REGION))
+                    .build();
+        }
+        return cognitoClient;
     }
 
     // ============================================================

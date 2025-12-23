@@ -71,6 +71,13 @@
             <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
 
+        <!-- Redisson for distributed caching and locking -->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
+            <version>3.24.3</version>
+        </dependency>
+
         <!-- HikariCP for tenant data source pooling -->
         <dependency>
             <groupId>com.zaxxer</groupId>

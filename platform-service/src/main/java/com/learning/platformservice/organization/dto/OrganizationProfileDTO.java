@@ -24,4 +24,7 @@ public class OrganizationProfileDTO {
     private String slaTier;
     private String tenantType;
     private Integer maxUsers;
+    private String ownerEmail;
+    private String subscriptionStatus;
+    private String trialEndsAt;
 }

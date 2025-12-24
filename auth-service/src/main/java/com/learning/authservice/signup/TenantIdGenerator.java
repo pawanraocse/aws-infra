@@ -1,8 +1,8 @@
 package com.learning.authservice.signup;
 
+import com.learning.authservice.exception.AuthSignupException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -12,8 +12,8 @@ import org.springframework.web.reactive.function.client.WebClient;
  * 
  * <p>
  * <b>Collision Prevention:</b> For organization signups, checks if the
- * slugified company name already exists and appends a numeric suffix if needed
- * (e.g., acme-inc, acme-inc-2, acme-inc-3).
+ * slugified company name already exists and throws an error if so.
+ * Users must choose a unique company name.
  * </p>
  */
 @Component
@@ -23,18 +23,17 @@ public class TenantIdGenerator {
 
     private final WebClient platformWebClient;
 
-    @Value("${tenant.id.max-collision-attempts:10}")
-    private int maxCollisionAttempts;
-
     /**
      * Generate a tenant ID based on signup type.
      * Personal: user-{sanitized-username}-{timestamp}
-     * Organization: slugified company name (with unique suffix if collision)
+     * Organization: slugified company name (must be unique)
+     * 
+     * @throws AuthSignupException if organization name already exists
      */
     public String generate(SignupRequest request) {
         return switch (request) {
             case PersonalSignupData p -> generatePersonalTenantId(p.email());
-            case OrganizationSignupData o -> generateUniqueOrganizationId(o.companyName());
+            case OrganizationSignupData o -> generateOrganizationId(o.companyName());
         };
     }
 
@@ -46,31 +45,21 @@ public class TenantIdGenerator {
     }
 
     /**
-     * Generate a unique organization tenant ID.
-     * First tries the plain slugified name, then appends -2, -3, etc. if collision.
+     * Generate organization tenant ID from company name.
+     * Throws AuthSignupException if the name already exists.
      */
-    private String generateUniqueOrganizationId(String companyName) {
-        String baseSlug = slugify(companyName);
+    private String generateOrganizationId(String companyName) {
+        String slug = slugify(companyName);
 
-        // First, try the base slug
-        if (!tenantExists(baseSlug)) {
-            log.debug("Tenant ID available: {}", baseSlug);
-            return baseSlug;
+        if (tenantExists(slug)) {
+            log.info("Organization name already exists: {} (slug: {})", companyName, slug);
+            throw new AuthSignupException(
+                    "COMPANY_NAME_EXISTS",
+                    "An organization with this name already exists. Please choose a different name.");
         }
 
-        // Base slug exists, try adding numeric suffix
-        for (int i = 2; i <= maxCollisionAttempts + 1; i++) {
-            String candidateId = baseSlug + "-" + i;
-            if (!tenantExists(candidateId)) {
-                log.info("Tenant ID collision resolved: {} -> {}", baseSlug, candidateId);
-                return candidateId;
-            }
-        }
-
-        // Fallback: append timestamp (should rarely happen)
-        String fallbackId = baseSlug + "-" + System.currentTimeMillis();
-        log.warn("Tenant ID collision fallback used: {} (max attempts exceeded)", fallbackId);
-        return fallbackId;
+        log.debug("Tenant ID available: {}", slug);
+        return slug;
     }
 
     /**
@@ -85,9 +74,9 @@ public class TenantIdGenerator {
                     .block();
             return Boolean.TRUE.equals(exists);
         } catch (Exception e) {
-            log.warn("Failed to check tenant existence: {} - assuming collision", tenantId, e);
-            // Fail safe: assume it exists to avoid collision
-            return true;
+            log.warn("Failed to check tenant existence: {} - assuming available", tenantId, e);
+            // Changed: assume available to allow signup (better UX than blocking)
+            return false;
         }
     }
 

@@ -3,7 +3,6 @@ package com.learning.authservice.signup;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -19,7 +18,6 @@ class TenantIdGeneratorTest {
     void setUp() {
         // Create with null WebClient - we'll test slugify directly
         generator = new TenantIdGenerator(null);
-        ReflectionTestUtils.setField(generator, "maxCollisionAttempts", 10);
     }
 
     @Test

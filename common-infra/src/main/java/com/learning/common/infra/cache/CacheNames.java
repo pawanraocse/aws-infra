@@ -62,6 +62,14 @@ public final class CacheNames {
      */
     public static final String USER_ALL_PERMISSIONS = "userAllPermissions";
 
+    /**
+     * [DISTRIBUTED] Cache for user roles lookup.
+     * Key: userId:tenantId
+     * Value: Optional<String> (role ID)
+     * TTL: 10 minutes
+     */
+    public static final String USER_ROLES = "userRoles";
+
     // === Tenant Caches (common-infra) ===
 
     /**
@@ -82,7 +90,8 @@ public final class CacheNames {
     public static final Set<String> DISTRIBUTED_CACHES = Set.of(
             PERMISSIONS,
             USER_PERMISSIONS,
-            USER_ALL_PERMISSIONS);
+            USER_ALL_PERMISSIONS,
+            USER_ROLES);
 
     /**
      * Caches that can be local (Caffeine).
@@ -107,7 +116,7 @@ public final class CacheNames {
      * @return set of all cache names
      */
     public static Set<String> all() {
-        return Set.of(PERMISSIONS, USER_PERMISSIONS, USER_ALL_PERMISSIONS, TENANT_CONFIG);
+        return Set.of(PERMISSIONS, USER_PERMISSIONS, USER_ALL_PERMISSIONS, USER_ROLES, TENANT_CONFIG);
     }
 
     private CacheNames() {

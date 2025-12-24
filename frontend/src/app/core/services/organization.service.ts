@@ -1,7 +1,7 @@
-import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
-import { environment } from '../../../environments/environment';
+import {Injectable} from '@angular/core';
+import {HttpClient} from '@angular/common/http';
+import {Observable} from 'rxjs';
+import {environment} from '../../../environments/environment';
 
 export interface OrganizationProfile {
     tenantId: string;
@@ -14,6 +14,9 @@ export interface OrganizationProfile {
     slaTier: string;
     tenantType: string;
     maxUsers: number;
+    ownerEmail?: string;
+    subscriptionStatus?: string;
+    trialEndsAt?: string;
 }
 
 export interface UpdateOrganizationRequest {

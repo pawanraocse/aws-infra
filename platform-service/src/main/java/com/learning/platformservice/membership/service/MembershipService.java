@@ -167,6 +167,21 @@ public class MembershipService {
     }
 
     /**
+     * Count active memberships for a user.
+     * Used to determine if Cognito user should be deleted when an account is
+     * removed.
+     *
+     * @param email User's email
+     * @return Count of active memberships (ACTIVE status only)
+     */
+    @Transactional(readOnly = true)
+    public long countActiveByEmail(String email) {
+        long count = membershipRepository.countActiveByEmail(email);
+        log.debug("Found {} active memberships for email={}", count, maskEmail(email));
+        return count;
+    }
+
+    /**
      * Remove all memberships for a tenant (when tenant is deleted).
      */
     @Transactional

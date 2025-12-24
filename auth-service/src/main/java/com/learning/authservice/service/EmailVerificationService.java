@@ -1,14 +1,25 @@
 package com.learning.authservice.service;
 
-import org.springframework.stereotype.Service;
-
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
-import software.amazon.awssdk.services.cognitoidentityprovider.model.*;
-
 import com.learning.authservice.config.CognitoProperties;
 import com.learning.authservice.exception.AuthSignupException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.CodeMismatchException;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.CognitoIdentityProviderException;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.ConfirmSignUpRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.ExpiredCodeException;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.InvalidParameterException;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.LimitExceededException;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.ResendConfirmationCodeRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.ResendConfirmationCodeResponse;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UserNotFoundException;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 /**
  * Service for handling email verification operations.
@@ -30,12 +41,17 @@ public class EmailVerificationService {
      */
     public void resendVerificationCode(String email) {
         try {
-            ResendConfirmationCodeRequest request = ResendConfirmationCodeRequest.builder()
-                    .clientId(cognitoProperties.getClientId())
-                    .username(email)
-                    .build();
+            String secretHash = calculateSecretHash(email);// Required for app clients with secrets
 
-            ResendConfirmationCodeResponse response = cognitoClient.resendConfirmationCode(request);
+            ResendConfirmationCodeRequest.Builder requestBuilder = ResendConfirmationCodeRequest.builder()
+                    .clientId(cognitoProperties.getClientId())
+                    .username(email);
+
+            if (secretHash != null) {
+                requestBuilder.secretHash(secretHash);
+            }
+
+            ResendConfirmationCodeResponse response = cognitoClient.resendConfirmationCode(requestBuilder.build());
 
             log.info("Verification code resent to: {} via {}", email,
                     response.codeDeliveryDetails().deliveryMedium());
@@ -69,13 +85,18 @@ public class EmailVerificationService {
      */
     public void confirmSignup(String email, String code) {
         try {
-            ConfirmSignUpRequest request = ConfirmSignUpRequest.builder()
+            String secretHash = calculateSecretHash(email);
+
+            ConfirmSignUpRequest.Builder requestBuilder = ConfirmSignUpRequest.builder()
                     .clientId(cognitoProperties.getClientId())
                     .username(email)
-                    .confirmationCode(code)
-                    .build();
+                    .confirmationCode(code);
 
-            cognitoClient.confirmSignUp(request);
+            if (secretHash != null) {
+                requestBuilder.secretHash(secretHash);
+            }
+
+            cognitoClient.confirmSignUp(requestBuilder.build());
 
             log.info("User confirmed successfully: {}", email);
 
@@ -96,6 +117,30 @@ public class EmailVerificationService {
             log.error("Failed to confirm signup: {}", e.getMessage());
             throw new AuthSignupException("CONFIRM_FAILED",
                     "Failed to confirm signup", e);
+        }
+    }
+
+    /**
+     * Calculate SECRET_HASH for Cognito API calls.
+     * Required when app client has a secret configured.
+     */
+    private String calculateSecretHash(String username) {
+        String clientSecret = cognitoProperties.getClientSecret();
+        if (clientSecret == null || clientSecret.isBlank()) {
+            return null;
+        }
+
+        try {
+            String message = username + cognitoProperties.getClientId();
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec secretKey = new SecretKeySpec(
+                    clientSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(secretKey);
+            byte[] hmac = mac.doFinal(message.getBytes(StandardCharsets.UTF_8));
+            return Base64.getEncoder().encodeToString(hmac);
+        } catch (Exception e) {
+            log.error("Failed to calculate secret hash: {}", e.getMessage());
+            throw new RuntimeException("Failed to calculate secret hash", e);
         }
     }
 }

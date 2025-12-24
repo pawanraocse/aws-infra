@@ -37,6 +37,12 @@ spring:
     table: flyway_schema_history_backend  # distinct from auth-service
     validate-on-migrate: true
 
+  # Redis configuration for Redisson (caching)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
 server:
   port: ${SERVER_PORT:8082}
   servlet:

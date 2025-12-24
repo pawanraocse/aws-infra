@@ -14,12 +14,24 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminDelete
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminDeleteUserResponse;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.CognitoIdentityProviderException;
 
+import java.util.Map;
+
 /**
  * Service for handling account deletion.
  * 
+ * <p>
  * Flow:
- * 1. Call platform-service to delete tenant (DB drop, audit record)
- * 2. Delete user from Cognito
+ * </p>
+ * <ol>
+ * <li>Call platform-service to delete tenant (DB drop, audit record)</li>
+ * <li>Check if user has other active memberships</li>
+ * <li>Only delete user from Cognito if this was their LAST membership</li>
+ * </ol>
+ * 
+ * <p>
+ * <b>IMPORTANT:</b> This prevents the bug where deleting one account
+ * would break all other accounts for the same email.
+ * </p>
  */
 @Service
 @RequiredArgsConstructor
@@ -36,6 +48,11 @@ public class AccountDeletionService {
     /**
      * Delete user's account and tenant.
      * 
+     * <p>
+     * Only deletes the Cognito user if this was their last active membership.
+     * Otherwise, the user keeps their Cognito account for other tenants.
+     * </p>
+     * 
      * @param tenantId  Tenant to delete (from JWT)
      * @param userEmail User's email
      * @throws RuntimeException if deletion fails
@@ -43,13 +60,67 @@ public class AccountDeletionService {
     public void deleteAccount(String tenantId, String userEmail) {
         log.info("Deleting account: tenantId={}, userEmail={}", tenantId, userEmail);
 
-        // 1. Delete tenant via platform-service
+        // 1. Delete tenant via platform-service (this also marks memberships as
+        // REMOVED)
         deleteTenantViaPlatformService(tenantId, userEmail);
 
-        // 2. Delete user from Cognito
-        deleteCognitoUser(userEmail);
+        // 2. Check if user has OTHER active memberships remaining
+        long remainingMemberships = countRemainingMemberships(userEmail);
 
-        log.info("Account deletion completed: tenantId={}, userEmail={}", tenantId, userEmail);
+        // 3. Only delete Cognito user if this was their LAST membership
+        if (remainingMemberships == 0) {
+            log.info("Last membership deleted, removing Cognito user: {}", userEmail);
+            deleteCognitoUser(userEmail);
+        } else {
+            log.info("User still has {} other active membership(s), keeping Cognito user: {}",
+                    remainingMemberships, userEmail);
+        }
+
+        log.info("Account deletion completed: tenantId={}, userEmail={}, cognitoDeleted={}",
+                tenantId, userEmail, remainingMemberships == 0);
+    }
+
+    /**
+     * Query platform-service to count remaining active memberships.
+     * 
+     * @param userEmail User's email
+     * @return Count of active memberships (0 if last one was just deleted)
+     */
+    private long countRemainingMemberships(String userEmail) {
+        log.debug("Checking remaining memberships for: {}", userEmail);
+
+        try {
+            WebClient webClient = webClientBuilder.baseUrl(platformServiceUrl).build();
+
+            @SuppressWarnings("unchecked")
+            Map<String, Long> response = webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/internal/memberships/count-active")
+                            .queryParam("email", userEmail)
+                            .build())
+                    .retrieve()
+                    .onStatus(HttpStatusCode::isError, clientResponse -> {
+                        log.error("Failed to count memberships: status={}", clientResponse.statusCode());
+                        return clientResponse.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new RuntimeException(
+                                        "Failed to count memberships: " + body)));
+                    })
+                    .bodyToMono(Map.class)
+                    .block();
+
+            if (response != null && response.containsKey("count")) {
+                // Handle both Integer and Long since JSON might deserialize as Integer
+                Number count = response.get("count");
+                return count != null ? count.longValue() : 0L;
+            }
+            return 0L;
+
+        } catch (Exception e) {
+            log.error("Failed to count memberships for {}: {}", userEmail, e.getMessage(), e);
+            // Fail-safe: don't delete Cognito user if we can't verify count
+            log.warn("Fail-safe: Not deleting Cognito user due to membership count error");
+            throw new RuntimeException("Cannot verify remaining memberships: " + e.getMessage(), e);
+        }
     }
 
     private void deleteTenantViaPlatformService(String tenantId, String deletedBy) {

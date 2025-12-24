@@ -12,7 +12,14 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
@@ -79,5 +86,16 @@ public class TenantInternalController {
                                                 "tenantId", tenant.getId(),
                                                 "status", tenant.getStatus() != null ? tenant.getStatus() : "UNKNOWN")))
                                 .orElse(ResponseEntity.notFound().build());
+        }
+
+        @Operation(summary = "Check if tenant exists (internal)", description = "Used during signup to prevent tenant ID collisions. Returns true if tenant ID is already taken.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Existence check result")
+        })
+        @GetMapping("/{tenantId}/exists")
+        public ResponseEntity<Boolean> checkTenantExists(@PathVariable String tenantId) {
+                log.debug("Internal tenant existence check: tenantId={}", tenantId);
+                boolean exists = tenantRepository.existsById(tenantId);
+                return ResponseEntity.ok(exists);
         }
 }

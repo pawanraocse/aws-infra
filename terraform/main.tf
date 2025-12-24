@@ -319,11 +319,20 @@ resource "aws_cognito_managed_login_branding" "main" {
 }
 
 # User Pool Client - Native Application (confidential client with secret)
+# Used by backend services for server-side authentication
 resource "aws_cognito_user_pool_client" "native" {
   name         = "${var.project_name}-${var.environment}-native-client"
   user_pool_id = aws_cognito_user_pool.main.id
 
   generate_secret = true
+
+  # Auth flows for server-side authentication
+  explicit_auth_flows = [
+    "ALLOW_ADMIN_USER_PASSWORD_AUTH", # Server-side admin auth (AdminInitiateAuth API)
+    "ALLOW_CUSTOM_AUTH",              # Custom authentication flow
+    "ALLOW_USER_SRP_AUTH",            # Secure Remote Password (recommended)
+    "ALLOW_REFRESH_TOKEN_AUTH"        # Refresh token flow
+  ]
 
   # OAuth configuration
   allowed_oauth_flows_user_pool_client = true

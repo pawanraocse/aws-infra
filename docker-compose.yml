@@ -118,6 +118,8 @@ services:
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
       MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
       server.port: 8082
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     networks:
       - awsinfra-net
     ports:
@@ -159,6 +161,8 @@ services:
       EUREKA_INSTANCE_HOSTNAME: auth-service
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
       MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     volumes:
       - ~/.aws:/root/.aws:ro
     networks:
@@ -194,6 +198,8 @@ services:
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
       EUREKA_INSTANCE_HOSTNAME: platform-service
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     networks:
       - awsinfra-net
     ports:

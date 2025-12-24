@@ -137,4 +137,24 @@ public class TenantMembershipInternalController {
         membershipService.updateCognitoId(email, cognitoUserId);
         return ResponseEntity.ok().build();
     }
+
+    /**
+     * Count active memberships for a user.
+     * Used to determine if Cognito user should be deleted when an account is
+     * removed.
+     * 
+     * If count > 0, user has other active memberships and Cognito user should NOT
+     * be deleted.
+     *
+     * @param email User's email to check
+     * @return Count of active memberships
+     */
+    @GetMapping("/count-active")
+    public ResponseEntity<Map<String, Long>> countActiveMemberships(
+            @RequestParam @NotBlank @Email String email) {
+
+        log.debug("Internal API: countActiveMemberships for email");
+        long count = membershipService.countActiveByEmail(email);
+        return ResponseEntity.ok(Map.of("count", count));
+    }
 }

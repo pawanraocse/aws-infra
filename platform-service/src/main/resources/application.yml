@@ -38,6 +38,12 @@ spring:
     schemas: public
     table: flyway_platform_service
 
+  # Redis configuration for Redisson (caching)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
   security:
     oauth2:
       resourceserver:

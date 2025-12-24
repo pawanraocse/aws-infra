@@ -1,7 +1,7 @@
 package com.learning.common.infra.security;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Profile;
@@ -24,7 +24,6 @@ import java.util.Optional;
  */
 @Service
 @Profile("!test")
-@RequiredArgsConstructor
 @Slf4j
 public class RemoteRoleLookupService implements RoleLookupService {
 
@@ -35,6 +34,11 @@ public class RemoteRoleLookupService implements RoleLookupService {
 
     @Value("${auth.service.url:http://auth-service:8081}")
     private String authServiceUrl;
+
+    public RemoteRoleLookupService(
+            @Qualifier("internalWebClientBuilder") WebClient.Builder webClientBuilder) {
+        this.webClientBuilder = webClientBuilder;
+    }
 
     @Override
     @Cacheable(value = CACHE_NAME, key = "#userId + ':' + #tenantId", unless = "#result.isEmpty()")

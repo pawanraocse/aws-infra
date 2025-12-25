@@ -1,14 +1,14 @@
-import { Component, OnInit, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ButtonModule } from 'primeng/button';
-import { InputTextModule } from 'primeng/inputtext';
-import { PasswordModule } from 'primeng/password';
-import { MessageModule } from 'primeng/message';
-import { AuthService } from '../../core/auth.service';
-import { HttpClient } from '@angular/common/http';
-import { environment } from '../../../environments/environment';
+import {ChangeDetectorRef, Component, inject, OnInit} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {ActivatedRoute, Router, RouterModule} from '@angular/router';
+import {FormBuilder, ReactiveFormsModule, Validators} from '@angular/forms';
+import {ButtonModule} from 'primeng/button';
+import {InputTextModule} from 'primeng/inputtext';
+import {PasswordModule} from 'primeng/password';
+import {MessageModule} from 'primeng/message';
+import {AuthService} from '../../core/auth.service';
+import {HttpClient} from '@angular/common/http';
+import {environment} from '../../../environments/environment';
 
 @Component({
   selector: 'app-join-organization',
@@ -47,23 +47,23 @@ import { environment } from '../../../environments/environment';
 
           <div class="mb-3">
             <label for="password" class="block text-900 font-medium mb-2">Password</label>
-            <p-password 
-              id="password" 
-              formControlName="password" 
-              [toggleMask]="true" 
-              styleClass="w-full" 
+            <p-password
+              id="password"
+              formControlName="password"
+              [toggleMask]="true"
+              styleClass="w-full"
               inputStyleClass="w-full">
             </p-password>
           </div>
 
           <div class="mb-3">
             <label for="confirmPassword" class="block text-900 font-medium mb-2">Confirm Password</label>
-            <p-password 
-              id="confirmPassword" 
-              formControlName="confirmPassword" 
-              [toggleMask]="true" 
+            <p-password
+              id="confirmPassword"
+              formControlName="confirmPassword"
+              [toggleMask]="true"
               [feedback]="false"
-              styleClass="w-full" 
+              styleClass="w-full"
               inputStyleClass="w-full">
             </p-password>
             <small *ngIf="joinForm.errors?.['mismatch'] && joinForm.get('confirmPassword')?.touched" class="p-error block mt-1">
@@ -72,7 +72,7 @@ import { environment } from '../../../environments/environment';
           </div>
 
           <button pButton pRipple label="Create Account & Join" class="w-full" [loading]="submitting" [disabled]="joinForm.invalid"></button>
-          
+
           <div class="mt-4 text-center">
             <span class="text-600">Already have an account? </span>
             <a routerLink="/auth/login" [queryParams]="{ token: token }" class="font-medium no-underline text-blue-500 cursor-pointer">Log in to accept</a>
@@ -95,8 +95,10 @@ export class JoinOrganizationComponent implements OnInit {
   private fb = inject(FormBuilder);
   private http = inject(HttpClient);
   private authService = inject(AuthService);
+  private cdr = inject(ChangeDetectorRef);
 
   token = '';
+  tenant = '';
   loading = true;
   isValidToken = false;
   submitting = false;
@@ -110,7 +112,8 @@ export class JoinOrganizationComponent implements OnInit {
 
   ngOnInit() {
     this.token = this.route.snapshot.queryParamMap.get('token') || '';
-    if (!this.token) {
+    this.tenant = this.route.snapshot.queryParamMap.get('tenant') || '';
+    if (!this.token || !this.tenant) {
       this.loading = false;
       this.isValidToken = false;
       return;
@@ -119,15 +122,17 @@ export class JoinOrganizationComponent implements OnInit {
   }
 
   validateToken() {
-    this.http.get(`${environment.apiUrl}/auth/api/v1/invitations/validate?token=${this.token}`)
+    this.http.get(`${environment.apiUrl}/auth/api/v1/invitations/validate?token=${this.token}&tenant=${this.tenant}`)
       .subscribe({
         next: () => {
           this.loading = false;
           this.isValidToken = true;
+          this.cdr.markForCheck();
         },
         error: () => {
           this.loading = false;
           this.isValidToken = false;
+          this.cdr.markForCheck();
         }
       });
   }
@@ -141,6 +146,7 @@ export class JoinOrganizationComponent implements OnInit {
 
       this.http.post(`${environment.apiUrl}/auth/api/v1/invitations/accept`, {
         token: this.token,
+        tenant: this.tenant,
         name,
         password
       }).subscribe({

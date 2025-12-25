@@ -3,11 +3,22 @@ package com.learning.authservice.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.ses.SesClient;
-import software.amazon.awssdk.services.ses.model.*;
+import software.amazon.awssdk.services.ses.model.Body;
+import software.amazon.awssdk.services.ses.model.Content;
+import software.amazon.awssdk.services.ses.model.Destination;
+import software.amazon.awssdk.services.ses.model.Message;
+import software.amazon.awssdk.services.ses.model.SendEmailRequest;
+import software.amazon.awssdk.services.ses.model.SesException;
 
+/**
+ * SES-based email service for production use.
+ * Only active in 'prod' profile. Uses DevEmailService in dev/test.
+ */
 @Service
+@Profile("prod")
 @RequiredArgsConstructor
 @Slf4j
 public class SesEmailService implements EmailService {
@@ -45,10 +56,10 @@ public class SesEmailService implements EmailService {
                     .build();
 
             sesClient.sendEmail(request);
-            log.info("Invitation email sent to {}", to);
+            log.info("Invitation email sent via SES to {} from {}", to, fromEmail);
         } catch (SesException e) {
-            log.error("Failed to send invitation email to {}", to, e);
-            throw new RuntimeException("Failed to send email", e);
+            log.error("Failed to send invitation email to {} via SES: {}", to, e.awsErrorDetails().errorMessage(), e);
+            throw new RuntimeException("Failed to send email via SES", e);
         }
     }
 }

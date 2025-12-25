@@ -3,12 +3,15 @@ package com.learning.authservice.invitation.service;
 import com.learning.authservice.authorization.domain.Role;
 import com.learning.authservice.authorization.repository.RoleRepository;
 import com.learning.authservice.authorization.repository.UserRoleRepository;
+import com.learning.authservice.authorization.service.UserRoleService;
+import com.learning.authservice.config.CognitoProperties;
 import com.learning.authservice.invitation.domain.Invitation;
 import com.learning.authservice.invitation.domain.InvitationStatus;
 import com.learning.authservice.invitation.dto.InvitationRequest;
 import com.learning.authservice.invitation.dto.InvitationResponse;
 import com.learning.authservice.invitation.repository.InvitationRepository;
 import com.learning.authservice.service.EmailService;
+import com.learning.authservice.signup.CognitoUserRegistrar;
 import com.learning.common.infra.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +40,10 @@ public class InvitationServiceImpl implements InvitationService {
     private final RoleRepository roleRepository;
     private final EmailService emailService;
     private final UserRoleRepository userRoleRepository;
+    private final CognitoUserRegistrar cognitoUserRegistrar;
+    private final UserRoleService userRoleService;
+    private final CognitoProperties cognitoProperties;
+    private final software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient cognitoClient;
 
     @Value("${app.invitation.expiration-hours:48}")
     private int expirationHours;
@@ -58,12 +65,11 @@ public class InvitationServiceImpl implements InvitationService {
             throw new IllegalArgumentException("Cannot invite users with PLATFORM scope roles");
         }
 
-        // 2. Check for existing pending invitation
-        invitationRepository.findByEmail(request.getEmail())
+        // 2. Check for existing pending invitation (use findByEmailAndStatus to avoid
+        // duplicate result issues)
+        invitationRepository.findByEmailAndStatus(request.getEmail(), InvitationStatus.PENDING)
                 .ifPresent(existing -> {
-                    if (existing.getStatus() == InvitationStatus.PENDING) {
-                        throw new IllegalStateException("Active invitation already exists for this email");
-                    }
+                    throw new IllegalStateException("Active invitation already exists for this email");
                 });
 
         // 3. Generate Token
@@ -82,7 +88,7 @@ public class InvitationServiceImpl implements InvitationService {
         invitation = invitationRepository.save(invitation);
 
         // 5. Send Email
-        String inviteLink = frontendUrl + "/auth/join?token=" + token;
+        String inviteLink = buildInvitationLink(token, tenantId);
         emailService.sendInvitationEmail(request.getEmail(), inviteLink, tenantId);
 
         return mapToResponse(invitation);
@@ -127,8 +133,17 @@ public class InvitationServiceImpl implements InvitationService {
             invitationRepository.save(invitation);
         }
 
-        String inviteLink = frontendUrl + "/auth/join?token=" + invitation.getToken();
+        String inviteLink = buildInvitationLink(invitation.getToken(), tenantId);
         emailService.sendInvitationEmail(invitation.getEmail(), inviteLink, tenantId);
+    }
+
+    /**
+     * Builds invitation link with Angular hash routing and tenant parameter.
+     * Uses /#/ for Angular hash-based routing.
+     * Includes tenant param for validation endpoint to know which DB to query.
+     */
+    private String buildInvitationLink(String token, String tenantId) {
+        return frontendUrl + "/#/auth/join?token=" + token + "&tenant=" + tenantId;
     }
 
     @Override
@@ -154,11 +169,117 @@ public class InvitationServiceImpl implements InvitationService {
     @Transactional
     public void acceptInvitation(String token, String password, String name) {
         Invitation invitation = validateInvitation(token);
+        String tenantId = TenantContext.getCurrentTenant();
 
-        log.info("Accepting invitation for email={}", invitation.getEmail());
+        log.info("Accepting invitation for email={} tenant={} role={}",
+                invitation.getEmail(), tenantId, invitation.getRoleId());
 
+        // 1. Create Cognito user (or skip if exists)
+        CognitoUserRegistrar.RegistrationResult result = cognitoUserRegistrar.registerIfNotExists(
+                invitation.getEmail(),
+                password,
+                name,
+                tenantId,
+                invitation.getRoleId());
+
+        // 2. Auto-confirm the user (invitation link proves email ownership)
+        if (result == CognitoUserRegistrar.RegistrationResult.CREATED) {
+            autoConfirmUser(invitation.getEmail());
+        }
+
+        // 3. Get user's sub from Cognito and assign role in tenant DB
+        String userId = getUserSubFromCognito(invitation.getEmail());
+        userRoleService.assignRole(userId, invitation.getRoleId(), "invitation");
+        log.info("Role assigned: userId={} role={}", userId, invitation.getRoleId());
+
+        // 4. Add user to platform DB for workspace discovery
+        addPlatformMembership(invitation.getEmail(), userId, tenantId, invitation.getRoleId(),
+                invitation.getInvitedBy());
+
+        // 5. Mark invitation as accepted
         invitation.setStatus(InvitationStatus.ACCEPTED);
         invitationRepository.save(invitation);
+
+        log.info("Invitation accepted: email={} cognitoResult={}", invitation.getEmail(), result);
+    }
+
+    /**
+     * Add user to platform DB so they can discover this workspace during login.
+     */
+    private void addPlatformMembership(String email, String cognitoUserId, String tenantId, String roleId,
+            String invitedBy) {
+        try {
+            String platformServiceUrl = "http://platform-service:8083/platform/internal/memberships";
+
+            var requestBody = java.util.Map.of(
+                    "email", email,
+                    "cognitoUserId", cognitoUserId,
+                    "tenantId", tenantId,
+                    "roleHint", roleId,
+                    "isOwner", false,
+                    "isDefault", false,
+                    "invitedBy", invitedBy != null ? invitedBy : "");
+
+            var restClient = org.springframework.web.client.RestClient.create();
+            restClient.post()
+                    .uri(platformServiceUrl)
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .body(requestBody)
+                    .retrieve()
+                    .toBodilessEntity();
+
+            log.info("Platform membership created: email={} tenantId={}", email, tenantId);
+        } catch (Exception e) {
+            log.error("Failed to create platform membership: email={} tenantId={} error={}",
+                    email, tenantId, e.getMessage());
+            // Don't fail the invitation - admin can fix manually
+        }
+    }
+
+    /**
+     * Auto-confirm a user in Cognito since invitation link proves email ownership.
+     */
+    private void autoConfirmUser(String email) {
+        try {
+            var confirmRequest = software.amazon.awssdk.services.cognitoidentityprovider.model.AdminConfirmSignUpRequest
+                    .builder()
+                    .userPoolId(cognitoProperties.getUserPoolId())
+                    .username(email)
+                    .build();
+            cognitoClient.adminConfirmSignUp(confirmRequest);
+
+            // Also verify email attribute
+            var updateRequest = software.amazon.awssdk.services.cognitoidentityprovider.model.AdminUpdateUserAttributesRequest
+                    .builder()
+                    .userPoolId(cognitoProperties.getUserPoolId())
+                    .username(email)
+                    .userAttributes(
+                            software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType.builder()
+                                    .name("email_verified")
+                                    .value("true")
+                                    .build())
+                    .build();
+            cognitoClient.adminUpdateUserAttributes(updateRequest);
+
+            log.info("User auto-confirmed and email verified: {}", email);
+        } catch (Exception e) {
+            log.error("Failed to auto-confirm user: {} error={}", email, e.getMessage());
+            throw new RuntimeException("Failed to confirm user: " + e.getMessage());
+        }
+    }
+
+    private String getUserSubFromCognito(String email) {
+        var getUserRequest = software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserRequest.builder()
+                .userPoolId(cognitoProperties.getUserPoolId())
+                .username(email)
+                .build();
+
+        var userResponse = cognitoClient.adminGetUser(getUserRequest);
+        return userResponse.userAttributes().stream()
+                .filter(attr -> "sub".equals(attr.name()))
+                .map(software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType::value)
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Failed to get user sub from Cognito"));
     }
 
     private String generateSecureToken() {

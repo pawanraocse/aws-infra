@@ -1,11 +1,11 @@
-import { Component, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { ButtonModule } from 'primeng/button';
-import { InputTextModule } from 'primeng/inputtext';
-import { SelectModule } from 'primeng/select';
-import { DynamicDialogRef } from 'primeng/dynamicdialog';
-import { InvitationService } from '../../../core/services/invitation.service';
+import {Component, inject, signal} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {FormBuilder, ReactiveFormsModule, Validators} from '@angular/forms';
+import {ButtonModule} from 'primeng/button';
+import {InputTextModule} from 'primeng/inputtext';
+import {SelectModule} from 'primeng/select';
+import {DynamicDialogRef} from 'primeng/dynamicdialog';
+import {InvitationService} from '../../../core/services/invitation.service';
 
 @Component({
   selector: 'app-invite-user-dialog',
@@ -23,13 +23,14 @@ import { InvitationService } from '../../../core/services/invitation.service';
 
       <div class="flex flex-column gap-2">
         <label htmlFor="role">Role</label>
-        <p-select 
-          id="role" 
-          [options]="roles" 
-          formControlName="roleId" 
-          optionLabel="name" 
-          optionValue="id" 
+        <p-select
+          id="role"
+          [options]="roles"
+          formControlName="roleId"
+          optionLabel="name"
+          optionValue="id"
           placeholder="Select a role"
+          appendTo="body"
           [style]="{'width':'100%'}">
         </p-select>
       </div>
@@ -38,7 +39,7 @@ import { InvitationService } from '../../../core/services/invitation.service';
         <p-button label="Cancel" styleClass="p-button-text" (onClick)="close()"></p-button>
         <p-button label="Send Invitation" type="submit" [loading]="loading()" [disabled]="inviteForm.invalid"></p-button>
       </div>
-      
+
       <div *ngIf="error()" class="p-error mt-2">{{ error() }}</div>
     </form>
   `
@@ -51,10 +52,13 @@ export class InviteUserDialogComponent {
   loading = signal(false);
   error = signal('');
 
-  // TODO: Fetch roles from backend
+  // Roles matching database seed data (V1__authorization_schema.sql)
+  // TODO: Fetch roles from backend API for dynamic role management
   roles = [
-    { name: 'Admin', id: 'admin' },
-    { name: 'User', id: 'user' }
+    { name: 'Admin', id: 'admin', description: 'Full tenant access' },
+    { name: 'Editor', id: 'editor', description: 'Read, edit, delete, share' },
+    { name: 'Viewer', id: 'viewer', description: 'Read-only access' },
+    { name: 'Guest', id: 'guest', description: 'Limited access' }
   ];
 
   inviteForm = this.fb.group({

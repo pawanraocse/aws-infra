@@ -116,35 +116,28 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   # ==========================================================================
-  # Email Configuration Options
+  # Email Configuration
   # ==========================================================================
-  # Option 1: COGNITO_DEFAULT (Current - Free, good for dev/testing)
-  #   - Uses Cognito's shared email service
-  #   - Sends from: no-reply@verificationemail.com
-  #   - Limit: ~50 emails/day
-  #   - Cost: FREE
+  # Dynamically switches between:
+  # - COGNITO_DEFAULT: Free, ~50 emails/day, from no-reply@verificationemail.com
+  # - DEVELOPER (SES): 62,000/month free, custom from address, requires verification
   #
-  # Option 2: SES with verified identity (Production recommended)
-  #   - Uses your own SES-verified domain/email
-  #   - Sends from: your custom address (e.g., noreply@yourcompany.com)
-  #   - Limit: Based on SES limits (62,000/month free from EC2/Lambda)
-  #   - Cost: FREE within limits, then $0.10/1000 emails
-  #   - Requires: SES identity verification + exit sandbox for production
+  # To enable SES:
+  # 1. Set enable_ses_email = true in terraform.tfvars
+  # 2. Verify ses_from_email in AWS SES console first
+  # 3. Request SES Production Access to send to any email
   # ==========================================================================
 
-  # Current: Using Cognito Default (free tier, good for development)
   email_configuration {
-    email_sending_account = "COGNITO_DEFAULT"
-  }
+    email_sending_account = var.enable_ses_email ? "DEVELOPER" : "COGNITO_DEFAULT"
 
-  # PRODUCTION: Uncomment below and comment out COGNITO_DEFAULT above
-  # First, verify your email/domain in SES and create the identity resource
-  # email_configuration {
-  #   email_sending_account  = "DEVELOPER"
-  #   source_arn             = "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/noreply@yourcompany.com"
-  #   from_email_address     = "Your App <noreply@yourcompany.com>"
-  #   reply_to_email_address = "support@yourcompany.com"
-  # }
+    # SES configuration (only applied when enable_ses_email = true)
+    source_arn = var.enable_ses_email ? "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.ses_from_email}" : null
+
+    from_email_address = var.enable_ses_email ? "${var.project_display_name} <${var.ses_from_email}>" : null
+
+    reply_to_email_address = var.enable_ses_email ? var.ses_reply_to_email : null
+  }
 
   # MFA configuration: keep SOFTWARE token (free). SMS MFA is commented out to avoid SMS charges.
   mfa_configuration = "OPTIONAL"
@@ -637,6 +630,42 @@ resource "aws_ssm_parameter" "aws_region" {
   value       = var.aws_region
   tags = {
     Name        = "${var.project_name}-${var.environment}-aws-region"
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+  lifecycle {
+    prevent_destroy = false
+  }
+}
+
+# ==========================================================================
+# SES Configuration SSM Parameters
+# ==========================================================================
+
+resource "aws_ssm_parameter" "ses_from_email" {
+  name        = "/${var.project_name}/${var.environment}/ses/from_email"
+  description = "SES From Email Address for sending emails"
+  type        = "String"
+  value       = var.ses_from_email
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-ses-from-email"
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+  lifecycle {
+    prevent_destroy = false
+  }
+}
+
+resource "aws_ssm_parameter" "ses_enabled" {
+  name        = "/${var.project_name}/${var.environment}/ses/enabled"
+  description = "Whether SES is enabled for email sending"
+  type        = "String"
+  value       = var.enable_ses_email ? "true" : "false"
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-ses-enabled"
     Project     = var.project_name
     Environment = var.environment
     ManagedBy   = "Terraform"

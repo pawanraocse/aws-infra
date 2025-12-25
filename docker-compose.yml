@@ -147,6 +147,8 @@ services:
       - .env
     environment:
       SPRING_APPLICATION_NAME: auth-service
+      # Enable prod profile for real SES email sending (remove for dev mode with mock emails)
+      SPRING_PROFILES_ACTIVE: ${AUTH_PROFILE:-}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/awsinfra
       server.port: 8081
       DB_HOST: postgres
@@ -163,6 +165,9 @@ services:
       MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # SES Configuration (only used when SPRING_PROFILES_ACTIVE=prod)
+      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-noreply@example.com}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
     volumes:
       - ~/.aws:/root/.aws:ro
     networks:

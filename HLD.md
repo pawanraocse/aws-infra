@@ -1,8 +1,8 @@
-# High-Level Design: Multi-Tenant SaaS Template System
+# High-Level Design: SaaS Foundation & Project Template
 
-**Version:** 6.2  
-**Last Updated:** 2025-12-22  
-**Purpose:** Production-ready, reusable multi-tenant architecture template with RBAC authorization and complete database-per-tenant isolation
+**Version:** 7.0 (The SaaS Factory)
+**Last Updated:** 2024-12-24
+**Core Mission:** A production-ready, ultra-decoupled foundation for launching multi-tenant SaaS applications in days, not months.
 
 
 ---
@@ -11,13 +11,12 @@
 
 This is a **template system** for building multi-tenant SaaS applications. It provides all the supporting infrastructure and services you need - just plug in your business logic.
 
-### Key Philosophy
-- **Backend-Service is a Mimic** - Replace it with your real service (work-service, inventory-service, etc.)
-- **Auth, Platform, Gateway are Reusable** - These supporting services work for any domain
-- **Angular Frontend Included** - Pre-built UI with AWS Amplify for client-side auth, ready to customize
-- **B2B & B2C Support** - Handle both individual users and organizations with tenant isolation
-- **Complete Multi-Tenancy** - Database-per-tenant isolation, automated provisioning, AWS Cognito integration
-- **Production-Ready** - Security, observability, IaC with Terraform included
+### Key Philosophy: The "SaaS Factory"
+- **Strict Decoupling:** Core infrastructure (Auth, Platform, Gateway) is completely separate from business logic.
+- **Microservice Mimicry:** The `backend-service` is purely a placeholder/mimic to be swapped for any domain (ImageKit, DAM, CRM, etc.).
+- **Infrastructure as Code (IaC):** Modular Terraform that can be cloned to spawn isolated environments for new startups.
+- **Multi-Tenant First:** Every component is designed for 100% data isolation and per-tenant scalability.
+- **Developer-Centric:** Focus on the "Boring" 80% (Auth, Billing, Orgs) so you can focus on the "Earning" 20%.
 
 ---
 

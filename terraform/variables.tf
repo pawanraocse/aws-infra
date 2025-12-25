@@ -113,3 +113,36 @@ variable "enable_ui_customization" {
   type        = bool
   default     = false
 }
+
+# ==========================================================================
+# AWS SES Email Configuration
+# ==========================================================================
+# To enable SES for Cognito emails:
+# 1. Set enable_ses_email = true
+# 2. Verify ses_from_email in SES first (or domain)
+# 3. Request SES Production Access for sending to any email
+# ==========================================================================
+
+variable "enable_ses_email" {
+  description = "Enable SES for Cognito email sending instead of Cognito default. Recommended for production."
+  type        = bool
+  default     = false
+}
+
+variable "ses_from_email" {
+  description = "From email address for Cognito emails (must be verified in SES)"
+  type        = string
+  default     = "noreply@example.com"
+}
+
+variable "ses_reply_to_email" {
+  description = "Reply-to email address for Cognito emails (optional)"
+  type        = string
+  default     = null
+}
+
+variable "project_display_name" {
+  description = "Display name for email sender (e.g., 'Your App Name' appears as 'Your App Name <noreply@...>')"
+  type        = string
+  default     = "Cloud Infra"
+}

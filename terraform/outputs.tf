@@ -204,3 +204,28 @@ output "spring_boot_config" {
   EOT
   sensitive   = true
 }
+
+# ============================================================================
+# SES Configuration
+# ============================================================================
+
+output "ses_email_sending_mode" {
+  description = "Email sending mode: DEVELOPER (SES) or COGNITO_DEFAULT"
+  value       = var.enable_ses_email ? "DEVELOPER (SES)" : "COGNITO_DEFAULT"
+}
+
+output "ses_from_email" {
+  description = "From email address for SES (if enabled)"
+  value       = var.enable_ses_email ? var.ses_from_email : "no-reply@verificationemail.com (Cognito default)"
+}
+
+output "ses_ssm_from_email_path" {
+  description = "SSM Parameter path for SES From Email"
+  value       = aws_ssm_parameter.ses_from_email.name
+}
+
+output "ses_ssm_enabled_path" {
+  description = "SSM Parameter path for SES Enabled flag"
+  value       = aws_ssm_parameter.ses_enabled.name
+}
+

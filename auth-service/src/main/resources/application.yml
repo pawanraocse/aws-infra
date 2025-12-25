@@ -73,6 +73,13 @@ cognito:
   region: ${AWS_REGION:us-east-1}
   logout-redirect-url: ${COGNITO_LOGOUT_REDIRECT_URL:http://localhost:8081/auth/logged-out}
 
+# AWS Configuration
+aws:
+  region: ${AWS_REGION:us-east-1}
+  ses:
+    # From email address for invitation emails (must be verified in SES)
+    from-email: ${SES_FROM_EMAIL:noreply@example.com}
+
 server:
   port: ${SERVER_PORT:8081}
   servlet:

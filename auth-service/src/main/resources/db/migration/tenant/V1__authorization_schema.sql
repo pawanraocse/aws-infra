@@ -139,7 +139,93 @@ INSERT INTO roles (id, name, description, scope, access_level) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================================
--- 8. AUDIT TRIGGER
+-- 8. PERMISSIONS TABLE (Fine-grained permissions)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS permissions (
+    id VARCHAR(64) PRIMARY KEY,
+    resource VARCHAR(50) NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(resource, action)
+);
+
+CREATE INDEX idx_permissions_resource ON permissions(resource);
+
+COMMENT ON TABLE permissions IS 'Defines all available permissions in the system';
+COMMENT ON COLUMN permissions.id IS 'Format: resource:action (e.g., entry:read)';
+
+-- ============================================================================
+-- 9. ROLE_PERMISSIONS TABLE (Role to Permission mapping)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role_id VARCHAR(64) NOT NULL,
+    permission_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (role_id, permission_id),
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_role_permissions_role ON role_permissions(role_id);
+CREATE INDEX idx_role_permissions_permission ON role_permissions(permission_id);
+
+COMMENT ON TABLE role_permissions IS 'Maps roles to their granted permissions';
+
+-- ============================================================================
+-- 10. SEED DATA - PERMISSIONS
+-- ============================================================================
+INSERT INTO permissions (id, resource, action, description) VALUES
+-- Entry permissions
+('entry:create', 'entry', 'create', 'Create new entries'),
+('entry:read', 'entry', 'read', 'View entries'),
+('entry:update', 'entry', 'update', 'Edit existing entries'),
+('entry:delete', 'entry', 'delete', 'Delete entries'),
+-- User permissions
+('user:read', 'user', 'read', 'View user list'),
+('user:invite', 'user', 'invite', 'Invite new users'),
+('user:manage', 'user', 'manage', 'Manage user roles and permissions'),
+-- Tenant permissions
+('tenant:settings', 'tenant', 'settings', 'Manage tenant settings')
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- 11. SEED DATA - ROLE PERMISSION MAPPINGS
+-- ============================================================================
+-- Admin role - all permissions
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('admin', 'entry:create'),
+('admin', 'entry:read'),
+('admin', 'entry:update'),
+('admin', 'entry:delete'),
+('admin', 'user:read'),
+('admin', 'user:invite'),
+('admin', 'user:manage'),
+('admin', 'tenant:settings')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- Editor role - entry CRUD + user read
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('editor', 'entry:create'),
+('editor', 'entry:read'),
+('editor', 'entry:update'),
+('editor', 'entry:delete'),
+('editor', 'user:read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- Viewer role - read only
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('viewer', 'entry:read'),
+('viewer', 'user:read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- Guest role - minimal read access
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('guest', 'entry:read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- ============================================================================
+-- 12. AUDIT TRIGGER
 -- ============================================================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -160,9 +246,10 @@ FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
--- SCHEMA COMPLETE - Simplified Permission Model
+-- SCHEMA COMPLETE - Full Permission Model
 -- ============================================================================
 -- Org Roles: admin (full access), editor, viewer, guest (predefined capabilities)
+-- Permissions: Fine-grained resource:action pairs mapped to roles
 -- Resource ACLs: Fine-grained sharing via acl_entries table
--- Admin Access: Checked by role, not granular permissions
 -- ============================================================================
+

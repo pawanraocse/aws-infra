@@ -36,6 +36,14 @@ class InvitationServiceTest {
     private EmailService emailService;
     @Mock
     private UserRoleRepository userRoleRepository;
+    @Mock
+    private com.learning.authservice.signup.CognitoUserRegistrar cognitoUserRegistrar;
+    @Mock
+    private com.learning.authservice.authorization.service.UserRoleService userRoleService;
+    @Mock
+    private com.learning.authservice.config.CognitoProperties cognitoProperties;
+    @Mock
+    private software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient cognitoClient;
 
     private InvitationServiceImpl invitationService;
 
@@ -45,7 +53,11 @@ class InvitationServiceTest {
                 invitationRepository,
                 roleRepository,
                 emailService,
-                userRoleRepository);
+                userRoleRepository,
+                cognitoUserRegistrar,
+                userRoleService,
+                cognitoProperties,
+                cognitoClient);
         org.springframework.test.util.ReflectionTestUtils.setField(invitationService, "expirationHours", 48);
         org.springframework.test.util.ReflectionTestUtils.setField(invitationService, "frontendUrl",
                 "http://localhost:4200");
@@ -68,7 +80,8 @@ class InvitationServiceTest {
         role.setScope(Role.RoleScope.TENANT);
 
         when(roleRepository.findById("role-user")).thenReturn(Optional.of(role));
-        when(invitationRepository.findByEmail(request.getEmail())).thenReturn(Optional.empty());
+        when(invitationRepository.findByEmailAndStatus(request.getEmail(), InvitationStatus.PENDING))
+                .thenReturn(Optional.empty());
         when(invitationRepository.save(any(Invitation.class))).thenAnswer(invocation -> {
             Invitation inv = invocation.getArgument(0);
             inv.setId(UUID.randomUUID());

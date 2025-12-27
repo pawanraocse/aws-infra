@@ -54,6 +54,8 @@ public class SecurityConfig {
                                                                 // Invitation acceptance (public)
                                                                 "/auth/api/v1/invitations/validate",
                                                                 "/auth/api/v1/invitations/accept",
+                                                                // Stripe webhook (secured by signature, not JWT)
+                                                                "/platform-service/platform/billing/webhook",
                                                                 // System endpoints
                                                                 "/actuator/**", "/fallback")
                                                 .permitAll()

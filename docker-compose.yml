@@ -38,7 +38,9 @@ services:
 
   # OpenTelemetry Collector for AWS X-Ray distributed tracing
   otel-collector:
-    image: amazon/aws-otel-collector:latest
+    build:
+      context: ./docker/otel-collector
+      dockerfile: Dockerfile
     container_name: otel-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
     env_file:
@@ -57,14 +59,8 @@ services:
       - "4318:4318" # OTLP HTTP
       - "13133:13133" # Health check
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q --spider http://localhost:13133/health/status || exit 1",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+      # Disabled: AWS OTEL Collector minimal image lacks wget/curl
+      disable: true
     restart: unless-stopped
 
   eureka-server:
@@ -128,7 +124,7 @@ services:
       redis:
         condition: service_healthy
       otel-collector:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test:
         [
@@ -244,6 +240,8 @@ services:
       dockerfile: Dockerfile
     image: awsinfra-platform-service:1.0.0
     container_name: platform-service
+    env_file:
+      - .env
     environment:
       SPRING_APPLICATION_NAME: platform-service
       SERVER_PORT: 8083
@@ -257,6 +255,15 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      # Stripe Billing Configuration
+      BILLING_ENABLED: ${BILLING_ENABLED:-false}
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_STARTER: ${STRIPE_PRICE_STARTER:-}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      STRIPE_PRICE_ENTERPRISE: ${STRIPE_PRICE_ENTERPRISE:-}
+      STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost:4200/app/settings/billing?success=true}
+      STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost:4200/app/settings/billing?canceled=true}
     networks:
       - awsinfra-net
     ports:

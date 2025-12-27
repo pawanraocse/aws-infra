@@ -1,11 +1,11 @@
-import { Component, inject, computed } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { RouterModule } from '@angular/router';
-import { AuthService } from '../core/auth.service';
-import { MenubarModule } from 'primeng/menubar';
-import { ButtonModule } from 'primeng/button';
-import { AvatarModule } from 'primeng/avatar';
-import { MenuItem } from 'primeng/api';
+import {Component, computed, inject} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {RouterModule} from '@angular/router';
+import {AuthService} from '../core/auth.service';
+import {MenubarModule} from 'primeng/menubar';
+import {ButtonModule} from 'primeng/button';
+import {AvatarModule} from 'primeng/avatar';
+import {MenuItem} from 'primeng/api';
 
 @Component({
   selector: 'app-layout',
@@ -37,7 +37,14 @@ export class AppLayoutComponent {
     if (!isOrganization) {
       return [
         { label: 'Dashboard', icon: 'pi pi-home', routerLink: '/app/dashboard' },
-        { label: 'Settings', icon: 'pi pi-cog', routerLink: '/app/settings/account' }
+        {
+          label: 'Settings',
+          icon: 'pi pi-cog',
+          items: [
+            { label: 'Account', icon: 'pi pi-user', routerLink: '/app/settings/account' },
+            { label: 'Billing', icon: 'pi pi-credit-card', routerLink: '/app/settings/billing' }
+          ]
+        }
       ];
     }
 
@@ -54,13 +61,22 @@ export class AppLayoutComponent {
         items: [
           { label: 'Users', icon: 'pi pi-users', routerLink: '/app/admin/users' },
           { label: 'Roles', icon: 'pi pi-id-card', routerLink: '/app/admin/roles' },
-          { label: 'Organization', icon: 'pi pi-building', routerLink: '/app/admin/settings/organization' }
+          { label: 'Organization', icon: 'pi pi-building', routerLink: '/app/admin/settings/organization' },
+          { separator: true },
+          { label: 'Billing & Subscription', icon: 'pi pi-credit-card', routerLink: '/app/settings/billing' }
         ]
       });
     }
 
     // Add Settings for all organization users
-    items.push({ label: 'Settings', icon: 'pi pi-cog', routerLink: '/app/settings/account' });
+    items.push({
+      label: 'Settings',
+      icon: 'pi pi-cog',
+      items: [
+        { label: 'Account', icon: 'pi pi-user', routerLink: '/app/settings/account' },
+        { label: 'Billing', icon: 'pi pi-credit-card', routerLink: '/app/settings/billing' }
+      ]
+    });
 
     return items;
   });

@@ -1,45 +1,44 @@
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { TableModule } from 'primeng/table';
-import { ButtonModule } from 'primeng/button';
-import { TagModule } from 'primeng/tag';
-import { DialogModule } from 'primeng/dialog';
-import { Select } from 'primeng/select';
-import { Checkbox } from 'primeng/checkbox';
-import { InputTextModule } from 'primeng/inputtext';
-import { DialogService, DynamicDialogRef } from 'primeng/dynamicdialog';
-import { RoleService, Role, Permission } from '../../../core/services/role.service';
-import { UserRoleService } from '../../../core/services/user-role.service';
-import { PermissionViewerComponent } from './permission-viewer.component';
-import { MessageService } from 'primeng/api';
-import { ToastModule } from 'primeng/toast';
+import {ChangeDetectorRef, Component, inject, OnInit} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {FormsModule} from '@angular/forms';
+import {TableModule} from 'primeng/table';
+import {ButtonModule} from 'primeng/button';
+import {TagModule} from 'primeng/tag';
+import {DialogModule} from 'primeng/dialog';
+import {Select} from 'primeng/select';
+import {InputTextModule} from 'primeng/inputtext';
+import {DialogService, DynamicDialogRef} from 'primeng/dynamicdialog';
+import {Permission, Role, RoleService} from '../../../core/services/role.service';
+import {UserRoleService} from '../../../core/services/user-role.service';
+import {PermissionViewerComponent} from './permission-viewer.component';
+import {MessageService} from 'primeng/api';
+import {ToastModule} from 'primeng/toast';
 
 @Component({
   selector: 'app-role-list',
   standalone: true,
   imports: [
     CommonModule, FormsModule, TableModule, ButtonModule, TagModule,
-    ToastModule, DialogModule, Select, InputTextModule, Checkbox
+    ToastModule, DialogModule, Select, InputTextModule
   ],
   providers: [DialogService, MessageService],
   template: `
     <div class="card">
       <p-toast></p-toast>
-      
+
       <!-- Header with Actions -->
       <div class="flex justify-content-between align-items-center mb-4">
         <h2 class="text-2xl font-bold m-0">Role Management</h2>
         <div class="flex gap-2">
-          <p-button 
-            label="Assign Role to User" 
-            icon="pi pi-user-plus" 
+          <p-button
+            label="Assign Role to User"
+            icon="pi pi-user-plus"
             severity="secondary"
             (onClick)="showAssignDialog = true">
           </p-button>
-          <p-button 
-            label="Create Role" 
-            icon="pi pi-plus" 
+          <p-button
+            label="Create Role"
+            icon="pi pi-plus"
             (onClick)="showCreateDialog = true">
           </p-button>
         </div>
@@ -68,22 +67,22 @@ import { ToastModule } from 'primeng/toast';
             <td>{{ role.description }}</td>
             <td>
               <div class="flex gap-1">
-                <p-button 
-                  icon="pi pi-eye" 
-                  [text]="true" 
+                <p-button
+                  icon="pi pi-eye"
+                  [text]="true"
                   pTooltip="View Permissions"
                   (onClick)="viewPermissions(role)">
                 </p-button>
-                <p-button 
-                  icon="pi pi-users" 
-                  [text]="true" 
+                <p-button
+                  icon="pi pi-users"
+                  [text]="true"
                   pTooltip="Assign to User"
                   (onClick)="openAssignDialog(role)">
                 </p-button>
-                <p-button 
+                <p-button
                   *ngIf="isCustomRole(role)"
-                  icon="pi pi-pencil" 
-                  [text]="true" 
+                  icon="pi pi-pencil"
+                  [text]="true"
                   pTooltip="Edit Role"
                   (onClick)="openEditDialog(role)">
                 </p-button>
@@ -101,10 +100,10 @@ import { ToastModule } from 'primeng/toast';
 
 
     <!-- Create Role Dialog -->
-    <p-dialog 
-      header="Create New Role" 
-      [(visible)]="showCreateDialog" 
-      [modal]="true" 
+    <p-dialog
+      header="Create New Role"
+      [(visible)]="showCreateDialog"
+      [modal]="true"
       [style]="{ width: '500px' }"
       [closable]="true">
       <div class="flex flex-column gap-3">
@@ -118,11 +117,11 @@ import { ToastModule } from 'primeng/toast';
         </div>
         <div>
           <label for="accessLevel" class="block text-sm font-medium mb-1">Access Level</label>
-          <p-select 
+          <p-select
             id="accessLevel"
-            [options]="accessLevels" 
-            [(ngModel)]="newRole.accessLevel" 
-            optionLabel="label" 
+            [options]="accessLevels"
+            [(ngModel)]="newRole.accessLevel"
+            optionLabel="label"
             optionValue="value"
             placeholder="Select access level"
             appendTo="body"
@@ -138,10 +137,10 @@ import { ToastModule } from 'primeng/toast';
     </p-dialog>
 
     <!-- Assign Role Dialog -->
-    <p-dialog 
-      header="Assign Role to User" 
-      [(visible)]="showAssignDialog" 
-      [modal]="true" 
+    <p-dialog
+      header="Assign Role to User"
+      [(visible)]="showAssignDialog"
+      [modal]="true"
       [style]="{ width: '450px' }"
       [closable]="true">
       <div class="flex flex-column gap-3">
@@ -151,11 +150,11 @@ import { ToastModule } from 'primeng/toast';
         </div>
         <div>
           <label for="assignRole" class="block text-sm font-medium mb-1">Role</label>
-          <p-select 
+          <p-select
             id="assignRole"
-            [options]="roles" 
-            [(ngModel)]="assignData.roleId" 
-            optionLabel="name" 
+            [options]="roles"
+            [(ngModel)]="assignData.roleId"
+            optionLabel="name"
             optionValue="id"
             placeholder="Select role"
             appendTo="body"

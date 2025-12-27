@@ -121,6 +121,13 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!-- Stripe Payment SDK -->
+        <dependency>
+            <groupId>com.stripe</groupId>
+            <artifactId>stripe-java</artifactId>
+            <version>26.1.0</version>
+        </dependency>
+
         <!-- Test Dependencies -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

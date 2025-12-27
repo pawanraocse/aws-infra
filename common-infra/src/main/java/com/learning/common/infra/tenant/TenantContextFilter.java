@@ -37,7 +37,9 @@ public class TenantContextFilter extends OncePerRequestFilter {
             "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
             "/api/v1/invitations/validate", "/api/v1/invitations/accept",
             // Internal service-to-service permission checks (tenant in request body)
-            "/api/v1/permissions"
+            "/api/v1/permissions",
+            // Stripe webhooks (verified via signature, not tenant header)
+            "/billing/webhook"
     };
 
     private final Environment environment;

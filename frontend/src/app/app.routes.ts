@@ -1,10 +1,10 @@
-import { Routes } from '@angular/router';
-import { authGuard } from './core/guards/auth.guard';
-import { guestGuard } from './core/guards/guest.guard';
-import { AppLayoutComponent } from './layout/app-layout.component';
-import { adminGuard } from './core/guards/admin.guard';
-import { superAdminGuard } from './core/guards/super-admin.guard';
-import { tenantUserGuard } from './core/guards/tenant-user.guard';
+import {Routes} from '@angular/router';
+import {authGuard} from './core/guards/auth.guard';
+import {guestGuard} from './core/guards/guest.guard';
+import {AppLayoutComponent} from './layout/app-layout.component';
+import {adminGuard} from './core/guards/admin.guard';
+import {superAdminGuard} from './core/guards/super-admin.guard';
+import {tenantUserGuard} from './core/guards/tenant-user.guard';
 
 export const routes: Routes = [
   {
@@ -86,6 +86,10 @@ export const routes: Routes = [
       {
         path: 'settings/account',
         loadComponent: () => import('./features/settings/account-settings.component').then(m => m.AccountSettingsComponent)
+      },
+      {
+        path: 'settings/billing',
+        loadComponent: () => import('./features/settings/billing.component').then(m => m.BillingComponent)
       }
     ]
   },

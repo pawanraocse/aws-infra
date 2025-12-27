@@ -728,12 +728,75 @@ if (tenant.getTenantType() == TenantType.PERSONAL) {
 
 #### Admin Operations
 - ✅ **Internal APIs** - Tenant migration triggers, health checks
-- 🔜 **Billing Integration** - Usage tracking, plan limits enforcement
+- ✅ **Billing Integration** - Stripe subscription management, webhook processing
 - 🔜 **Compliance** - Data residency, retention policies
 
 **Databases:**
 - **Master DB:** Tenant registry, system configuration
 - **Tenant DBs:** Created dynamically per tenant
+
+---
+
+### 💳 Stripe Billing Integration
+
+**Role:** Subscription management, payment processing, and billing portal
+
+The platform includes a complete Stripe integration for B2B subscription billing.
+
+#### Key Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `BillingController` | platform-service | Checkout, portal, status APIs |
+| `WebhookController` | platform-service | Stripe webhook receiver |
+| `WebhookService` | platform-service | Event processing with idempotency |
+| `StripeService` | platform-service | Stripe API wrapper |
+| `BillingProperties` | platform-service | Tier configuration |
+| `BillingComponent` | frontend | Subscription UI |
+
+#### Subscription Tiers
+
+| Tier | Price | Max Users |
+|------|-------|-----------|
+| **Starter** | $10/mo | 5 users |
+| **Pro** | $20/mo | 50 users |
+| **Enterprise** | Custom | Unlimited |
+
+#### Webhook Events Handled
+
+| Event | Action |
+|-------|--------|
+| `checkout.session.completed` | Set tenant to ACTIVE, save subscription ID |
+| `customer.subscription.updated` | Update period end, sync status |
+| `customer.subscription.deleted` | Set status to CANCELLED |
+| `invoice.paid` | Log payment success |
+| `invoice.payment_failed` | Set status to PAST_DUE |
+
+#### Configuration (Environment Variables)
+
+```bash
+BILLING_ENABLED=true
+STRIPE_API_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_STARTER=price_...
+STRIPE_PRICE_PRO=price_...
+STRIPE_PRICE_ENTERPRISE=price_...
+```
+
+#### API Endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/api/v1/billing/checkout` | Create Stripe Checkout session |
+| `POST` | `/api/v1/billing/portal` | Create Customer Portal session |
+| `GET` | `/api/v1/billing/status` | Get current subscription status |
+| `POST` | `/billing/webhook` | Stripe webhook receiver (no auth) |
+
+#### Security
+
+- Webhooks are **publicly accessible** but secured via Stripe signature verification
+- `TenantContextFilter` excludes `/billing/webhook` from tenant header requirement
+- Gateway security permits webhook path without JWT
 
 ---
 

@@ -205,3 +205,29 @@ resilience4j:
       backendMigration:
         sliding-window-size: 10
         failure-rate-threshold: 50
+
+# =============================================================================
+# Billing Configuration (Stripe)
+# =============================================================================
+billing:
+  enabled: ${BILLING_ENABLED:true}
+  b2c:
+    enabled: ${BILLING_B2C_ENABLED:false}  # Toggle to enable B2C billing
+  stripe:
+    api-key: ${STRIPE_API_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    success-url: ${STRIPE_SUCCESS_URL:http://localhost:4200/settings/billing?success=true}
+    cancel-url: ${STRIPE_CANCEL_URL:http://localhost:4200/settings/billing?canceled=true}
+  tiers:
+    starter:
+      price-id: ${STRIPE_PRICE_STARTER:price_starter}
+      name: Starter
+      max-users: 5
+    pro:
+      price-id: ${STRIPE_PRICE_PRO:price_pro}
+      name: Pro
+      max-users: 50
+    enterprise:
+      price-id: ${STRIPE_PRICE_ENTERPRISE:price_enterprise}
+      name: Enterprise
+      max-users: -1  # Unlimited

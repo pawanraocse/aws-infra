@@ -7,14 +7,13 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
-
-import lombok.Getter;
-import lombok.Setter;
 
 @Entity
 @Table(name = "tenant")
@@ -133,4 +132,14 @@ public class Tenant {
 
     @Column(name = "archived_to_s3")
     private Boolean archivedToS3 = false;
+
+    // ========== NEW: Stripe Billing Fields ==========
+    @Column(name = "stripe_subscription_id")
+    private String stripeSubscriptionId;
+
+    @Column(name = "stripe_price_id")
+    private String stripePriceId;
+
+    @Column(name = "current_period_end")
+    private OffsetDateTime currentPeriodEnd;
 }

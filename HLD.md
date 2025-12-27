@@ -1678,10 +1678,166 @@ frontend/
   - ALB, target groups
 
 ### Observability
+
+#### Distributed Tracing Architecture
+
+The platform uses **OpenTelemetry** with **AWS X-Ray** for distributed tracing across all microservices. This enables end-to-end request tracking, latency analysis, and service dependency visualization.
+
+```mermaid
+graph LR
+    subgraph Microservices
+        G[gateway-service]
+        A[auth-service]
+        P[platform-service]
+        B[backend-service]
+    end
+    
+    subgraph OTEL["OpenTelemetry Collector"]
+        R[OTLP Receiver<br/>:4317/:4318]
+        BP[Batch Processor]
+        X[AWS X-Ray Exporter]
+    end
+    
+    subgraph AWS["AWS Cloud"]
+        XR[AWS X-Ray]
+        SM[Service Map]
+        TR[Traces]
+    end
+    
+    G -->|OTLP/HTTP| R
+    A -->|OTLP/HTTP| R
+    P -->|OTLP/HTTP| R
+    B -->|OTLP/HTTP| R
+    
+    R --> BP --> X
+    X --> XR
+    XR --> SM
+    XR --> TR
+```
+
+#### Technology Stack
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Instrumentation** | Micrometer Tracing + OpenTelemetry Bridge | Auto-instrument Spring Boot requests |
+| **Export Protocol** | OTLP (OpenTelemetry Protocol) over HTTP | Send spans to collector |
+| **Collector** | AWS Distro for OpenTelemetry (ADOT) | Batch, process, and export traces |
+| **Backend** | AWS X-Ray | Store, visualize, and analyze traces |
+
+#### Configuration
+
+**Service Configuration (`application.yml`):**
+
+```yaml
+management:
+  tracing:
+    enabled: ${TRACING_ENABLED:true}
+    sampling:
+      probability: ${TRACING_PROBABILITY:1.0}  # 100% sampling in dev, reduce in prod
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+```
+
+**OpenTelemetry Collector (`otel-collector-config.yaml`):**
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  awsxray:
+    region: ${AWS_REGION}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [awsxray]
+```
+
+#### Viewing Traces in AWS X-Ray Console
+
+1. **Navigate to X-Ray Console:**
+   - URL: `https://<region>.console.aws.amazon.com/xray/home`
+   - Replace `<region>` with your AWS region (e.g., `us-east-1`)
+
+2. **Service Map:**
+   - Visual representation of service dependencies
+   - Shows latency, error rates, and request counts between services
+   - Click on any node to drill into traces
+
+3. **Traces View:**
+   - Filter by: Service name, trace ID, time range, response code
+   - View complete request path through all microservices
+   - Analyze segment timelines for latency bottlenecks
+
+4. **Analytics:**
+   - Query traces using filter expressions
+   - Example: `service("gateway-service") AND responseTime > 1`
+
+#### Local Development Setup
+
+```bash
+# Start all services including OTEL Collector
+docker-compose up -d
+
+# Verify collector is healthy
+docker ps | grep otel-collector
+# Should show: (healthy)
+
+# Check collector logs
+docker logs otel-collector | tail -20
+# Should show: "Traces" with span counts (no errors)
+
+# Make API requests to generate traces
+curl http://localhost:8080/actuator/health
+
+# View traces in X-Ray Console (1-2 minute delay)
+```
+
+#### Required AWS Permissions
+
+The OTEL Collector needs these IAM permissions:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "xray:PutTraceSegments",
+        "xray:PutTelemetryRecords"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+#### Sampling Configuration (Production)
+
+For production, reduce sampling to manage costs:
+
+```yaml
+management:
+  tracing:
+    sampling:
+      probability: 0.1  # Sample 10% of requests
+```
+
+#### Other Observability Components
+
 - **Logging:** JSON structured logs via Logback (logstash-logback-encoder)
-- **Tracing:** Micrometer + Zipkin
-- **Metrics:** Prometheus + Grafana
-- **Monitoring:** AWS CloudWatch
+- **Metrics:** Prometheus endpoints exposed at `/actuator/prometheus`
+- **Monitoring:** AWS CloudWatch for infrastructure metrics
 
 ---
 

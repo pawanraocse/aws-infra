@@ -1,0 +1,45 @@
+# OpenTelemetry Collector Configuration for AWS X-Ray
+# This collector receives traces via OTLP and exports to AWS X-Ray
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 50
+  
+  # Add service name to all spans
+  resource:
+    attributes:
+      - key: service.namespace
+        value: saas-factory
+        action: upsert
+
+exporters:
+  # AWS X-Ray exporter
+  awsxray:
+    region: ${AWS_REGION}
+    # Uncomment for local testing without X-Ray
+    # local_mode: true
+  
+  # Debug exporter for local troubleshooting (disable in production)
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [awsxray, debug]

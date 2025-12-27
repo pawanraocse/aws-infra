@@ -112,14 +112,15 @@ management:
     readinessstate:
       enabled: true
 
-  # Distributed Tracing
+  # Distributed Tracing (OpenTelemetry)
   tracing:
+    enabled: ${TRACING_ENABLED:true}
     sampling:
       probability: ${TRACING_PROBABILITY:1.0}
 
-  zipkin:
+  otlp:
     tracing:
-      endpoint: ${ZIPKIN_URL:http://localhost:9411}/api/v2/spans
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
 
 # OpenAPI Documentation
 

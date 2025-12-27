@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -30,8 +30,39 @@ services:
     ports:
       - "6379:6379"
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # OpenTelemetry Collector for AWS X-Ray distributed tracing
+  otel-collector:
+    image: amazon/aws-otel-collector:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    env_file:
+      - .env
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    environment:
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_PROFILE: ""  # Override profile from .env - OTEL Collector uses credentials directly
+    networks:
+      - awsinfra-net
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+      - "13133:13133" # Health check
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://localhost:13133/health/status || exit 1",
+        ]
+      interval: 15s
       timeout: 5s
       retries: 5
     restart: unless-stopped
@@ -53,7 +84,11 @@ services:
     ports:
       - "8761:8761"
     healthcheck:
-      test: [ "CMD-SHELL", "wget -q --spider http://localhost:8761/actuator/health || exit 1" ]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://localhost:8761/actuator/health || exit 1",
+        ]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -76,7 +111,7 @@ services:
       EUREKA_INSTANCE_HOSTNAME: gateway-service
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      ZIPKIN_ENABLED: "false"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,gateway
       AWS_REGION: us-east-1
       AWS_PROFILE: ""
@@ -92,8 +127,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      otel-collector:
+        condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "wget -q --spider http://localhost:8080/actuator/health || exit 1" ]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://localhost:8080/actuator/health || exit 1",
+        ]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -120,6 +161,7 @@ services:
       server.port: 8082
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
     networks:
       - awsinfra-net
     ports:
@@ -130,7 +172,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "wget -q --spider http://localhost:8082/actuator/health || exit 1" ]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://localhost:8082/actuator/health || exit 1",
+        ]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -165,6 +211,7 @@ services:
       MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       # SES Configuration (only used when SPRING_PROFILES_ACTIVE=prod)
       SES_FROM_EMAIL: ${SES_FROM_EMAIL:-noreply@example.com}
       AWS_REGION: ${AWS_REGION:-us-east-1}
@@ -180,7 +227,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "wget -q --spider http://localhost:8081/auth/actuator/health || exit 1" ]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://localhost:8081/auth/actuator/health || exit 1",
+        ]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -205,6 +256,7 @@ services:
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
     networks:
       - awsinfra-net
     ports:
@@ -215,7 +267,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "wget -q --spider http://localhost:8083/platform/actuator/health || exit 1" ]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://localhost:8083/platform/actuator/health || exit 1",
+        ]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -225,7 +281,6 @@ services:
 volumes:
   postgres_data:
   redis_data:
-
 
 networks:
   awsinfra-net:

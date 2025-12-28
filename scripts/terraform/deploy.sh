@@ -182,6 +182,9 @@ else
     log_warn "Frontend directory not found, skipping environment file updates"
 fi
 
+# NOTE: Gateway now loads COGNITO_USER_POOL_ID and COGNITO_SPA_CLIENT_ID directly
+# from SSM via entrypoint.sh - no .env update needed
+
 # Verify SSM parameters
 log_info "Verifying SSM parameters in AWS..."
 SSM_VERIFY=$(aws ssm get-parameters-by-path \

@@ -2,8 +2,8 @@ export const environment = {
   production: false,
   apiUrl: 'http://localhost:8080', // Gateway URL
   cognito: {
-    userPoolId: 'us-east-1_mxcYdW1PQ',
-    userPoolWebClientId: '6u2rfgheeo6jjmnodoi67fjp9f',  // SPA client (no secret)
+    userPoolId: 'us-east-1_JTWyGznRm',
+    userPoolWebClientId: '5ipcdulrm15t1laniekdk3bmm0',  // SPA client (no secret)
     region: 'us-east-1'
   }
 };

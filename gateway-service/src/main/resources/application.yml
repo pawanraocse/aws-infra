@@ -37,14 +37,22 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${COGNITO_ISSUER_URI:https://cognito-idp.us-east-1.amazonaws.com/us-east-1_8asmhblbI}
-          jwk-set-uri: ${COGNITO_ISSUER_URI:https://cognito-idp.us-east-1.amazonaws.com/us-east-1_8asmhblbI}/.well-known/jwks.json
+          issuer-uri: ${COGNITO_ISSUER_URI:https://cognito-idp.us-east-1.amazonaws.com/us-east-1_placeholder}
+          jwk-set-uri: ${COGNITO_JWKS_URI:https://cognito-idp.us-east-1.amazonaws.com/us-east-1_placeholder/.well-known/jwks.json}
 
 server:
   port: ${SERVER_PORT:8080}
   netty:
     connection-timeout: 20s
     idle-timeout: 60s
+
+# Cognito SPA client configuration for frontend
+# These are public identifiers (not secrets) exposed via /api/config/cognito
+cognito:
+  spa:
+    user-pool-id: ${COGNITO_USER_POOL_ID:}
+    client-id: ${COGNITO_SPA_CLIENT_ID:}
+    region: ${AWS_REGION:us-east-1}
 
 eureka:
   client:

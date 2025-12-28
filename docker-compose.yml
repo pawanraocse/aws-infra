@@ -113,6 +113,7 @@ services:
       AWS_PROFILE: ""
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      # NOTE: Cognito config (USER_POOL_ID, SPA_CLIENT_ID) loaded from SSM via entrypoint.sh
     networks:
       - awsinfra-net
     ports:

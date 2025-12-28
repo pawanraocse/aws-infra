@@ -73,8 +73,7 @@ export class AppLayoutComponent {
       label: 'Settings',
       icon: 'pi pi-cog',
       items: [
-        { label: 'Account', icon: 'pi pi-user', routerLink: '/app/settings/account' },
-        { label: 'Billing', icon: 'pi pi-credit-card', routerLink: '/app/settings/billing' }
+        { label: 'Account', icon: 'pi pi-user', routerLink: '/app/settings/account' }
       ]
     });
 

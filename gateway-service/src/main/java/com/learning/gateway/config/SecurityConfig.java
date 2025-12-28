@@ -62,6 +62,14 @@ public class SecurityConfig {
                                                                 // System endpoints
                                                                 "/actuator/**", "/fallback")
                                                 .permitAll()
+                                                // Allow API key authenticated requests (validated by
+                                                // ApiKeyAuthenticationFilter)
+                                                .matchers(ex -> ex.getRequest().getHeaders().containsKey("X-API-Key")
+                                                                ? org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher.MatchResult
+                                                                                .match()
+                                                                : org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher.MatchResult
+                                                                                .notMatch())
+                                                .permitAll()
                                                 .anyExchange().authenticated())
                                 .oauth2ResourceServer(oauth2 -> oauth2
                                                 .jwt(jwt -> jwt.jwtAuthenticationConverter(

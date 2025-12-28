@@ -73,7 +73,8 @@ export class AppLayoutComponent {
       label: 'Settings',
       icon: 'pi pi-cog',
       items: [
-        { label: 'Account', icon: 'pi pi-user', routerLink: '/app/settings/account' }
+        { label: 'Account', icon: 'pi pi-user', routerLink: '/app/settings/account' },
+        { label: 'API Keys', icon: 'pi pi-key', routerLink: '/app/settings/api-keys' }
       ]
     });
 

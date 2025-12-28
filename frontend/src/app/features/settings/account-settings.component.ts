@@ -1,16 +1,16 @@
-import { Component, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
-import { CardModule } from 'primeng/card';
-import { ButtonModule } from 'primeng/button';
-import { DialogModule } from 'primeng/dialog';
-import { InputTextModule } from 'primeng/inputtext';
-import { ToastModule } from 'primeng/toast';
-import { MessageService } from 'primeng/api';
-import { AuthService } from '../../core/auth.service';
-import { HttpClient } from '@angular/common/http';
-import { environment } from '../../../environments/environment';
+import {Component, inject, signal} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {FormsModule} from '@angular/forms';
+import {Router} from '@angular/router';
+import {CardModule} from 'primeng/card';
+import {ButtonModule} from 'primeng/button';
+import {DialogModule} from 'primeng/dialog';
+import {InputTextModule} from 'primeng/inputtext';
+import {ToastModule} from 'primeng/toast';
+import {MessageService} from 'primeng/api';
+import {AuthService} from '../../core/auth.service';
+import {HttpClient} from '@angular/common/http';
+import {environment} from '../../../environments/environment';
 
 @Component({
   selector: 'app-account-settings',
@@ -20,9 +20,9 @@ import { environment } from '../../../environments/environment';
   template: `
     <div class="p-4">
       <p-toast></p-toast>
-      
+
       <h1 class="text-3xl font-bold mb-4">Account Settings</h1>
-      
+
       <div class="grid">
         <!-- Profile Info -->
         <div class="col-12 md:col-6">
@@ -44,17 +44,17 @@ import { environment } from '../../../environments/environment';
           </p-card>
         </div>
 
-        <!-- Danger Zone - Hidden for super-admin -->
-        <div class="col-12 md:col-6" *ngIf="!isSuperAdmin()">
+        <!-- Danger Zone - Only visible to admins (not super-admin or regular users) -->
+        <div class="col-12 md:col-6" *ngIf="canDeleteAccount()">
           <p-card header="Danger Zone" styleClass="h-full border-red-500 border-1">
             <div class="flex flex-column gap-3">
               <p class="text-600 line-height-3">
-                Deleting your account will permanently remove all your data, including any entries 
+                Deleting your account will permanently remove all your data, including any entries
                 you've created. This action cannot be undone.
               </p>
-              <p-button 
-                label="Delete My Account" 
-                icon="pi pi-trash" 
+              <p-button
+                label="Delete My Account"
+                icon="pi pi-trash"
                 severity="danger"
                 [loading]="deleting()"
                 (click)="showDeleteDialog = true">
@@ -66,10 +66,10 @@ import { environment } from '../../../environments/environment';
     </div>
 
     <!-- Delete Confirmation Dialog -->
-    <p-dialog 
-      header="Delete Account" 
-      [(visible)]="showDeleteDialog" 
-      [modal]="true" 
+    <p-dialog
+      header="Delete Account"
+      [(visible)]="showDeleteDialog"
+      [modal]="true"
       [style]="{width: '450px'}"
       [closable]="!deleting()">
       <div class="flex flex-column gap-4">
@@ -77,27 +77,27 @@ import { environment } from '../../../environments/environment';
           <i class="pi pi-exclamation-triangle text-orange-500 mr-2"></i>
           <span class="font-medium">This action is permanent and cannot be undone.</span>
         </div>
-        
+
         <p class="text-600">
           Type <span class="font-bold text-red-500">DELETE</span> below to confirm:
         </p>
-        
-        <input 
-          pInputText 
-          [(ngModel)]="confirmationText" 
+
+        <input
+          pInputText
+          [(ngModel)]="confirmationText"
           placeholder="Type DELETE to confirm"
           class="w-full"
           [disabled]="deleting()">
-        
+
         <div class="flex gap-2 justify-content-end">
-          <p-button 
-            label="Cancel" 
-            severity="secondary" 
+          <p-button
+            label="Cancel"
+            severity="secondary"
             (click)="showDeleteDialog = false; confirmationText = ''"
             [disabled]="deleting()">
           </p-button>
-          <p-button 
-            label="Delete Account" 
+          <p-button
+            label="Delete Account"
             severity="danger"
             icon="pi pi-trash"
             [loading]="deleting()"
@@ -121,6 +121,12 @@ export class AccountSettingsComponent {
 
   isSuperAdmin(): boolean {
     return this.authService.user()?.role === 'super-admin';
+  }
+
+  canDeleteAccount(): boolean {
+    const user = this.authService.user();
+    // Only admin can delete account (not super-admin, not regular users)
+    return user?.role === 'admin';
   }
 
   getAccountType(user: any): string {

@@ -90,6 +90,10 @@ export const routes: Routes = [
       {
         path: 'settings/billing',
         loadComponent: () => import('./features/settings/billing.component').then(m => m.BillingComponent)
+      },
+      {
+        path: 'settings/api-keys',
+        loadComponent: () => import('./features/settings/api-keys.component').then(m => m.ApiKeysComponent)
       }
     ]
   },

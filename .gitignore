@@ -70,3 +70,4 @@ terraform/lambda/*.zip
 *secret*
 *password*
 *credentials*
+/scripts/.api-key

@@ -3,8 +3,9 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS tenant (
     -- Core identity
-    id VARCHAR(64) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    key_hash VARCHAR(256) NOT NULL,
+    key_prefix VARCHAR(20) NOT NULL,  -- "sk_live_" + 8 chars = 16, buffer to 20
     status VARCHAR(32) NOT NULL,
     
     -- Storage configuration
@@ -287,3 +288,58 @@ COMMENT ON TABLE webhook_events IS 'Tracks processed Stripe webhook events for i
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(255);
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_price_id VARCHAR(255);
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ;
+
+-- =====================================================
+-- API KEYS TABLE
+-- =====================================================
+-- Stores API keys for programmatic access (B2B integrations).
+-- Keys inherit the creator's RBAC permissions.
+-- Key is shown ONCE at creation, only hash is stored.
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- Tenant relationship
+    tenant_id VARCHAR(64) NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    
+    -- Key identification
+    name VARCHAR(100) NOT NULL,              -- User-friendly name (e.g., "CI/CD Integration")
+    key_hash VARCHAR(256) NOT NULL,          -- SHA-256 hash of the key (never store raw key)
+    key_prefix VARCHAR(12) NOT NULL,         -- First 8 chars for identification (e.g., "sk_live_a1b2")
+    
+    -- Permission inheritance
+    created_by_user_id VARCHAR(255) NOT NULL, -- Cognito user ID - permissions inherited from this user
+    created_by_email VARCHAR(255) NOT NULL,   -- For display purposes
+    
+    -- Rate limiting (can be overridden from default based on subscription tier)
+    rate_limit_per_minute INTEGER DEFAULT 60,
+    
+    -- Expiration (required, max 2 years from creation)
+    expires_at TIMESTAMPTZ NOT NULL,
+    
+    -- Usage tracking
+    last_used_at TIMESTAMPTZ,
+    usage_count BIGINT DEFAULT 0,
+    
+    -- Lifecycle
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    revoked_at TIMESTAMPTZ,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'  -- ACTIVE, REVOKED, EXPIRED
+);
+
+-- Indexes for API key lookups
+CREATE UNIQUE INDEX idx_api_keys_hash ON api_keys(key_hash);
+CREATE INDEX idx_api_keys_tenant ON api_keys(tenant_id) WHERE status = 'ACTIVE';
+CREATE INDEX idx_api_keys_prefix ON api_keys(key_prefix);
+CREATE INDEX idx_api_keys_status ON api_keys(status);
+CREATE INDEX idx_api_keys_expiry ON api_keys(expires_at) WHERE status = 'ACTIVE';
+CREATE INDEX idx_api_keys_creator ON api_keys(created_by_user_id);
+
+-- Comments for documentation
+COMMENT ON TABLE api_keys IS 'API keys for programmatic access. Keys inherit creator permissions.';
+COMMENT ON COLUMN api_keys.key_hash IS 'SHA-256 hash of the API key. Raw key is never stored.';
+COMMENT ON COLUMN api_keys.key_prefix IS 'First 12 chars of key for identification in logs/UI.';
+COMMENT ON COLUMN api_keys.created_by_user_id IS 'Cognito user ID. API key inherits this users RBAC permissions.';
+COMMENT ON COLUMN api_keys.status IS 'Key status: ACTIVE (usable), REVOKED (manually disabled), EXPIRED (past expiry).';
+

@@ -2,10 +2,13 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS tenant (
+    -- Primary key
+    id VARCHAR(64) PRIMARY KEY,
+    
     -- Core identity
     name VARCHAR(100) NOT NULL,
-    key_hash VARCHAR(256) NOT NULL,
-    key_prefix VARCHAR(20) NOT NULL,  -- "sk_live_" + 8 chars = 16, buffer to 20
+    key_hash VARCHAR(256),  -- Legacy/unused: not mapped in Tenant entity
+    key_prefix VARCHAR(20), -- Legacy/unused: not mapped in Tenant entity
     status VARCHAR(32) NOT NULL,
     
     -- Storage configuration

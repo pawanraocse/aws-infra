@@ -186,7 +186,13 @@ INSERT INTO permissions (id, resource, action, description) VALUES
 ('user:invite', 'user', 'invite', 'Invite new users'),
 ('user:manage', 'user', 'manage', 'Manage user roles and permissions'),
 -- Tenant permissions
-('tenant:settings', 'tenant', 'settings', 'Manage tenant settings')
+('tenant:settings', 'tenant', 'settings', 'Manage tenant settings'),
+-- SSO permissions (Phase 4)
+('sso:read', 'sso', 'read', 'View SSO configuration'),
+('sso:manage', 'sso', 'manage', 'Configure SSO identity providers'),
+-- Group permissions (Phase 4)
+('group:read', 'group', 'read', 'View IdP group mappings'),
+('group:manage', 'group', 'manage', 'Manage group-to-role mappings')
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================================
@@ -201,7 +207,11 @@ INSERT INTO role_permissions (role_id, permission_id) VALUES
 ('admin', 'user:read'),
 ('admin', 'user:invite'),
 ('admin', 'user:manage'),
-('admin', 'tenant:settings')
+('admin', 'tenant:settings'),
+('admin', 'sso:read'),
+('admin', 'sso:manage'),
+('admin', 'group:read'),
+('admin', 'group:manage')
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 -- Editor role - entry CRUD + user read

@@ -72,3 +72,10 @@ eureka:
 services:
   backend:
     base-url: http://localhost
+
+# Cognito config for SSO tests (uses mock in test config)
+cognito:
+  user-pool-id: test-pool-id
+  region: us-east-1
+  domain: test-domain
+  client-id: test-client-id

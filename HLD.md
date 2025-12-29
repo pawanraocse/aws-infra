@@ -1,7 +1,7 @@
 # High-Level Design: SaaS Foundation & Project Template
 
-**Version:** 7.0 (The SaaS Factory)
-**Last Updated:** 2024-12-24
+**Version:** 7.1 (API Key Auth)
+**Last Updated:** 2025-12-28
 **Core Mission:** A production-ready, ultra-decoupled foundation for launching multi-tenant SaaS applications in days, not months.
 
 
@@ -432,6 +432,30 @@ sequenceDiagram
 - ✅ **Session Management** - Token issuance, refresh, logout
 - ✅ **MFA Support** - Via Cognito (SMS, TOTP)
 - ✅ **Trusts Gateway:** Relies on `X-User-Id` and `X-Tenant-Id` headers. **No local JWT validation.**
+
+#### API Key Authentication (B2B)
+For programmatic access without interactive login:
+
+- ✅ **Key Generation:** Users create API keys via `Settings → API Keys`
+- ✅ **Secure Storage:** Only SHA-256 hash stored; raw key shown once at creation
+- ✅ **Key Format:** `sk_live_` prefix + 32-byte random (256-bit entropy)
+- ✅ **Gateway Filter:** `ApiKeyAuthenticationFilter` validates via platform-service
+- ✅ **Header Injection:** Valid key → `X-Tenant-Id`, `X-User-Id`, `X-User-Email`
+- ✅ **RBAC Inheritance:** API key inherits creator's permissions
+
+**Usage:**
+```bash
+curl https://api.example.com/your-endpoint \
+  -H "X-API-Key: sk_live_..."
+```
+
+**Management APIs:**
+- `POST /api/v1/api-keys` - Create new key (returns raw key once)
+- `GET /api/v1/api-keys` - List keys for tenant
+- `DELETE /api/v1/api-keys/{id}` - Revoke key
+
+**Internal API (gateway → platform-service):**
+- `GET /internal/api-keys/validate?key=...` - Validate and return context
 
 #### Authorization & Permissions
 

@@ -63,6 +63,9 @@ export class AppLayoutComponent {
           { label: 'Roles', icon: 'pi pi-id-card', routerLink: '/app/admin/roles' },
           { label: 'Organization', icon: 'pi pi-building', routerLink: '/app/admin/settings/organization' },
           { separator: true },
+          { label: 'SSO Settings', icon: 'pi pi-shield', routerLink: '/app/admin/settings/sso' },
+          { label: 'Group Mapping', icon: 'pi pi-sitemap', routerLink: '/app/admin/settings/group-mapping' },
+          { separator: true },
           { label: 'Billing & Subscription', icon: 'pi pi-credit-card', routerLink: '/app/settings/billing' }
         ]
       });

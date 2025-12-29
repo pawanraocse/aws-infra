@@ -5,6 +5,7 @@ Tests group extraction, IdP detection, and claim generation.
 import json
 import unittest
 from unittest.mock import patch, MagicMock
+
 import handler
 
 
@@ -205,5 +206,94 @@ class TestTenantIdDetermination(unittest.TestCase):
         self.assertEqual(result, 'selected')
 
 
+class TestJitProvisioning(unittest.TestCase):
+    """Tests for JIT provisioning functions."""
+
+    @patch.object(handler, '_check_user_exists')
+    @patch.object(handler, '_resolve_role_from_groups')
+    @patch.object(handler, '_provision_user')
+    def test_jit_provision_new_sso_user(self, mock_provision, mock_resolve, mock_exists):
+        """Should provision new SSO user with resolved role."""
+        mock_exists.return_value = False
+        mock_resolve.return_value = 'editor'
+        
+        handler._jit_provision_if_needed(
+            tenant_id='tenant-123',
+            email='user@example.com',
+            user_sub='sub-456',
+            groups=['engineering', 'developers'],
+            idp_type='OKTA'
+        )
+        
+        mock_exists.assert_called_once_with('tenant-123', 'user@example.com')
+        mock_resolve.assert_called_once_with(['engineering', 'developers'])
+        mock_provision.assert_called_once_with(
+            'tenant-123', 'user@example.com', 'sub-456', 'editor', 'OKTA'
+        )
+
+    @patch.object(handler, '_check_user_exists')
+    @patch.object(handler, '_provision_user')
+    def test_skip_existing_user(self, mock_provision, mock_exists):
+        """Should skip provisioning when user already exists."""
+        mock_exists.return_value = True
+        
+        handler._jit_provision_if_needed(
+            tenant_id='tenant-123',
+            email='existing@example.com',
+            user_sub='sub-789',
+            groups=['admins'],
+            idp_type='AZURE_AD'
+        )
+        
+        mock_provision.assert_not_called()
+
+    @patch.object(handler, '_check_user_exists')
+    @patch.object(handler, '_resolve_role_from_groups')
+    @patch.object(handler, '_provision_user')
+    def test_default_role_when_no_mapping(self, mock_provision, mock_resolve, mock_exists):
+        """Should use default 'viewer' role when no group mapping found."""
+        mock_exists.return_value = False
+        mock_resolve.return_value = None  # No mapping found
+        
+        handler._jit_provision_if_needed(
+            tenant_id='tenant-123',
+            email='newuser@example.com',
+            user_sub='sub-abc',
+            groups=['unknown-group'],
+            idp_type='SAML'
+        )
+        
+        # Should provision with 'viewer' as default role
+        mock_provision.assert_called_once_with(
+            'tenant-123', 'newuser@example.com', 'sub-abc', 'viewer', 'SAML'
+        )
+
+    @patch.object(handler, '_check_user_exists')
+    def test_jit_provision_error_handling(self, mock_exists):
+        """Should not block login on JIT provision error."""
+        mock_exists.side_effect = Exception('API connection failed')
+        
+        # Should not raise exception
+        handler._jit_provision_if_needed(
+            tenant_id='tenant-123',
+            email='error@example.com',
+            user_sub='sub-err',
+            groups=['admins'],
+            idp_type='GOOGLE'
+        )
+        # Test passes if no exception raised
+
+    def test_resolve_role_empty_groups(self):
+        """Should return None for empty groups list."""
+        result = handler._resolve_role_from_groups([])
+        self.assertIsNone(result)
+
+    def test_resolve_role_none_groups(self):
+        """Should return None for None groups."""
+        result = handler._resolve_role_from_groups(None)
+        self.assertIsNone(result)
+
+
 if __name__ == '__main__':
     unittest.main()
+

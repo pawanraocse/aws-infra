@@ -37,8 +37,8 @@ Event Structure (SSO):
 import json
 import logging
 import os
-import urllib.request
 import urllib.error
+import urllib.request
 from typing import Any, Dict, List, Optional
 
 # Configure logging
@@ -72,11 +72,15 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Handle Cognito PreTokenGeneration trigger.
     
+    This function is called on EVERY LOGIN (not just signup), making it ideal
+    for JIT (Just-In-Time) provisioning of SSO users on their first login.
+    
     Steps:
     1. Extract tenant and role info
     2. Extract groups from SSO claims (if present)
     3. Sync groups to platform service
-    4. Add groups to JWT claims
+    4. JIT provision new SSO users (if not exists)
+    5. Add groups to JWT claims
     
     Args:
         event: Cognito trigger event containing user info and metadata
@@ -88,6 +92,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
         username = event.get('userName', 'unknown')
         trigger_source = event.get('triggerSource', '')
+        user_sub = event.get('request', {}).get('userAttributes', {}).get('sub', username)
         
         logger.info(f"PreTokenGeneration triggered for user: {username}, trigger: {trigger_source}")
         
@@ -115,13 +120,19 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.warning(f"No tenantId found for user: {username}")
             return event
         
-        # Extract groups from SSO claims
+        # Extract groups and detect IdP type from SSO claims
         groups = _extract_groups_from_claims(user_attributes)
         idp_type = _detect_idp_type(user_attributes)
+        is_sso_user = idp_type in ('SAML', 'OIDC', 'OKTA', 'AZURE_AD', 'GOOGLE', 'PING')
         
         # Sync groups if enabled and groups found
         if ENABLE_GROUP_SYNC and groups and final_tenant_id:
             _sync_groups_to_platform(final_tenant_id, groups, idp_type)
+        
+        # JIT Provisioning: Check if SSO user exists and provision if new
+        if is_sso_user:
+            email = user_attributes.get('email', username)
+            _jit_provision_if_needed(final_tenant_id, email, user_sub, groups, idp_type)
         
         # Build claims override (role is managed in DB, not JWT)
         claims_to_override = {
@@ -141,7 +152,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(
             f"Token claims set for {username}: tenantId={final_tenant_id}, "
-            f"groups={len(groups) if groups else 0}"
+            f"groups={len(groups) if groups else 0}, sso={is_sso_user}"
         )
         
     except Exception as e:
@@ -266,6 +277,192 @@ def _sync_groups_to_platform(tenant_id: str, groups: List[str], idp_type: str) -
         logger.warning(f"Failed to sync groups (non-blocking): {str(e)}")
     except Exception as e:
         logger.error(f"Unexpected error syncing groups: {str(e)}")
+
+
+# =============================================================================
+# JIT PROVISIONING FUNCTIONS
+# =============================================================================
+
+def _jit_provision_if_needed(
+    tenant_id: str, 
+    email: str, 
+    user_sub: str, 
+    groups: List[str],
+    idp_type: str
+) -> None:
+    """
+    JIT (Just-In-Time) provision a new SSO user if they don't already exist.
+    
+    This function is called on every SSO login to check if the user exists
+    in the tenant's user registry. If not, it provisions them with an
+    appropriate role based on their group memberships.
+    
+    This is a fire-and-forget operation - login is not blocked on failure.
+    
+    Args:
+        tenant_id: The tenant ID
+        email: User email from SSO claims
+        user_sub: Cognito user sub (user ID)
+        groups: List of IdP group IDs the user belongs to
+        idp_type: The identity provider type (SAML, OIDC, OKTA, etc.)
+    """
+    try:
+        # Step 1: Check if user already exists
+        if _check_user_exists(tenant_id, email):
+            logger.debug(f"User {email} already exists in tenant {tenant_id}, skipping JIT provision")
+            return
+        
+        # Step 2: Resolve role from groups (if mappings exist)
+        role_id = _resolve_role_from_groups(groups)
+        if not role_id:
+            role_id = 'viewer'  # Default role for SSO users with no group mapping
+            logger.info(f"No group mapping found for {email}, using default role: {role_id}")
+        
+        # Step 3: Provision the user
+        _provision_user(tenant_id, email, user_sub, role_id, idp_type)
+        
+        logger.info(
+            f"Successfully JIT provisioned SSO user: email={email}, "
+            f"tenant={tenant_id}, role={role_id}, idpType={idp_type}"
+        )
+        
+    except Exception as e:
+        # Log error but don't block SSO login
+        logger.error(f"JIT provision failed for {email} (non-blocking): {str(e)}", exc_info=True)
+
+
+def _check_user_exists(tenant_id: str, email: str) -> bool:
+    """
+    Check if a user exists in the tenant's user registry.
+    
+    Calls the platform-service internal API to check user existence.
+    
+    Args:
+        tenant_id: The tenant ID
+        email: User email to check
+        
+    Returns:
+        True if user exists, False otherwise
+    """
+    try:
+        url = f"{PLATFORM_SERVICE_URL}/internal/users/exists?tenantId={tenant_id}&email={email}"
+        
+        req = urllib.request.Request(
+            url,
+            headers={
+                'Content-Type': 'application/json',
+                'X-Internal-Request': 'true'
+            },
+            method='GET'
+        )
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            if response.status == 200:
+                result = json.loads(response.read().decode('utf-8'))
+                return result.get('exists', False)
+            return False
+            
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        logger.warning(f"HTTP error checking user existence: {e.code}")
+        return False
+    except Exception as e:
+        logger.warning(f"Error checking user existence: {str(e)}")
+        return False  # Assume doesn't exist, provision attempt will fail gracefully
+
+
+def _resolve_role_from_groups(groups: List[str]) -> Optional[str]:
+    """
+    Resolve the appropriate role for a user based on their IdP group memberships.
+    
+    Calls the auth-service internal API to find matching group-role mappings.
+    The highest priority matching role is returned.
+    
+    Args:
+        groups: List of external group IDs from the IdP
+        
+    Returns:
+        Role ID if a mapping is found, None otherwise
+    """
+    if not groups:
+        return None
+        
+    try:
+        url = f"{AUTH_SERVICE_URL}/internal/groups/resolve-role"
+        
+        payload = {'groups': groups}
+        data = json.dumps(payload).encode('utf-8')
+        
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                'Content-Type': 'application/json',
+                'X-Internal-Request': 'true'
+            },
+            method='POST'
+        )
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            if response.status == 200:
+                result = json.loads(response.read().decode('utf-8'))
+                if result.get('matched'):
+                    role_id = result.get('roleId')
+                    logger.debug(f"Resolved role '{role_id}' for groups: {groups}")
+                    return role_id
+        
+        return None
+        
+    except Exception as e:
+        logger.warning(f"Error resolving role from groups: {str(e)}")
+        return None  # Caller will use default role
+
+
+def _provision_user(
+    tenant_id: str, 
+    email: str, 
+    user_sub: str, 
+    role_id: str,
+    source: str
+) -> None:
+    """
+    Provision a new user in the tenant's user registry via platform-service.
+    
+    Args:
+        tenant_id: The tenant ID
+        email: User email
+        user_sub: Cognito user sub (user ID)
+        role_id: Role to assign
+        source: User source (SAML, OIDC, OKTA, etc.)
+    """
+    url = f"{PLATFORM_SERVICE_URL}/internal/users/jit-provision"
+    
+    payload = {
+        'tenantId': tenant_id,
+        'email': email,
+        'userId': user_sub,
+        'roleId': role_id,
+        'source': source
+    }
+    
+    data = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            'Content-Type': 'application/json',
+            'X-Internal-Request': 'true'
+        },
+        method='POST'
+    )
+    
+    with urllib.request.urlopen(req, timeout=10) as response:
+        if response.status in (200, 201):
+            logger.info(f"User {email} provisioned successfully in tenant {tenant_id}")
+        else:
+            logger.warning(f"User provision returned unexpected status: {response.status}")
+
 
 
 def _determine_tenant_id(

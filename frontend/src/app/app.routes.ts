@@ -102,6 +102,11 @@ export const routes: Routes = [
     path: 'auth/join',
     loadComponent: () => import('./features/auth/join-organization.component').then(m => m.JoinOrganizationComponent)
   },
+  // SSO OAuth2 callback route (outside guestGuard because user is authenticated)
+  {
+    path: 'auth/callback',
+    loadComponent: () => import('./features/auth/callback.component').then(m => m.AuthCallbackComponent)
+  },
   { path: '', redirectTo: 'app', pathMatch: 'full' },
   { path: '**', redirectTo: 'app' }
 ];

@@ -36,6 +36,12 @@ variable "logout_urls" {
   type        = list(string)
 }
 
+variable "identity_providers" {
+  description = "List of identity provider names to support (e.g., SAML/OIDC provider names created dynamically)"
+  type        = list(string)
+  default     = []
+}
+
 # =============================================================================
 # Token Validity
 # =============================================================================

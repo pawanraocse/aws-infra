@@ -161,7 +161,7 @@ interface Provider {
                     <label class="font-medium block mb-2">Sign-In URL (Optional)</label>
                     <input pInputText
                       class="w-full"
-                      [(ngModel)]="samlForm.signInUrl"
+                      [(ngModel)]="samlForm.ssoUrl"
                       placeholder="https://your-idp.com/sso/saml" />
                   </div>
                 </div>
@@ -289,16 +289,19 @@ export class SsoConfigComponent implements OnInit {
   selectedProvider: Provider | null = null;
 
   oidcForm: OidcConfigRequest = {
+    idpType: 'OIDC',
+    providerName: '',
     clientId: '',
     clientSecret: '',
-    issuerUrl: '',
-    provider: 'GENERIC'
+    issuerUrl: ''
   };
 
   samlForm: SamlConfigRequest = {
+    idpType: 'SAML',
+    providerName: '',
     metadataUrl: '',
     entityId: '',
-    signInUrl: ''
+    ssoUrl: ''
   };
 
   spEntityId = 'urn:amazon:cognito:sp:YOUR_USER_POOL_ID';
@@ -313,11 +316,15 @@ export class SsoConfigComponent implements OnInit {
     this.ssoService.getConfiguration().subscribe({
       next: (data) => {
         this.config.set(data);
-        this.ssoEnabled = data.ssoEnabled;
+        this.ssoEnabled = data?.ssoEnabled ?? false;
         this.loading.set(false);
         this.loadSpMetadata();
       },
-      error: () => this.loading.set(false)
+      error: () => {
+        this.config.set(null);
+        this.ssoEnabled = false;
+        this.loading.set(false);
+      }
     });
   }
 
@@ -332,10 +339,18 @@ export class SsoConfigComponent implements OnInit {
   }
 
   onProviderChange() {
-    this.oidcForm = { clientId: '', clientSecret: '', issuerUrl: '', provider: 'GENERIC' };
-    this.samlForm = { metadataUrl: '', entityId: '', signInUrl: '' };
+    this.oidcForm = { idpType: 'OIDC', providerName: '', clientId: '', clientSecret: '', issuerUrl: '' };
+    this.samlForm = { idpType: 'SAML', providerName: '', metadataUrl: '', entityId: '', ssoUrl: '' };
     if (this.selectedProvider) {
-      this.oidcForm.provider = this.selectedProvider.value as 'GOOGLE' | 'AZURE_AD' | 'OKTA' | 'GENERIC';
+      // Set idpType and providerName based on selected provider
+      if (this.selectedProvider.protocol === 'OIDC') {
+        this.oidcForm.idpType = this.selectedProvider.value === 'GOOGLE' ? 'GOOGLE' :
+          this.selectedProvider.value === 'AZURE_AD' ? 'AZURE_AD' : 'OIDC';
+        this.oidcForm.providerName = this.selectedProvider.label;
+      } else {
+        this.samlForm.idpType = this.selectedProvider.value === 'OKTA' ? 'OKTA' : 'SAML';
+        this.samlForm.providerName = this.selectedProvider.label;
+      }
     }
   }
 

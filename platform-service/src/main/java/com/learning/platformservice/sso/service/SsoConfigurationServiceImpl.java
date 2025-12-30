@@ -17,10 +17,13 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.CreateIdent
 import software.amazon.awssdk.services.cognitoidentityprovider.model.DeleteIdentityProviderRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.DescribeIdentityProviderRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.DescribeIdentityProviderResponse;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.DescribeUserPoolClientRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.DescribeUserPoolClientResponse;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.IdentityProviderType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.IdentityProviderTypeType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.ResourceNotFoundException;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.UpdateIdentityProviderRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UpdateUserPoolClientRequest;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -210,6 +213,13 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
 
             IdentityProviderType provider = response.identityProvider();
 
+            // Update test status in idpConfigJson
+            Map<String, Object> config = new HashMap<>(tenant.getIdpConfigJson());
+            config.put("lastTestedAt", java.time.OffsetDateTime.now().toString());
+            config.put("testStatus", "SUCCESS");
+            tenant.setIdpConfigJson(config);
+            tenantRepository.save(tenant);
+
             return SsoTestResult.builder()
                     .success(true)
                     .message("Connection successful")
@@ -220,6 +230,7 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
                     .build();
 
         } catch (ResourceNotFoundException e) {
+            updateTestStatus(tenantId, "FAILED");
             return SsoTestResult.builder()
                     .success(false)
                     .message("Identity provider not found in Cognito")
@@ -227,11 +238,27 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
                     .build();
         } catch (Exception e) {
             log.error("SSO test failed for tenant: {}", tenantId, e);
+            updateTestStatus(tenantId, "FAILED");
             return SsoTestResult.builder()
                     .success(false)
                     .message("Test failed: " + e.getMessage())
                     .responseTimeMs(System.currentTimeMillis() - startTime)
                     .build();
+        }
+    }
+
+    private void updateTestStatus(String tenantId, String status) {
+        try {
+            Tenant tenant = getTenantOrThrow(tenantId);
+            if (tenant.getIdpConfigJson() != null) {
+                Map<String, Object> config = new HashMap<>(tenant.getIdpConfigJson());
+                config.put("lastTestedAt", java.time.OffsetDateTime.now().toString());
+                config.put("testStatus", status);
+                tenant.setIdpConfigJson(config);
+                tenantRepository.save(tenant);
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to update test status for tenant: {}", tenantId, ex);
         }
     }
 
@@ -262,12 +289,14 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
     }
 
     private String buildProviderName(String tenantId, IdpType idpType) {
-        // Provider name must be 1-32 chars, alphanumeric and underscores only
+        // Provider name: alphanumeric, must NOT contain underscores (Cognito
+        // constraint)
+        // Pattern: [^\p{Z}][\p{L}\p{M}\p{S}\p{N}\p{P}][^\p{Z}]+
         String sanitizedTenantId = tenantId.replaceAll("[^a-zA-Z0-9]", "");
         if (sanitizedTenantId.length() > 20) {
             sanitizedTenantId = sanitizedTenantId.substring(0, 20);
         }
-        return idpType.name() + "_" + sanitizedTenantId;
+        return idpType.name() + "-" + sanitizedTenantId;
     }
 
     private void createOrUpdateCognitoProvider(String providerName, IdentityProviderTypeType providerType,
@@ -301,6 +330,70 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
                     .build());
 
             log.info("Created Cognito identity provider: {}", providerName);
+
+            // Register the new provider with the SPA client
+            registerProviderWithClient(providerName);
+        }
+    }
+
+    /**
+     * Register an identity provider with the SPA client so it can be used for
+     * federated login.
+     */
+    private void registerProviderWithClient(String providerName) {
+        try {
+            String clientId = cognitoProperties.getClientId();
+
+            // Get current client configuration
+            DescribeUserPoolClientResponse clientResponse = cognitoClient.describeUserPoolClient(
+                    DescribeUserPoolClientRequest.builder()
+                            .userPoolId(cognitoProperties.getUserPoolId())
+                            .clientId(clientId)
+                            .build());
+
+            var client = clientResponse.userPoolClient();
+
+            // Check if provider is already registered
+            java.util.List<String> currentProviders = new java.util.ArrayList<>(
+                    client.supportedIdentityProviders() != null
+                            ? client.supportedIdentityProviders()
+                            : java.util.List.of("COGNITO"));
+
+            if (currentProviders.contains(providerName)) {
+                log.debug("Provider {} already registered with client {}", providerName, clientId);
+                return;
+            }
+
+            // Add the new provider
+            currentProviders.add(providerName);
+
+            // Update the client with the new provider
+            cognitoClient.updateUserPoolClient(UpdateUserPoolClientRequest.builder()
+                    .userPoolId(cognitoProperties.getUserPoolId())
+                    .clientId(clientId)
+                    .clientName(client.clientName())
+                    .supportedIdentityProviders(currentProviders)
+                    .callbackURLs(client.callbackURLs())
+                    .logoutURLs(client.logoutURLs())
+                    .allowedOAuthFlows(client.allowedOAuthFlows())
+                    .allowedOAuthScopes(client.allowedOAuthScopes())
+                    .allowedOAuthFlowsUserPoolClient(client.allowedOAuthFlowsUserPoolClient())
+                    .explicitAuthFlows(client.explicitAuthFlows())
+                    .accessTokenValidity(client.accessTokenValidity())
+                    .idTokenValidity(client.idTokenValidity())
+                    .refreshTokenValidity(client.refreshTokenValidity())
+                    .tokenValidityUnits(client.tokenValidityUnits())
+                    .readAttributes(client.readAttributes())
+                    .writeAttributes(client.writeAttributes())
+                    .preventUserExistenceErrors(client.preventUserExistenceErrors())
+                    .enableTokenRevocation(client.enableTokenRevocation())
+                    .build());
+
+            log.info("Registered identity provider {} with client {}", providerName, clientId);
+
+        } catch (Exception ex) {
+            log.error("Failed to register provider {} with client: {}", providerName, ex.getMessage(), ex);
+            // Don't fail the overall operation, provider is still created
         }
     }
 
@@ -316,7 +409,9 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
         Map<String, String> mapping = new HashMap<>();
         mapping.put("email", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress");
         mapping.put("name", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name");
-        mapping.put("custom:groups", "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups");
+        // Note: custom:groups requires the attribute to be pre-created in Cognito
+        // mapping.put("custom:groups",
+        // "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups");
         return mapping;
     }
 
@@ -325,7 +420,8 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
         mapping.put("email", "email");
         mapping.put("name", "name");
         mapping.put("username", "sub");
-        mapping.put("custom:groups", "groups");
+        // Note: custom:groups requires the attribute to be pre-created in Cognito
+        // mapping.put("custom:groups", "groups");
         return mapping;
     }
 
@@ -383,6 +479,8 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
             builder.defaultRole((String) config.get("defaultRole"));
             builder.oidcIssuer((String) config.get("oidcIssuer"));
             builder.oidcClientId((String) config.get("oidcClientId"));
+            builder.lastTestedAt((String) config.get("lastTestedAt"));
+            builder.testStatus((String) config.get("testStatus"));
 
             @SuppressWarnings("unchecked")
             Map<String, String> attrMap = (Map<String, String>) config.get("attributeMappings");

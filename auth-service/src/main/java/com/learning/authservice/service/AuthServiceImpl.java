@@ -1,7 +1,5 @@
 package com.learning.authservice.service;
 
-import org.springframework.security.core.Authentication;
-
 import com.learning.authservice.authorization.domain.UserRole;
 import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.authservice.config.CognitoProperties;
@@ -16,11 +14,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminInitiateAuthRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminInitiateAuthResponse;
@@ -67,9 +65,10 @@ public class AuthServiceImpl implements AuthService {
                 String email = request.getHeader("X-Email");
                 String name = request.getHeader("X-Username");
 
-                // Fetch role from database
+                // Fetch role from database - 'viewer' default for SSO users without role
+                // assignments
                 List<UserRole> userRoles = userRoleService.getUserRoles(userId);
-                String role = userRoles.isEmpty() ? "member" : userRoles.get(0).getRoleId();
+                String role = userRoles.isEmpty() ? "viewer" : userRoles.get(0).getRoleId();
 
                 log.info("operation=getCurrentUser, userId={}, role={}, requestId={}, status=success", userId, role,
                                 request.getAttribute("X-Request-Id"));

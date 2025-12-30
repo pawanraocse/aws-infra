@@ -216,8 +216,17 @@ resource "aws_cognito_user_pool_client" "spa" {
     "ALLOW_USER_PASSWORD_AUTH"
   ]
 
-  allowed_oauth_flows_user_pool_client = false
-  supported_identity_providers         = ["COGNITO"]
+  # Enable OAuth for SSO/federated login
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_scopes                 = ["openid", "email", "profile"]
+
+  # Support both Cognito and federated identity providers
+  supported_identity_providers = concat(["COGNITO"], var.identity_providers)
+
+  # OAuth callback URLs
+  callback_urls = var.callback_urls
+  logout_urls   = var.logout_urls
 
   access_token_validity  = var.access_token_validity
   id_token_validity      = var.id_token_validity
@@ -246,6 +255,14 @@ resource "aws_cognito_user_pool_client" "spa" {
     "email",
     "name"
   ]
+
+  # Ignore changes to supported_identity_providers because they are
+  # managed dynamically by the platform-service when tenants configure SSO
+  lifecycle {
+    ignore_changes = [
+      supported_identity_providers
+    ]
+  }
 }
 
 # =============================================================================

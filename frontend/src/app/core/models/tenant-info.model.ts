@@ -24,6 +24,9 @@ export interface TenantInfo {
     /** SSO provider type (OKTA, AZURE_AD, etc.) if enabled */
     ssoProvider?: string;
 
+    /** Cognito identity provider name for SSO redirect */
+    cognitoProviderName?: string;
+
     /** User's role hint in this tenant (owner, admin, member, guest) */
     roleHint: string;
 

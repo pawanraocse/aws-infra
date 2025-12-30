@@ -41,8 +41,12 @@ public class RoleLookupInternalController {
         List<UserRole> roles = userRoleService.getUserRoles(userId);
 
         if (roles.isEmpty()) {
-            log.warn("No roles found for userId={}", userId);
-            return ResponseEntity.ok(Map.of("roleId", ""));
+            // SSO users may not have explicit role assignments
+            // Gateway already validated JWT, so user is authenticated
+            // Return 'viewer' as default role (least privilege) until group mappings are
+            // configured
+            log.info("No roles found for userId={}, returning default 'viewer' role (SSO user)", userId);
+            return ResponseEntity.ok(Map.of("roleId", "viewer"));
         }
 
         // Return first role (primary role)

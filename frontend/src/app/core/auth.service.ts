@@ -1,23 +1,23 @@
-import { Injectable, inject, signal } from '@angular/core';
-import { signIn, signOut, getCurrentUser, fetchAuthSession, SignInOutput } from 'aws-amplify/auth';
-import { Router } from '@angular/router';
-import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import {inject, Injectable, signal} from '@angular/core';
+import {fetchAuthSession, getCurrentUser, signIn, SignInOutput, signOut} from 'aws-amplify/auth';
+import {Router} from '@angular/router';
+import {HttpClient} from '@angular/common/http';
+import {firstValueFrom} from 'rxjs';
 
 import {
-  UserInfo,
-  TenantInfo,
-  TenantLookupResult,
-  LoginWithTenantInput,
   AuthExceptionType,
   classifyAuthError,
-  getAuthErrorMessage
+  getAuthErrorMessage,
+  LoginWithTenantInput,
+  TenantInfo,
+  TenantLookupResult,
+  UserInfo
 } from './models';
-import { environment } from '../../environments/environment';
+import {environment} from '../../environments/environment';
 
 /**
  * Authentication service with multi-tenant support.
- * 
+ *
  * Handles:
  * - Email-first tenant lookup
  * - Multi-tenant login with tenant selection
@@ -46,7 +46,7 @@ export class AuthService {
   /**
    * Lookup tenants for a given email address.
    * First step of the multi-tenant login flow.
-   * 
+   *
    * @param email User's email address
    * @returns TenantLookupResult with tenants and flow control info
    */
@@ -83,7 +83,7 @@ export class AuthService {
   /**
    * Login with a selected tenant context.
    * Main login method for multi-tenant flow.
-   * 
+   *
    * @param input Login credentials with selected tenant
    * @returns SignInOutput from Cognito
    * @throws Error with classified exception type
@@ -121,6 +121,96 @@ export class AuthService {
       const enhancedError = new Error(message);
       (enhancedError as unknown as { code: AuthExceptionType }).code = errorType;
       throw enhancedError;
+    }
+  }
+
+  /**
+   * Initiate SSO login by redirecting to Cognito Hosted UI with identity provider.
+   * This triggers federated authentication via SAML/OIDC.
+   * Uses Amplify's signInWithRedirect for proper OAuth code exchange.
+   *
+   * @param tenant TenantInfo with SSO configuration
+   */
+  async loginWithSSO(tenant: TenantInfo): Promise<void> {
+    // The identity provider name should match what's configured in Cognito
+    const identityProvider = tenant.cognitoProviderName || `OKTA-${tenant.tenantId}`;
+
+    // Store tenant ID for post-login processing
+    sessionStorage.setItem('sso_pending_tenant', tenant.tenantId);
+
+    console.log('[Auth] Initiating SSO with provider:', identityProvider);
+
+    try {
+      // Use Amplify's signInWithRedirect for proper OAuth flow
+      // This handles the code exchange automatically on callback
+      const { signInWithRedirect } = await import('aws-amplify/auth');
+      await signInWithRedirect({
+        provider: {
+          custom: identityProvider
+        }
+      });
+    } catch (error) {
+      console.error('[Auth] SSO redirect failed:', error);
+      // Fallback to manual URL if signInWithRedirect fails
+      this.loginWithSSOManual(tenant);
+    }
+  }
+
+  /**
+   * Fallback: Manual SSO URL building if Amplify redirect fails.
+   */
+  private loginWithSSOManual(tenant: TenantInfo): void {
+    const cognitoDomain = environment.cognito.domain;
+    const clientId = environment.cognito.userPoolWebClientId;
+    const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`);
+    const identityProvider = tenant.cognitoProviderName || `OKTA-${tenant.tenantId}`;
+
+    const ssoUrl = `https://${cognitoDomain}/oauth2/authorize` +
+      `?identity_provider=${encodeURIComponent(identityProvider)}` +
+      `&response_type=code` +
+      `&client_id=${clientId}` +
+      `&redirect_uri=${redirectUri}` +
+      `&scope=openid+email+profile`;
+
+    console.log('[Auth] Fallback SSO URL:', ssoUrl);
+    window.location.href = ssoUrl;
+  }
+
+  /**
+   * JIT provision an SSO user after successful login.
+   * Called from callback component after SSO auth completes.
+   * This is needed because Lambda can't reach local services during development.
+   *
+   * Note: Role assignment is handled via group mappings configured in the admin UI.
+   * The Lambda's _resolve_role_from_groups function maps IdP groups to roles.
+   */
+  async jitProvisionSsoUser(tenantId: string, email: string, cognitoUserId: string): Promise<boolean> {
+    try {
+      console.log('[Auth] JIT provisioning SSO user:', { tenantId, email, cognitoUserId });
+
+      const jitResponse = await firstValueFrom(
+        this.http.post<{ success: boolean; message: string }>(
+          `${environment.apiUrl}/platform-service/platform/internal/users/jit-provision`,
+          {
+            tenantId,
+            email,
+            cognitoUserId,
+            source: 'SSO',
+            defaultRole: 'admin'
+          }
+        )
+      );
+
+      console.log('[Auth] JIT provision result:', jitResponse);
+      return jitResponse.success;
+    } catch (error: any) {
+      // 409 Conflict or similar means user already exists, which is fine
+      if (error.status === 409 || error.error?.message?.includes('already exists')) {
+        console.log('[Auth] User already provisioned');
+        return true;
+      }
+      console.warn('[Auth] JIT provision failed:', error);
+      return false;
     }
   }
 
@@ -183,14 +273,14 @@ export class AuthService {
           tenantType = await this.lookupTenantType(tenantId);
         }
 
-        // Fetch role from auth-service using the token we already have
-        const role = await this.lookupUserRole(idTokenString);
+        // Fetch user info (email, role) from auth-service - backend is single source of truth
+        const userInfo = await this.lookupUserInfo(idTokenString);
 
         this.setUserInfo({
           userId: currentUser.userId,
-          email: currentUser.signInDetails?.loginId || '',
+          email: userInfo.email,
           tenantId,
-          role,
+          role: userInfo.role,
           tenantType,
           emailVerified: Boolean(idToken['email_verified'])
         });
@@ -204,27 +294,29 @@ export class AuthService {
   }
 
   /**
-   * Lookup user role from auth-service.
-   * Role is stored in tenant DB, not in JWT.
+   * Lookup user info from auth-service /me endpoint.
+   * Backend is single source of truth for email and role.
    * @param token Optional JWT token to use for authentication
    */
-  private async lookupUserRole(token?: string): Promise<string> {
+  private async lookupUserInfo(token?: string): Promise<{ email: string; role: string; name: string }> {
     try {
-      // Build request options with optional auth header
       const options = token
         ? { headers: { Authorization: `Bearer ${token}` } }
         : {};
 
       const response = await firstValueFrom(
-        this.http.get<{ role: string }>(
+        this.http.get<{ email: string; role: string; name: string; userId: string }>(
           `${environment.apiUrl}/auth/api/v1/auth/me`,
           options
         )
       );
-      return response?.role || 'member';
+      return {
+        email: response?.email || '',
+        role: response?.role || 'viewer',
+        name: response?.name || ''
+      };
     } catch {
-      // Expected to fail during initial app load before user logs in
-      return 'member';
+      return { email: '', role: 'viewer', name: '' };
     }
   }
 

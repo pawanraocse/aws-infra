@@ -207,6 +207,59 @@ graph TB
 
 ---
 
+## 🔀 Service Routing & Context Paths
+
+Understanding how requests flow through the gateway to backend services is critical for debugging and development.
+
+### Service Configuration Table
+
+| Service | Port | Context Path | Eureka Name | Gateway Route |
+|---------|------|--------------|-------------|---------------|
+| **Gateway** | 8080 | `/` (root) | GATEWAY-SERVICE | N/A (entry point) |
+| **Auth Service** | 8081 | `/` (root) | AUTH-SERVICE | `/auth/**` |
+| **Backend Service** | 8082 | `/` (root) | BACKEND-SERVICE | `/api/**` |
+| **Platform Service** | 8083 | `/platform` | PLATFORM-SERVICE | `/platform-service/**` |
+| **Eureka Server** | 8761 | `/` (root) | N/A | N/A (discovery only) |
+
+### URL Construction Examples
+
+When calling services through the gateway, construct URLs as:
+```
+http://localhost:8080/{gateway-route}/{context-path}/{endpoint}
+```
+
+**Examples:**
+
+| Service | Endpoint | Full Gateway URL |
+|---------|----------|------------------|
+| Auth | `/api/v1/auth/login` | `http://localhost:8080/auth/api/v1/auth/login` |
+| Backend | `/api/v1/entries` | `http://localhost:8080/api/v1/entries` |
+| Platform | `/internal/tenants/{id}` | `http://localhost:8080/platform-service/platform/internal/tenants/{id}` |
+| Platform | `/api/v1/sso/config` | `http://localhost:8080/platform-service/platform/api/v1/sso/config` |
+
+### Direct Service Access (Development Only)
+
+For debugging, you can bypass the gateway:
+
+| Service | Direct URL Example |
+|---------|-------------------|
+| Auth | `http://localhost:8081/api/v1/auth/login` |
+| Backend | `http://localhost:8082/api/v1/entries` |
+| Platform | `http://localhost:8083/platform/internal/tenants/xyz` |
+
+> **⚠️ Important:** Platform-service has context path `/platform`. All its endpoints are prefixed with `/platform`.
+
+### Internal API Paths
+
+Internal APIs (service-to-service) use `/internal/**` prefix and bypass JWT authentication:
+
+| Service | Internal API Examples |
+|---------|----------------------|
+| Platform | `/platform/internal/tenants/{id}`, `/platform/internal/users/jit-provision` |
+| Auth | `/internal/roles/lookup`, `/internal/groups/resolve-role` |
+
+---
+
 ## 🎯 Design Principles
 
 ### 1. Gateway-as-Gatekeeper (Security Boundary)

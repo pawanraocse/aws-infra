@@ -21,21 +21,24 @@ export interface SsoConfig {
  * SAML configuration request
  */
 export interface SamlConfigRequest {
-    metadataUrl: string;
+    idpType: 'SAML' | 'OKTA';
+    providerName: string;
+    metadataUrl?: string;
+    metadataXml?: string;
     entityId?: string;
-    signInUrl?: string;
-    signingCertificate?: string;
+    ssoUrl?: string;
 }
 
 /**
  * OIDC configuration request
  */
 export interface OidcConfigRequest {
+    idpType: 'OIDC' | 'AZURE_AD' | 'GOOGLE';
+    providerName: string;
     clientId: string;
     clientSecret: string;
-    issuerUrl: string;
-    scopes?: string[];
-    provider?: 'GOOGLE' | 'AZURE_AD' | 'OKTA' | 'GENERIC';
+    issuerUrl?: string;
+    scopes?: string;
 }
 
 /**

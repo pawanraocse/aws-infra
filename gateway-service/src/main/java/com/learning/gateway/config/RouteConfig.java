@@ -64,6 +64,40 @@ public class RouteConfig {
                                                                                                 HttpStatus.SERVICE_UNAVAILABLE)))
                                                 .uri("lb://" + PLATFORM_SERVICE_ID))
 
+                                // SSO API route -> platform-service (must be before generic /api/**)
+                                .route("sso-service", r -> r
+                                                .path("/api/v1/sso/**")
+                                                .filters(f -> f
+                                                                .filter(jwtFilterFactory.apply(
+                                                                                new JwtAuthenticationGatewayFilterFactory.Config()))
+                                                                .rewritePath("/api/v1/sso/(?<segment>.*)",
+                                                                                "/platform/api/v1/sso/${segment}")
+                                                                .circuitBreaker(c -> c
+                                                                                .setName(CB_PLATFORM)
+                                                                                .setFallbackUri(FALLBACK_URI))
+                                                                .retry(rCfg -> rCfg
+                                                                                .setRetries(3)
+                                                                                .setStatuses(HttpStatus.BAD_GATEWAY,
+                                                                                                HttpStatus.SERVICE_UNAVAILABLE)))
+                                                .uri("lb://" + PLATFORM_SERVICE_ID))
+
+                                // Group mapping API route -> platform-service
+                                .route("group-mapping-service", r -> r
+                                                .path("/api/v1/group-mappings/**")
+                                                .filters(f -> f
+                                                                .filter(jwtFilterFactory.apply(
+                                                                                new JwtAuthenticationGatewayFilterFactory.Config()))
+                                                                .rewritePath("/api/v1/group-mappings/(?<segment>.*)",
+                                                                                "/platform/api/v1/group-mappings/${segment}")
+                                                                .circuitBreaker(c -> c
+                                                                                .setName(CB_PLATFORM)
+                                                                                .setFallbackUri(FALLBACK_URI))
+                                                                .retry(rCfg -> rCfg
+                                                                                .setRetries(3)
+                                                                                .setStatuses(HttpStatus.BAD_GATEWAY,
+                                                                                                HttpStatus.SERVICE_UNAVAILABLE)))
+                                                .uri("lb://" + PLATFORM_SERVICE_ID))
+
                                 .route(BACKEND_SERVICE_ID, r -> r
                                                 .path(API_PATH)
                                                 .filters(f -> f

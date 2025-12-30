@@ -47,6 +47,10 @@ public class SsoConfigDto {
     // Cognito Identity Provider name
     private String cognitoProviderName;
 
+    // Test status
+    private String lastTestedAt;
+    private String testStatus;
+
     // Audit fields
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;

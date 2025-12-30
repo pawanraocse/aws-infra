@@ -113,17 +113,30 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         stored_tenant_id = user_attributes.get('custom:tenantId')
         stored_tenant_type = user_attributes.get('custom:tenantType', 'PERSONAL')
         
-        # Determine final tenant ID
-        final_tenant_id = _determine_tenant_id(selected_tenant_id, stored_tenant_id, username)
-        
-        if not final_tenant_id:
-            logger.warning(f"No tenantId found for user: {username}")
-            return event
-        
         # Extract groups and detect IdP type from SSO claims
         groups = _extract_groups_from_claims(user_attributes)
         idp_type = _detect_idp_type(user_attributes)
         is_sso_user = idp_type in ('SAML', 'OIDC', 'OKTA', 'AZURE_AD', 'GOOGLE', 'PING')
+        
+        # For SSO users, try to extract tenant from identity provider name
+        # Provider names follow pattern: OKTA-{tenantId}, SAML-{tenantId}, etc.
+        sso_tenant_id = None
+        if is_sso_user:
+            sso_tenant_id = _extract_tenant_from_idp(user_attributes)
+            if sso_tenant_id:
+                logger.info(f"Extracted tenant '{sso_tenant_id}' from SSO identity provider")
+                stored_tenant_type = 'ORGANIZATION'  # SSO users are always org users
+        
+        # Determine final tenant ID - SSO tenant takes precedence for federated users
+        final_tenant_id = _determine_tenant_id(
+            selected_tenant_id, 
+            sso_tenant_id or stored_tenant_id, 
+            username
+        )
+        
+        if not final_tenant_id:
+            logger.warning(f"No tenantId found for user: {username}")
+            return event
         
         # Sync groups if enabled and groups found
         if ENABLE_GROUP_SYNC and groups and final_tenant_id:
@@ -145,9 +158,15 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             claims_to_override['custom:groups'] = ','.join(groups)
         
         # Set the override in the response
+        # NOTE: Using V2 format (claimsAndScopeOverrideDetails) as Lambda is configured for V2_0
         event['response'] = event.get('response', {})
-        event['response']['claimsOverrideDetails'] = {
-            'claimsToAddOrOverride': claims_to_override
+        event['response']['claimsAndScopeOverrideDetails'] = {
+            'idTokenGeneration': {
+                'claimsToAddOrOverride': claims_to_override
+            },
+            'accessTokenGeneration': {
+                'claimsToAddOrOverride': claims_to_override
+            }
         }
         
         logger.info(
@@ -239,6 +258,59 @@ def _detect_idp_type(user_attributes: Dict[str, str]) -> str:
         return 'SAML'
     
     return 'OIDC'
+
+
+def _extract_tenant_from_idp(user_attributes: Dict[str, str]) -> Optional[str]:
+    """
+    Extract tenant ID from the identity provider name.
+    
+    Identity providers are named with a pattern: {IdP_TYPE}-{tenantId}
+    Examples:
+    - OKTA-aarohan -> aarohan
+    - SAML-acme-corp -> acme-corp
+    - AZURE_AD-mycompany -> mycompany
+    
+    Returns:
+        Tenant ID if found, None otherwise
+    """
+    identities_raw = user_attributes.get('identities', '')
+    
+    if not identities_raw:
+        return None
+    
+    try:
+        identities = json.loads(identities_raw)
+        if identities and isinstance(identities, list):
+            provider_name = identities[0].get('providerName', '')
+            
+            if not provider_name:
+                return None
+            
+            # Provider names follow pattern: PREFIX-tenantId
+            # e.g., OKTA-aarohan, SAML-acme, AZURE_AD-mycompany
+            prefixes = ['OKTA-', 'SAML-', 'OIDC-', 'AZURE_AD-', 'GOOGLE-', 'PING-']
+            
+            for prefix in prefixes:
+                if provider_name.upper().startswith(prefix):
+                    # Find position of the prefix (case-insensitive)
+                    idx = provider_name.upper().find(prefix)
+                    if idx != -1:
+                        tenant_id = provider_name[idx + len(prefix):]
+                        if tenant_id:
+                            logger.debug(f"Extracted tenant '{tenant_id}' from provider '{provider_name}'")
+                            return tenant_id.lower()
+            
+            # If no known prefix, try generic dash split
+            if '-' in provider_name:
+                parts = provider_name.split('-', 1)
+                if len(parts) == 2 and parts[1]:
+                    logger.debug(f"Extracted tenant '{parts[1]}' from provider '{provider_name}' (generic)")
+                    return parts[1].lower()
+                    
+    except json.JSONDecodeError:
+        pass
+    
+    return None
 
 
 def _sync_groups_to_platform(tenant_id: str, groups: List[str], idp_type: str) -> None:

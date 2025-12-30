@@ -53,7 +53,59 @@
             [disabled]="emailForm.invalid"
             styleClass="w-full p-button-lg">
           </p-button>
+
+          <!-- SSO Divider -->
+          <div class="flex align-items-center gap-3 my-4">
+            <div class="flex-1 border-top-1 surface-border"></div>
+            <span class="text-500 font-medium">or</span>
+            <div class="flex-1 border-top-1 surface-border"></div>
+          </div>
+
+          <!-- SSO Login Button -->
+          <p-button 
+            label="Sign in with SSO" 
+            icon="pi pi-key"
+            severity="secondary"
+            styleClass="w-full"
+            (onClick)="showSsoTenantInput()">
+          </p-button>
         </form>
+
+        <!-- SSO Tenant Input Modal -->
+        @if (showSsoInput()) {
+          <div class="sso-input-section mt-4">
+            <div class="p-fluid">
+              <label for="ssoTenant" class="font-medium text-900 mb-2 block">Organization Name</label>
+              <span class="p-input-icon-left w-full">
+                <i class="pi pi-building"></i>
+                <input 
+                  pInputText 
+                  id="ssoTenant" 
+                  [(ngModel)]="ssoTenantName"
+                  class="w-full" 
+                  placeholder="Enter your organization name" />
+              </span>
+              <small class="text-500 mt-1 block">Enter your company name or organization identifier</small>
+            </div>
+            <div class="flex gap-2 mt-3">
+              <p-button 
+                label="Cancel" 
+                severity="secondary"
+                [text]="true"
+                styleClass="flex-1"
+                (onClick)="cancelSsoInput()">
+              </p-button>
+              <p-button 
+                label="Continue to SSO" 
+                icon="pi pi-sign-in"
+                styleClass="flex-1"
+                [loading]="loading()"
+                [disabled]="!ssoTenantName"
+                (onClick)="loginWithSsoTenant()">
+              </p-button>
+            </div>
+          </div>
+        }
       }
 
       <!-- Step 2: Tenant Selection -->

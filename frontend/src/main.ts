@@ -27,11 +27,24 @@ async function initializeApp(): Promise<void> {
   }
 
   // Configure Amplify with the loaded config
+  const cognitoDomain = environment.cognito.domain;
+  const redirectUri = `${window.location.origin}/auth/callback`;
+  const logoutUri = window.location.origin;
+
   Amplify.configure({
     Auth: {
       Cognito: {
         userPoolId,
         userPoolClientId,
+        loginWith: {
+          oauth: {
+            domain: cognitoDomain,
+            scopes: ['openid', 'email', 'profile'],
+            redirectSignIn: [redirectUri],
+            redirectSignOut: [logoutUri],
+            responseType: 'code'
+          }
+        }
       }
     }
   });

@@ -3,16 +3,15 @@ package com.learning.gateway.filter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
+import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.core.io.buffer.DataBuffer;
 import reactor.core.publisher.Mono;
-import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -60,7 +59,47 @@ public class JwtAuthenticationGatewayFilterFactory
                     String tenantId = tenantResult.tenantId();
                     String userId = jwt.getSubject();
                     String username = jwt.getClaimAsString("username");
+
+                    // Debug: log all claims to troubleshoot email extraction
+                    log.debug("JWT claims for userId={}: {}", userId, jwt.getClaims().keySet());
+
+                    // Extract email - check multiple claim locations for SSO compatibility
                     String email = jwt.getClaimAsString("email");
+                    if (email == null || email.isBlank()) {
+                        // For SSO users, email may be in custom claims
+                        email = jwt.getClaimAsString("custom:email");
+                    }
+                    if (email == null || email.isBlank()) {
+                        // For federated users, extract from identities claim
+                        // identities is an array of objects: [{userId: "email", providerName: "...",
+                        // ...}]
+                        Object identitiesObj = jwt.getClaim("identities");
+                        if (identitiesObj instanceof java.util.List<?> identitiesList && !identitiesList.isEmpty()) {
+                            Object firstIdentity = identitiesList.get(0);
+                            if (firstIdentity instanceof java.util.Map<?, ?> identityMap) {
+                                Object userIdObj = identityMap.get("userId");
+                                if (userIdObj instanceof String userIdStr && userIdStr.contains("@")) {
+                                    email = userIdStr;
+                                    log.debug("Extracted email from identities: {}", email);
+                                }
+                            }
+                        }
+                    }
+                    if (email == null || email.isBlank()) {
+                        // Last resort: extract from cognito:username (format: "prefix_email@domain")
+                        String cognitoUsername = jwt.getClaimAsString("cognito:username");
+                        if (cognitoUsername != null && cognitoUsername.contains("@")) {
+                            // Extract email part after underscore (e.g., "okta-aarohan_user@example.com")
+                            int underscoreIdx = cognitoUsername.indexOf('_');
+                            if (underscoreIdx > 0 && underscoreIdx < cognitoUsername.length() - 1) {
+                                email = cognitoUsername.substring(underscoreIdx + 1);
+                            } else {
+                                email = cognitoUsername;
+                            }
+                            log.debug("Extracted email from cognito:username: {}", email);
+                        }
+                    }
+
                     String authorities = authentication.getAuthorities().stream()
                             .map(Object::toString)
                             .collect(Collectors.joining(","));

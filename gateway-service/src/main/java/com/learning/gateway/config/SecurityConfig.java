@@ -56,6 +56,10 @@ public class SecurityConfig {
                                                                 "/auth/api/v1/invitations/accept",
                                                                 // Stripe webhook (secured by signature, not JWT)
                                                                 "/platform-service/platform/billing/webhook",
+                                                                // JIT provisioning for SSO users (called during
+                                                                // callback)
+                                                                "/platform-service/platform/internal/users/jit-provision",
+                                                                "/platform-service/platform/internal/users/exists",
                                                                 // Frontend config endpoint (public - needed before
                                                                 // auth)
                                                                 "/api/config/**",

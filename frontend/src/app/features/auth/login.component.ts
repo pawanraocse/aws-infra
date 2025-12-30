@@ -1,20 +1,15 @@
-import { Component, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
-import { AuthService } from '../../core/auth.service';
-import {
-  TenantInfo,
-  TenantLookupResult,
-  AuthExceptionType,
-  getAuthErrorMessage
-} from '../../core/models';
-import { CardModule } from 'primeng/card';
-import { ButtonModule } from 'primeng/button';
-import { InputTextModule } from 'primeng/inputtext';
-import { PasswordModule } from 'primeng/password';
-import { MessageModule } from 'primeng/message';
-import { ProgressSpinnerModule } from 'primeng/progressspinner';
+import {Component, inject, signal} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {FormBuilder, FormsModule, ReactiveFormsModule, Validators} from '@angular/forms';
+import {Router, RouterModule} from '@angular/router';
+import {AuthService} from '../../core/auth.service';
+import {AuthExceptionType, getAuthErrorMessage, TenantInfo, TenantLookupResult} from '../../core/models';
+import {CardModule} from 'primeng/card';
+import {ButtonModule} from 'primeng/button';
+import {InputTextModule} from 'primeng/inputtext';
+import {PasswordModule} from 'primeng/password';
+import {MessageModule} from 'primeng/message';
+import {ProgressSpinnerModule} from 'primeng/progressspinner';
 
 /**
  * Login flow states for the multi-step state machine.
@@ -27,6 +22,7 @@ type LoginStep = 'email' | 'select-tenant' | 'password';
   imports: [
     CommonModule,
     ReactiveFormsModule,
+    FormsModule,
     RouterModule,
     CardModule,
     ButtonModule,
@@ -75,6 +71,14 @@ export class LoginComponent {
     password: ['', [Validators.required, Validators.minLength(8)]]
   });
 
+  // ========== SSO Login ==========
+
+  /** Show SSO organization input */
+  showSsoInput = signal(false);
+
+  /** SSO tenant/organization name */
+  ssoTenantName = '';
+
   // ========== Step 1: Email Lookup ==========
 
   /**
@@ -109,8 +113,6 @@ export class LoginComponent {
     }
   }
 
-  // ========== Step 2: Tenant Selection ==========
-
   /**
    * Select a tenant from the list.
    */
@@ -119,8 +121,8 @@ export class LoginComponent {
 
     // Check if SSO is enabled for this tenant
     if (tenant.ssoEnabled) {
-      // SSO not yet implemented - show message
-      this.error.set(getAuthErrorMessage(AuthExceptionType.SSO_NOT_CONFIGURED));
+      // Redirect to SSO login via Cognito Hosted UI
+      this.authService.loginWithSSO(tenant);
       return;
     }
 
@@ -233,5 +235,62 @@ export class LoginComponent {
    */
   getTenantIcon(tenant: TenantInfo): string {
     return tenant.tenantType === 'PERSONAL' ? 'pi-user' : 'pi-building';
+  }
+
+  // ========== SSO Methods ==========
+
+  /**
+   * Show SSO organization input.
+   */
+  showSsoTenantInput() {
+    this.showSsoInput.set(true);
+    this.error.set(null);
+  }
+
+  /**
+   * Cancel SSO input and go back to email form.
+   */
+  cancelSsoInput() {
+    this.showSsoInput.set(false);
+    this.ssoTenantName = '';
+    this.error.set(null);
+  }
+
+  /**
+   * Login with SSO using the organization name.
+   * Looks up the tenant by name and redirects to SSO.
+   */
+  async loginWithSsoTenant() {
+    if (!this.ssoTenantName.trim()) {
+      this.error.set('Please enter your organization name');
+      return;
+    }
+
+    this.loading.set(true);
+    this.error.set(null);
+
+    try {
+      // Create a minimal tenant info for SSO redirect
+      // The tenant ID is typically the organization name (sanitized)
+      const tenantId = this.ssoTenantName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+
+      const tenant: TenantInfo = {
+        tenantId: tenantId,
+        tenantName: this.ssoTenantName,
+        tenantType: 'ORGANIZATION',
+        ssoEnabled: true,
+        roleHint: 'member',
+        isOwner: false,
+        isDefault: false,
+        // Cognito provider name follows our convention
+        cognitoProviderName: `OKTA-${tenantId}`
+      };
+
+      // Redirect to SSO
+      this.authService.loginWithSSO(tenant);
+    } catch (err) {
+      this.loading.set(false);
+      this.error.set('Failed to initiate SSO login. Please try again.');
+    }
   }
 }

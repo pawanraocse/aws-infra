@@ -72,46 +72,114 @@ terraform output cognito_domain          # e.g., your-domain.auth.us-east-1.amaz
 
 ---
 
-## 2. Setting Up Test IdP Accounts
+## 2. Complete Okta SSO Setup Guide
 
-### 2.1 Okta Developer Account
+This section covers the complete Okta setup end-to-end.
 
-**Step 1: Create Account**
+---
+
+### 2.1 Create Okta Developer Account
+
 1. Go to https://developer.okta.com/signup/
 2. Fill in: Work email, Name, Country
 3. Activate via email, set password
+4. Note your Okta domain: `https://dev-XXXXX.okta.com`
 
-**Step 2: Create Test Users**
-1. Directory → People → Add Person
-2. Create users:
-   - `alice@yourcompany.com` (Group: Engineering)
-   - `bob@yourcompany.com` (Group: Marketing)
-   - `charlie@yourcompany.com` (Groups: Engineering, Marketing)
+---
 
-**Step 3: Create Groups**
-1. Directory → Groups → Add Group
-2. Create: `Engineering`, `Marketing`, `Admins`
-3. Assign users to groups
+### 2.2 Create Test Users in Okta
 
-**Step 4: Create SAML Application**
-1. Applications → Create App Integration → SAML 2.0
-2. Configure:
-   - **Single Sign-On URL:** `https://<cognito-domain>/saml2/idpresponse`
-   - **Audience URI (SP Entity ID):** `urn:amazon:cognito:sp:<user-pool-id>`
-   - **Name ID format:** Email
-3. Attribute Statements:
+1. **Directory → People → Add Person**
+2. Create test users with emails (e.g., `testuser@yourcompany.com`)
+3. Optionally assign to groups for role mapping
+
+---
+
+### 2.3 Create SAML Application in Okta
+
+1. **Applications → Create App Integration → SAML 2.0**
+2. Give it a name (e.g., "SaaS Platform SSO")
+3. Configure SAML settings:
+
+   | Setting | Value |
+   |---------|-------|
+   | **Single Sign-On URL** | `https://<cognito-domain>.auth.<region>.amazoncognito.com/saml2/idpresponse` |
+   | **Audience URI (SP Entity ID)** | `urn:amazon:cognito:sp:<user-pool-id>` |
+   | **Name ID format** | EmailAddress |
+
+4. **Attribute Statements:**
    | Name | Value |
    |------|-------|
-   | email | user.email |
-   | name | user.displayName |
-4. Group Attribute Statements:
-   | Name | Filter | Value |
-   |------|--------|-------|
-   | groups | Matches regex | .* |
+   | `email` | `user.email` |
+   | `name` | `user.displayName` |
 
-**Step 5: Get Metadata URL**
-- Applications → Your App → Sign On → "View SAML setup instructions"
-- Copy: `https://dev-XXXXX.okta.com/app/YYYYYY/sso/saml/metadata`
+5. Click **Next** → Select "I'm an Okta customer" → **Finish**
+
+---
+
+### 2.4 Get Okta Metadata URL
+
+1. **Applications → Your App → Sign On** tab
+2. Scroll to "SAML 2.0" section → **Metadata URL**
+3. Copy the URL (format: `https://dev-XXXXX.okta.com/app/YYYYYY/sso/saml/metadata`)
+
+---
+
+### 2.5 Option A: Set Up in Our App (Recommended)
+
+1. Login as tenant admin
+2. Navigate to **Settings → SSO Configuration**
+3. Select **Okta** as provider
+4. Paste the **Metadata URL** from step 2.4
+5. Click **Save Configuration** → **Enable SSO**
+
+**To Remove:** Click **Remove Configuration** (cleans up Cognito and database)
+
+---
+
+### 2.6 Option B: Set Up Directly in Cognito Console
+
+**Step 1: Add Identity Provider**
+1. AWS Console → Cognito → User Pools → Your Pool
+2. **Social and external providers** → **Add identity provider** → **SAML**
+3. Configure:
+   - **Provider name:** `OKTA-{tenantId}` (e.g., `OKTA-aarohan`)
+   - **Metadata document URL:** Paste URL from step 2.4
+   - **SAML signing:** Leave unchecked for testing
+   - **IdP-initiated:** Select "Require SP-initiated" (recommended)
+4. **Map attributes:**
+   | User pool attribute | SAML attribute |
+   |---------------------|----------------|
+   | `email` | `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress` |
+5. Click **Add identity provider**
+
+**Step 2: Enable for App Client**
+1. **App integration** → Your app client → **Hosted UI** → Edit
+2. Under **Identity providers**, check your SAML provider
+3. Verify callback URL: `http://localhost:4200/auth/callback`
+4. Save changes
+
+**Step 3: Test SSO**
+- Click **Login with SSO** → Enter org name → Okta login → Returns to app
+
+---
+
+### 2.7 Okta Cognito Values Quick Reference
+
+| What You Need | Where to Find It |
+|---------------|------------------|
+| **Metadata URL** | Okta → Applications → Your App → Sign On → Metadata URL |
+| **Cognito ACS URL** | `https://<domain>.auth.<region>.amazoncognito.com/saml2/idpresponse` |
+| **Cognito Entity ID** | `urn:amazon:cognito:sp:<user-pool-id>` |
+| **Cognito Domain** | AWS Console → Cognito → Your Pool → App integration → Domain |
+| **User Pool ID** | AWS Console → Cognito → Your Pool → User pool overview |
+
+> **⚠️ IMPORTANT: Provider Name Case Sensitivity**
+> 
+> Cognito provider names are **case-sensitive**. The provider name in Cognito must **exactly match** what the frontend constructs.
+> - Frontend expects: `OKTA-{tenantId}` (uppercase OKTA)
+> - If you create `OkTA-aarohan` instead of `OKTA-aarohan`, SSO will fail with "Login pages unavailable"
+> - Always use **UPPERCASE** for the IdP type: `OKTA-`, `AZURE-`, `PING-`
 
 ---
 
@@ -403,3 +471,166 @@ POST /api/v1/sso/test           - Test connection
 /app/admin/settings/sso           - SSO configuration
 /app/admin/settings/group-mapping - Group role mappings
 ```
+
+---
+
+## 7. Local Development Testing
+
+### 7.1 Local Environment Setup
+
+For testing SSO locally (Lambda can't reach local services), client-side JIT provisioning handles user creation.
+
+```bash
+# Start all services with Docker Compose
+docker-compose up -d
+
+# Verify all services are healthy
+docker ps
+
+# Frontend with hot-reload
+cd frontend && npm run start
+```
+
+**Important:** Ensure `environment.ts` has:
+```typescript
+production: false  // Enables client-side JIT for local dev
+```
+
+### 7.2 Okta Local Testing Flow
+
+| Step | Action | What Happens |
+|------|--------|--------------|
+| 1 | Click "Login with SSO" | Redirects to Cognito Hosted UI |
+| 2 | Cognito redirects to Okta | User authenticates with Okta |
+| 3 | Okta → Cognito → Frontend callback | `callback.component.ts` handles token |
+| 4 | Frontend calls JIT provision API | Creates user membership in platform-service |
+| 5 | Frontend calls `/me` API | Gets email, role from auth-service |
+| 6 | User lands on dashboard | Profile shows email, tenant, role |
+
+### 7.3 Verifying Local SSO
+
+**Check JWT Claims:**
+- Open browser DevTools → Application → Local Storage → `CognitoIdentityServiceProvider.*`
+- Decode ID token at https://jwt.io
+- Verify:
+  - `custom:tenantId` is present
+  - `identities[0].userId` contains email
+  - `cognito:groups` contains tenant group
+
+**Check API Response:**
+```bash
+# After SSO login, call /me endpoint
+curl -H "Authorization: Bearer <id-token>" \
+  http://localhost:8080/auth/api/v1/auth/me
+
+# Expected response:
+{
+  "userId": "uuid",
+  "email": "user@company.com",
+  "role": "viewer",
+  "name": ""
+}
+```
+
+### 7.4 Database Verification
+
+```bash
+# Check user membership was created
+docker exec postgres psql -U postgres -d platform_db -c \
+  "SELECT * FROM user_tenant_memberships WHERE email = 'user@company.com';"
+
+# Check tenant has SSO enabled
+docker exec postgres psql -U postgres -d platform_db -c \
+  "SELECT tenant_id, sso_enabled, sso_provider, cognito_provider_name FROM tenants;"
+```
+
+---
+
+## 8. Additional Test Scenarios (Local Dev)
+
+### Scenario 10: Admin Password Login with SSO Enabled
+
+**Purpose:** Ensure admin users can login with password even when tenant has SSO configured.
+
+| Step | Action | Expected |
+|------|--------|----------|
+| 1 | Enter admin email | - |
+| 2 | Click continue | Goes to password step (NOT SSO redirect) |
+| 3 | Enter password | Successful login |
+
+> **Note:** SSO redirect only happens via the "Login with SSO" button, never via email/password flow.
+
+---
+
+### Scenario 11: Default Role Without Group Mapping
+
+**Purpose:** Verify SSO users get default role when no group mappings exist.
+
+| Step | Action | Expected |
+|------|--------|----------|
+| 1 | Configure SSO (no group mappings) | - |
+| 2 | Login with SSO | User created |
+| 3 | Check profile | Role = "viewer" (default) |
+| 4 | Add group mapping for user's group | - |
+| 5 | Re-login with SSO | Role = mapped role |
+
+---
+
+### Scenario 12: Email Extraction from identities
+
+**Purpose:** Verify email is correctly extracted from JWT for SSO users.
+
+**Check Points:**
+1. JWT has `identities[0].userId` with email
+2. Gateway extracts email → `X-Email` header
+3. `/me` API returns correct email
+4. UI displays email in profile
+
+---
+
+## 9. Key Learnings & Gotchas
+
+### 9.1 JWT Claim Differences (SSO vs Password)
+
+| Claim | Password User | SSO User |
+|-------|--------------|----------|
+| `email` | ✅ Present | ❌ Not present |
+| `identities` | ❌ Not present | ✅ Array with userId |
+| `cognito:username` | email | `{idp}_{email}` |
+| `custom:tenantId` | ✅ Present | ✅ Present (from Lambda) |
+
+### 9.2 Service Dependencies
+
+```
+Gateway → Auth-Service → (role lookup)
+      ↘ Platform-Service → (JIT provision, tenant info)
+      
+Lambda → Platform-Service → (in production, not local)
+```
+
+### 9.3 Common Pitfalls
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| 403 after SSO login | No role mapping + no default role | Added default 'viewer' role |
+| Missing email in profile | `identities` is array, not string | Parse `identities[0].userId` |
+| Auto-redirect to SSO | `selectTenant()` checked ssoEnabled | Removed auto-redirect |
+| Stale service connection | Container IP changed after restart | Restart dependent services |
+| Lambda can't reach local services | Lambda in AWS, services in Docker | Use client-side JIT for local dev |
+
+---
+
+## 10. Production Checklist
+
+Before deploying to production:
+
+- [ ] `environment.production = true` (disables client-side JIT)
+- [ ] Lambda VPC configured to reach platform-service
+- [ ] Group mappings configured for all expected IdP groups
+- [ ] SAML/OIDC metadata URLs are production endpoints
+- [ ] Cognito Hosted UI callback URLs include production domain
+- [ ] Log levels set to INFO (not DEBUG)
+
+
+
+

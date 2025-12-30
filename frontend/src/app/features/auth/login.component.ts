@@ -76,6 +76,9 @@ export class LoginComponent {
   /** Show SSO organization input */
   showSsoInput = signal(false);
 
+  /** SSO loading state (separate from main loading) */
+  ssoLoading = signal(false);
+
   /** SSO tenant/organization name */
   ssoTenantName = '';
 
@@ -115,17 +118,12 @@ export class LoginComponent {
 
   /**
    * Select a tenant from the list.
+   * Always proceeds to password step - SSO users use the dedicated SSO button.
    */
   selectTenant(tenant: TenantInfo) {
     this.selectedTenant.set(tenant);
-
-    // Check if SSO is enabled for this tenant
-    if (tenant.ssoEnabled) {
-      // Redirect to SSO login via Cognito Hosted UI
-      this.authService.loginWithSSO(tenant);
-      return;
-    }
-
+    // Always go to password step for email login flow
+    // Users who want SSO should use the "Login with SSO" button instead
     this.currentStep.set('password');
     this.error.set(null);
   }
@@ -266,7 +264,7 @@ export class LoginComponent {
       return;
     }
 
-    this.loading.set(true);
+    this.ssoLoading.set(true);
     this.error.set(null);
 
     try {
@@ -289,7 +287,7 @@ export class LoginComponent {
       // Redirect to SSO
       this.authService.loginWithSSO(tenant);
     } catch (err) {
-      this.loading.set(false);
+      this.ssoLoading.set(false);
       this.error.set('Failed to initiate SSO login. Please try again.');
     }
   }

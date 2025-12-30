@@ -99,7 +99,7 @@
                 label="Continue to SSO" 
                 icon="pi pi-sign-in"
                 styleClass="flex-1"
-                [loading]="loading()"
+                [loading]="ssoLoading()"
                 [disabled]="!ssoTenantName"
                 (onClick)="loginWithSsoTenant()">
               </p-button>

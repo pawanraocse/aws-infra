@@ -9,11 +9,18 @@
 ## Table of Contents
 
 1. [Prerequisites](#1-prerequisites)
-2. [Setting Up Test IdP Accounts](#2-setting-up-test-idp-accounts)
-3. [Test Scenarios](#3-test-scenarios)
-4. [Test Cases & Edge Cases](#4-test-cases--edge-cases)
-5. [Troubleshooting](#5-troubleshooting)
-6. [Quick Reference](#6-quick-reference)
+2. [Complete Okta SSO Setup Guide](#2-complete-okta-sso-setup-guide)
+3. [Complete Azure AD SSO Setup Guide](#3-complete-azure-ad-sso-setup-guide)
+4. [Complete Google Workspace SSO Setup Guide](#4-complete-google-workspace-sso-setup-guide-oidc)
+5. [Complete Ping Identity SSO Setup Guide](#5-complete-ping-identity-sso-setup-guide)
+6. [Supported SSO Providers Summary](#6-supported-sso-providers-summary)
+7. [Test Scenarios](#7-test-scenarios)
+8. [Troubleshooting](#8-troubleshooting)
+9. [Quick Reference](#9-quick-reference)
+10. [Local Development Testing](#10-local-development-testing)
+11. [Additional Test Scenarios](#11-additional-test-scenarios-local-dev)
+12. [Key Learnings & Gotchas](#12-key-learnings--gotchas)
+13. [Production Checklist](#13-production-checklist)
 
 ---
 
@@ -183,56 +190,280 @@ This section covers the complete Okta setup end-to-end.
 
 ---
 
-### 2.2 Azure AD Setup
+## 3. Complete Azure AD SSO Setup Guide
 
-**Step 1: Register Enterprise Application**
-1. Azure Portal → Azure Active Directory → Enterprise applications → New
-2. Create your own → "SaaS Platform Test"
+### 3.1 Create Azure AD Account (Free Tier)
 
-**Step 2: Configure SAML SSO**
-1. Single sign-on → SAML
-2. Basic SAML Configuration:
-   - **Identifier (Entity ID):** `urn:amazon:cognito:sp:<user-pool-id>`
-   - **Reply URL:** `https://<cognito-domain>/saml2/idpresponse`
-3. User Attributes & Claims: email, name, groups
-
-**Step 3: Download Metadata**
-- SAML Signing Certificate → Download Federation Metadata XML
+1. Go to https://azure.microsoft.com/free/
+2. Sign up with a Microsoft account (free)
+3. Navigate to **Azure Portal** → https://portal.azure.com
 
 ---
 
-### 2.3 Google Workspace (OIDC)
+### 3.2 Create Test Users in Azure AD
 
-**Step 1: Google Cloud Console**
-1. https://console.cloud.google.com → Create project
-
-**Step 2: OAuth Consent Screen**
-1. APIs & Services → OAuth consent screen
-2. User Type: External, Scopes: email, profile, openid
-
-**Step 3: Create OAuth Credentials**
-1. Credentials → Create Credentials → OAuth client ID
-2. Web application, name: "Cognito SSO"
-3. Redirect URI: `https://<cognito-domain>/oauth2/idpresponse`
-4. Save **Client ID** and **Client Secret**
+1. **Azure Portal → Azure Active Directory → Users → New user**
+2. Create test users with emails (e.g., `testuser@yourdomain.onmicrosoft.com`)
+3. Optionally assign to groups for role mapping
 
 ---
 
-### 2.4 Ping Identity Setup
+### 3.3 Create Enterprise Application for SAML SSO
 
-**Step 1:** Create PingOne account at https://www.pingidentity.com/en/try-ping.html
+1. **Azure AD → Enterprise applications → New application**
+2. Click **Create your own application**
+3. Name: "SaaS Platform SSO", select "Non-gallery application"
+4. **Single sign-on → SAML**
+5. Configure Basic SAML Configuration:
 
-**Step 2:** Applications → Add SAML Application
-- ACS URL: `https://<cognito-domain>/saml2/idpresponse`
-- Entity ID: `urn:amazon:cognito:sp:<user-pool-id>`
+   | Setting | Value |
+   |---------|-------|
+   | **Identifier (Entity ID)** | `urn:amazon:cognito:sp:<user-pool-id>` |
+   | **Reply URL (ACS URL)** | `https://<cognito-domain>.auth.<region>.amazoncognito.com/saml2/idpresponse` |
+   | **Sign on URL** | (leave blank) |
 
-**Step 3:** Configure attributes: email, name, memberOf
-
-**Step 4:** Download SAML Metadata
+6. **User Attributes & Claims** → Edit:
+   | Claim name | Source attribute |
+   |------------|------------------|
+   | `emailaddress` | `user.mail` |
+   | `name` | `user.displayname` |
 
 ---
 
-## 3. Test Scenarios
+### 3.4 Get Azure AD Metadata
+
+1. **Single sign-on** page → **SAML Certificates** section
+2. Download **Federation Metadata XML** or copy **App Federation Metadata Url**
+3. Example URL: `https://login.microsoftonline.com/{tenant-id}/federationmetadata/2007-06/federationmetadata.xml?appid={app-id}`
+
+---
+
+### 3.5 Set Up Azure AD in Our App
+
+1. Login as tenant admin
+2. Navigate to **Settings → SSO Configuration**
+3. Select **Azure AD** as provider
+4. Paste the **Metadata URL** from step 3.4
+5. Click **Save Configuration** → **Enable SSO**
+
+---
+
+### 3.6 Set Up Azure AD Directly in Cognito
+
+**Step 1: Add Identity Provider**
+1. AWS Console → Cognito → User Pools → Your Pool
+2. **Social and external providers** → **Add identity provider** → **SAML**
+3. Configure:
+   - **Provider name:** `AZURE-{tenantId}` (e.g., `AZURE-aarohan`)
+   - **Metadata document URL:** Paste URL from step 3.4
+4. **Map attributes:**
+   | User pool attribute | SAML attribute |
+   |---------------------|----------------|
+   | `email` | `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress` |
+
+**Step 2: Enable for App Client**
+1. **App integration** → Your app client → **Hosted UI** → Edit
+2. Check the SAML provider
+3. Save changes
+
+---
+
+## 4. Complete Google Workspace SSO Setup Guide (OIDC)
+
+### 4.1 Create Google Cloud Account
+
+1. Go to https://console.cloud.google.com
+2. Sign in with Google account (free)
+3. Create a new project or use existing
+
+---
+
+### 4.2 Configure OAuth Consent Screen
+
+1. **APIs & Services → OAuth consent screen**
+2. **User Type:** External (for testing) or Internal (for production)
+3. Fill in:
+   - App name: "SaaS Platform"
+   - Support email: Your email
+   - Developer contact: Your email
+4. **Scopes:** Click "Add or Remove Scopes" → Add:
+   - `email`
+   - `profile`
+   - `openid`
+5. **Test users:** Add your test Gmail accounts
+
+---
+
+### 4.3 Create OAuth 2.0 Credentials
+
+1. **APIs & Services → Credentials → Create Credentials → OAuth client ID**
+2. **Application type:** Web application
+3. **Name:** "Cognito SSO"
+4. **Authorized redirect URIs:** Add:
+   ```
+   https://<cognito-domain>.auth.<region>.amazoncognito.com/oauth2/idpresponse
+   ```
+5. Click **Create**
+6. **Save the Client ID and Client Secret** - you'll need these!
+
+---
+
+### 4.4 Google OIDC Values Reference
+
+| Value | Location |
+|-------|----------|
+| **Client ID** | Credentials page after creating OAuth client |
+| **Client Secret** | Credentials page after creating OAuth client |
+| **Issuer URL** | `https://accounts.google.com` |
+| **Authorization endpoint** | `https://accounts.google.com/o/oauth2/v2/auth` |
+| **Token endpoint** | `https://oauth2.googleapis.com/token` |
+
+---
+
+### 4.5 Set Up Google SSO in Our App
+
+1. Login as tenant admin
+2. Navigate to **Settings → SSO Configuration**
+3. Select **Google Workspace** as provider
+4. Enter:
+   - **Client ID:** From step 4.3
+   - **Client Secret:** From step 4.3
+   - **Issuer URL:** `https://accounts.google.com`
+5. Click **Save Configuration** → **Enable SSO**
+
+---
+
+### 4.6 Set Up Google SSO Directly in Cognito
+
+**Step 1: Add Identity Provider**
+1. AWS Console → Cognito → User Pools → Your Pool
+2. **Social and external providers** → **Add identity provider** → **OpenID Connect**
+3. Configure:
+   - **Provider name:** `GOOGLE-{tenantId}` (e.g., `GOOGLE-aarohan`)
+   - **Client ID:** From step 4.3
+   - **Client secret:** From step 4.3
+   - **Issuer URL:** `https://accounts.google.com`
+   - **Authorize scope:** `openid email profile`
+4. **Map attributes:**
+   | User pool attribute | OIDC attribute |
+   |---------------------|----------------|
+   | `email` | `email` |
+   | `name` | `name` |
+
+**Step 2: Enable for App Client**
+1. **App integration** → Your app client → **Hosted UI** → Edit
+2. Check the OIDC provider
+3. Save changes
+
+---
+
+## 5. Complete Ping Identity SSO Setup Guide
+
+### 5.1 Create Ping Identity Account
+
+1. Go to https://www.pingidentity.com/en/try-ping.html
+2. Sign up for **PingOne** free trial
+3. Complete registration and login to PingOne admin console
+
+---
+
+### 5.2 Create Test Users in PingOne
+
+1. **Directory → Users → Add User**
+2. Create test users with emails
+3. Optionally create groups and assign users
+
+---
+
+### 5.3 Create SAML Application in PingOne
+
+1. **Connections → Applications → Add Application**
+2. Select **SAML Application**
+3. **Name:** "SaaS Platform SSO"
+4. **Configure SAML:**
+
+   | Setting | Value |
+   |---------|-------|
+   | **ACS URL** | `https://<cognito-domain>.auth.<region>.amazoncognito.com/saml2/idpresponse` |
+   | **Entity ID** | `urn:amazon:cognito:sp:<user-pool-id>` |
+   | **Sign on URL** | (leave blank) |
+   | **Binding** | HTTP-POST |
+
+5. **Attribute Mappings:**
+   | PingOne Attribute | SAML Attribute |
+   |-------------------|----------------|
+   | `email` | `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress` |
+   | `name` | `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name` |
+
+6. Click **Save** and **Enable** the application
+
+---
+
+### 5.4 Get Ping Identity Metadata
+
+1. **Applications → Your App → Configuration**
+2. Copy **Metadata URL** or download **Metadata XML**
+3. Example URL: `https://auth.pingone.com/{environment-id}/saml20/metadata/{application-id}`
+
+---
+
+### 5.5 Set Up Ping Identity in Our App
+
+1. Login as tenant admin
+2. Navigate to **Settings → SSO Configuration**
+3. Select **Ping Identity** as provider
+4. Paste the **Metadata URL** from step 5.4
+5. Click **Save Configuration** → **Enable SSO**
+
+---
+
+### 5.6 Set Up Ping Identity Directly in Cognito
+
+**Step 1: Add Identity Provider**
+1. AWS Console → Cognito → User Pools → Your Pool
+2. **Social and external providers** → **Add identity provider** → **SAML**
+3. Configure:
+   - **Provider name:** `PING-{tenantId}` (e.g., `PING-aarohan`)
+   - **Metadata document URL:** Paste URL from step 5.4
+4. **Map attributes:**
+   | User pool attribute | SAML attribute |
+   |---------------------|----------------|
+   | `email` | `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress` |
+
+**Step 2: Enable for App Client**
+1. **App integration** → Your app client → **Hosted UI** → Edit
+2. Check the SAML provider
+3. Save changes
+
+---
+
+## 6. Supported SSO Providers Summary
+
+| Provider | Protocol | Free Tier | Setup Complexity |
+|----------|----------|-----------|------------------|
+| **Okta** | SAML | ✅ Developer account | Medium |
+| **Azure AD** | SAML | ✅ Free tier | Medium |
+| **Google** | OIDC | ✅ Free | Easy |
+| **Ping Identity** | SAML | ✅ Free trial | Medium |
+| **OneLogin** | SAML | ✅ Developer account | Medium |
+| **Auth0** | OIDC | ✅ Free tier | Easy |
+
+### Provider Name Convention
+
+| Provider | Cognito Provider Name Format |
+|----------|------------------------------|
+| Okta | `OKTA-{tenantId}` |
+| Azure AD | `AZURE-{tenantId}` |
+| Google | `GOOGLE-{tenantId}` |
+| Ping Identity | `PING-{tenantId}` |
+| OneLogin | `ONELOGIN-{tenantId}` |
+| Auth0 | `AUTH0-{tenantId}` |
+
+> **⚠️ IMPORTANT:** Provider names are case-sensitive. Always use UPPERCASE for the IdP type.
+
+---
+
+## 7. Test Scenarios
 
 ### Scenario 1: Standard Email/Password Login
 
@@ -371,44 +602,7 @@ INFO: Successfully JIT provisioned SSO user: email=newuser@company.com
 
 ---
 
-## 4. Test Cases & Edge Cases
-
-### Core Functionality Tests
-
-| ID | Test Case | Priority |
-|----|-----------|----------|
-| SSO-001 | First SSO Login (JIT Provision) | HIGH |
-| SSO-002 | Returning SSO User | HIGH |
-| SSO-003 | Group-to-Role Mapping | HIGH |
-| SSO-004 | Multiple Groups (priority) | HIGH |
-| SSO-005 | No Group Membership | MEDIUM |
-| SSO-006 | Unknown Groups | MEDIUM |
-| SSO-007 | SSO Disabled Mid-Session | MEDIUM |
-| SSO-008 | Invalid SAML Metadata | HIGH |
-| SSO-009 | Expired OIDC Secret | MEDIUM |
-| SSO-010 | Email Case Sensitivity | MEDIUM |
-
-### Security Tests
-
-| ID | Test Case | Priority |
-|----|-----------|----------|
-| SEC-001 | SAML Signature Validation | CRITICAL |
-| SEC-002 | OIDC Token Validation | CRITICAL |
-| SEC-003 | Replay Attack Prevention | HIGH |
-| SEC-004 | IdP Impersonation | HIGH |
-| SEC-005 | Cross-Tenant Access | CRITICAL |
-
-### Performance Tests
-
-| ID | Test Case | Expected |
-|----|-----------|----------|
-| PERF-001 | Group Sync (50+ groups) | < 3s |
-| PERF-002 | Concurrent SSO Logins (10) | All succeed |
-| PERF-003 | Large Metadata Validation | < 2s |
-
----
-
-## 5. Troubleshooting
+## 8. Troubleshooting
 
 ### Common Issues
 
@@ -445,7 +639,7 @@ aws logs filter-log-events \
 
 ---
 
-## 6. Quick Reference
+## 9. Quick Reference
 
 ### Cognito URLs
 
@@ -474,7 +668,7 @@ POST /api/v1/sso/test           - Test connection
 
 ---
 
-## 7. Local Development Testing
+## 10. Local Development Testing
 
 ### 7.1 Local Environment Setup
 
@@ -546,7 +740,7 @@ docker exec postgres psql -U postgres -d platform_db -c \
 
 ---
 
-## 8. Additional Test Scenarios (Local Dev)
+## 11. Additional Test Scenarios (Local Dev)
 
 ### Scenario 10: Admin Password Login with SSO Enabled
 
@@ -588,7 +782,7 @@ docker exec postgres psql -U postgres -d platform_db -c \
 
 ---
 
-## 9. Key Learnings & Gotchas
+## 12. Key Learnings & Gotchas
 
 ### 9.1 JWT Claim Differences (SSO vs Password)
 
@@ -620,7 +814,7 @@ Lambda → Platform-Service → (in production, not local)
 
 ---
 
-## 10. Production Checklist
+## 13. Production Checklist
 
 Before deploying to production:
 

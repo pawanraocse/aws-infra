@@ -61,7 +61,17 @@
             <div class="flex-1 border-top-1 surface-border"></div>
           </div>
 
-          <!-- SSO Login Button -->
+          <!-- Google Sign-in Button (Personal Gmail) -->
+          <p-button 
+            label="Sign in with Google" 
+            icon="pi pi-google"
+            severity="secondary"
+            [outlined]="true"
+            styleClass="w-full google-btn mb-2"
+            (onClick)="loginWithGoogle()">
+          </p-button>
+
+          <!-- SSO Login Button (Organization) -->
           <p-button 
             label="Sign in with SSO" 
             icon="pi pi-key"

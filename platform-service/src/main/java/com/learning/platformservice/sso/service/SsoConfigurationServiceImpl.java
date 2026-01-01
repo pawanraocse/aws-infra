@@ -296,7 +296,17 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
         if (sanitizedTenantId.length() > 20) {
             sanitizedTenantId = sanitizedTenantId.substring(0, 20);
         }
-        return idpType.name() + "-" + sanitizedTenantId;
+
+        // Provider prefixes:
+        // - GWORKSPACE: Google OIDC (no groups)
+        // - GSAML: Google SAML (with groups)
+        // - Others use IdpType name directly
+        String providerPrefix = switch (idpType) {
+            case GOOGLE -> "GWORKSPACE";
+            case GOOGLE_SAML -> "GSAML";
+            default -> idpType.name();
+        };
+        return providerPrefix + "-" + sanitizedTenantId;
     }
 
     private void createOrUpdateCognitoProvider(String providerName, IdentityProviderTypeType providerType,
@@ -452,9 +462,10 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
 
     private IdentityProviderTypeType mapIdpTypeToProviderType(IdpType idpType) {
         return switch (idpType) {
-            case GOOGLE -> IdentityProviderTypeType.GOOGLE;
-            case AZURE_AD, OKTA, OIDC -> IdentityProviderTypeType.OIDC;
-            case SAML, PING -> IdentityProviderTypeType.SAML;
+            // Note: GOOGLE uses OIDC type because Cognito's GOOGLE type is reserved for
+            // built-in social login
+            case GOOGLE, AZURE_AD, OKTA, OIDC -> IdentityProviderTypeType.OIDC;
+            case GOOGLE_SAML, SAML, PING -> IdentityProviderTypeType.SAML;
             default -> IdentityProviderTypeType.OIDC;
         };
     }
@@ -498,5 +509,27 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
 
     private String getDefaultClientId() {
         return System.getenv("COGNITO_CLIENT_ID");
+    }
+
+    @Override
+    public Optional<com.learning.platformservice.sso.controller.SsoConfigurationController.SsoLookupResponse> getSsoLookup(
+            String tenantId) {
+        Optional<Tenant> tenantOpt = tenantRepository.findById(tenantId);
+        if (tenantOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Tenant tenant = tenantOpt.get();
+        if (!Boolean.TRUE.equals(tenant.getSsoEnabled()) || tenant.getIdpConfigJson() == null) {
+            return Optional.empty();
+        }
+
+        String providerName = (String) tenant.getIdpConfigJson().get("cognitoProviderName");
+        String idpType = tenant.getIdpType() != null ? tenant.getIdpType().name() : null;
+
+        return Optional.of(new com.learning.platformservice.sso.controller.SsoConfigurationController.SsoLookupResponse(
+                Boolean.TRUE.equals(tenant.getSsoEnabled()),
+                providerName,
+                idpType));
     }
 }

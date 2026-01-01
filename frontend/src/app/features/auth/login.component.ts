@@ -255,6 +255,25 @@ export class LoginComponent {
   }
 
   /**
+   * Login with Google for personal Gmail accounts (B2C).
+   * Uses Cognito's built-in Google social identity provider.
+   * This is separate from organization SSO (GWORKSPACE-{tenant} or GSAML-{tenant}).
+   */
+  loginWithGoogle() {
+    this.error.set(null);
+    // Don't set loading state since we're redirecting immediately
+    // The page will navigate away
+
+    try {
+      // Use Cognito's built-in Google social provider
+      // This creates/links a personal tenant for the user
+      this.authService.loginWithSocialProvider('Google');
+    } catch (err) {
+      this.error.set('Failed to initiate Google sign-in. Please try again.');
+    }
+  }
+
+  /**
    * Login with SSO using the organization name.
    * Looks up the tenant by name and redirects to SSO.
    */
@@ -268,9 +287,29 @@ export class LoginComponent {
     this.error.set(null);
 
     try {
-      // Create a minimal tenant info for SSO redirect
-      // The tenant ID is typically the organization name (sanitized)
+      // Sanitize tenant ID
       const tenantId = this.ssoTenantName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+
+      // Fetch SSO configuration from backend
+      const response = await fetch(`http://localhost:8080/api/v1/sso/lookup?tenantId=${tenantId}`);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          this.error.set('SSO is not configured for this organization');
+        } else {
+          this.error.set('Failed to lookup SSO configuration');
+        }
+        this.ssoLoading.set(false);
+        return;
+      }
+
+      const ssoConfig = await response.json();
+
+      if (!ssoConfig.ssoEnabled || !ssoConfig.cognitoProviderName) {
+        this.error.set('SSO is not enabled for this organization');
+        this.ssoLoading.set(false);
+        return;
+      }
 
       const tenant: TenantInfo = {
         tenantId: tenantId,
@@ -280,8 +319,7 @@ export class LoginComponent {
         roleHint: 'member',
         isOwner: false,
         isDefault: false,
-        // Cognito provider name follows our convention
-        cognitoProviderName: `OKTA-${tenantId}`
+        cognitoProviderName: ssoConfig.cognitoProviderName
       };
 
       // Redirect to SSO
@@ -292,3 +330,4 @@ export class LoginComponent {
     }
   }
 }
+

@@ -18,6 +18,31 @@ spring:
     gateway:
       server:
         webflux:
+          # Explicit routes for services with context paths
+          routes:
+            - id: auth-service
+              uri: lb://AUTH-SERVICE
+              predicates:
+                - Path=/auth-service/**
+              filters:
+                - StripPrefix=1
+                - PrefixPath=/auth
+
+            - id: platform-service
+              uri: lb://PLATFORM-SERVICE
+              predicates:
+                - Path=/platform-service/**
+              filters:
+                - StripPrefix=1
+                - PrefixPath=/platform
+
+            - id: backend-service
+              uri: lb://BACKEND-SERVICE
+              predicates:
+                - Path=/backend-service/**
+              filters:
+                - StripPrefix=1
+
           # Default filters applied to all discovered routes
           default-filters:
             - JwtAuthentication

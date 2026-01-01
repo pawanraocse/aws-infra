@@ -128,4 +128,28 @@ public class SsoConfigurationController {
                 .header("Content-Type", "application/xml")
                 .body(metadata);
     }
+
+    /**
+     * Public endpoint to lookup SSO provider info for a tenant.
+     * Used by the login page to redirect to the correct identity provider.
+     * Returns minimal info: ssoEnabled and cognitoProviderName.
+     */
+    @GetMapping("/lookup")
+    public ResponseEntity<SsoLookupResponse> lookupSso(
+            @RequestParam String tenantId) {
+        log.info("Looking up SSO for tenant: {}", tenantId);
+
+        return ssoConfigurationService.getSsoLookup(tenantId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * DTO for SSO lookup response (minimal info for login redirect).
+     */
+    public record SsoLookupResponse(
+            boolean ssoEnabled,
+            String cognitoProviderName,
+            String idpType) {
+    }
 }

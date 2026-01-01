@@ -223,7 +223,9 @@ class SsoConfigurationServiceTest {
 
             verify(cognitoClient).createIdentityProvider(createRequestCaptor.capture());
             CreateIdentityProviderRequest capturedRequest = createRequestCaptor.getValue();
-            assertThat(capturedRequest.providerTypeAsString()).isEqualTo("Google");
+            // NOTE: Enterprise Google Workspace SSO uses OIDC type, not native Google
+            // (Cognito's native Google provider is for social login only)
+            assertThat(capturedRequest.providerTypeAsString()).isEqualTo("OIDC");
         }
     }
 

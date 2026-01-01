@@ -54,6 +54,7 @@ public class SecurityConfiguration {
                                                 .requestMatchers("/", "/actuator/health", "/actuator/info",
                                                                 "/logged-out", "/error",
                                                                 "/api/v1/auth/signup/**", "/api/v1/auth/login",
+                                                                "/api/v1/auth/sso-complete", // SSO signup completion
                                                                 "/api/v1/auth/lookup", // Multi-tenant login lookup
                                                                 "/api/v1/auth/last-accessed", // Update last accessed
                                                                                               // after login

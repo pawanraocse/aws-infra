@@ -117,3 +117,28 @@ variable "pre_token_generation_lambda_arn" {
   type        = string
   default     = ""
 }
+
+# =============================================================================
+# Google Social Login (Personal Gmail - B2C)
+# =============================================================================
+
+variable "enable_google_social_login" {
+  description = "Enable Google as a social identity provider for personal Gmail sign-in"
+  type        = bool
+  default     = false
+}
+
+variable "google_client_id" {
+  description = "Google OAuth 2.0 Client ID for personal Gmail sign-in"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "google_client_secret" {
+  description = "Google OAuth 2.0 Client Secret for personal Gmail sign-in"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+

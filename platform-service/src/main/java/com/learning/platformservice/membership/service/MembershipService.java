@@ -157,6 +157,15 @@ public class MembershipService {
     }
 
     /**
+     * Check if a membership exists for given email and tenant.
+     * Used for idempotency checks during signup.
+     */
+    @Transactional(readOnly = true)
+    public boolean membershipExists(String email, String tenantId) {
+        return membershipRepository.existsByEmailAndTenant(email, tenantId);
+    }
+
+    /**
      * Update Cognito user ID for all memberships of an email.
      * Called after first login when we have the Cognito ID.
      */

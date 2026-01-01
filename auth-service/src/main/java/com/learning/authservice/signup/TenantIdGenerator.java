@@ -33,15 +33,27 @@ public class TenantIdGenerator {
     public String generate(SignupRequest request) {
         return switch (request) {
             case PersonalSignupData p -> generatePersonalTenantId(p.email());
-            case OrganizationSignupData o -> generateOrganizationId(o.companyName());
+            case OrganizationSignupData o -> generateOrganizationTenantId(o.companyName());
         };
     }
 
-    private String generatePersonalTenantId(String email) {
+    /**
+     * Generate a personal tenant ID from email.
+     * Format: user-{sanitized-username}-{timestamp}
+     */
+    public String generatePersonalTenantId(String email) {
         String username = email.split("@")[0];
         String sanitized = username.replaceAll("[^a-zA-Z0-9]", "");
         String timestamp = String.valueOf(System.currentTimeMillis()).substring(8);
         return "user-" + sanitized + "-" + timestamp;
+    }
+
+    /**
+     * Generate an organization tenant ID from company name.
+     * Throws AuthSignupException if the name already exists.
+     */
+    public String generateOrganizationTenantId(String companyName) {
+        return generateOrganizationId(companyName);
     }
 
     /**

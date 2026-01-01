@@ -35,6 +35,56 @@ public class RouteConfig {
                 log.info("Configuring custom routes");
 
                 return builder.routes()
+                                // Routes for frontend paths (/auth-service/** proxy to /auth/**)
+                                .route("auth-service-proxy", r -> r
+                                                .path("/auth-service/**")
+                                                .filters(f -> f
+                                                                .filter(jwtFilterFactory.apply(
+                                                                                new JwtAuthenticationGatewayFilterFactory.Config()))
+                                                                .rewritePath("/auth-service/(?<segment>.*)",
+                                                                                "/auth/${segment}")
+                                                                .circuitBreaker(c -> c
+                                                                                .setName(CB_AUTH)
+                                                                                .setFallbackUri(FALLBACK_URI))
+                                                                .retry(rCfg -> rCfg
+                                                                                .setRetries(3)
+                                                                                .setStatuses(HttpStatus.BAD_GATEWAY,
+                                                                                                HttpStatus.SERVICE_UNAVAILABLE)))
+                                                .uri("lb://" + AUTH_SERVICE_ID))
+
+                                // Routes for frontend paths (/platform-service/** proxy to /platform/**)
+                                .route("platform-service-proxy", r -> r
+                                                .path("/platform-service/**")
+                                                .filters(f -> f
+                                                                .filter(jwtFilterFactory.apply(
+                                                                                new JwtAuthenticationGatewayFilterFactory.Config()))
+                                                                .rewritePath("/platform-service/(?<segment>.*)",
+                                                                                "/platform/${segment}")
+                                                                .circuitBreaker(c -> c
+                                                                                .setName(CB_PLATFORM)
+                                                                                .setFallbackUri(FALLBACK_URI))
+                                                                .retry(rCfg -> rCfg
+                                                                                .setRetries(3)
+                                                                                .setStatuses(HttpStatus.BAD_GATEWAY,
+                                                                                                HttpStatus.SERVICE_UNAVAILABLE)))
+                                                .uri("lb://" + PLATFORM_SERVICE_ID))
+
+                                // Routes for backend-service (/backend-service/** proxy)
+                                .route("backend-service-proxy", r -> r
+                                                .path("/backend-service/**")
+                                                .filters(f -> f
+                                                                .filter(jwtFilterFactory.apply(
+                                                                                new JwtAuthenticationGatewayFilterFactory.Config()))
+                                                                .stripPrefix(1)
+                                                                .circuitBreaker(c -> c
+                                                                                .setName(CB_BACKEND)
+                                                                                .setFallbackUri(FALLBACK_URI))
+                                                                .retry(rCfg -> rCfg
+                                                                                .setRetries(3)
+                                                                                .setStatuses(HttpStatus.BAD_GATEWAY,
+                                                                                                HttpStatus.SERVICE_UNAVAILABLE)))
+                                                .uri("lb://" + BACKEND_SERVICE_ID))
+
                                 .route(AUTH_SERVICE_ID, r -> r
                                                 .path(AUTH_PATH)
                                                 .filters(f -> f

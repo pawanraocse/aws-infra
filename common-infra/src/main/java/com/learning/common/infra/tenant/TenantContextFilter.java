@@ -33,9 +33,12 @@ public class TenantContextFilter extends OncePerRequestFilter {
             "/actuator", "/swagger", "/v3/api-docs", "/internal",
             // Public auth endpoints (no tenant context known yet)
             "/api/v1/auth/signup", "/api/v1/auth/login", "/api/v1/auth/verify",
+            "/api/v1/auth/sso-complete", // SSO signup completion (tenant creation)
             "/api/v1/auth/lookup", "/api/v1/auth/last-accessed", "/api/v1/auth/resend-verification",
             "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
             "/api/v1/invitations/validate", "/api/v1/invitations/accept",
+            // SSO lookup (public - needed for SSO login before tenant context is known)
+            "/sso/lookup",
             // Internal service-to-service permission checks (tenant in request body)
             "/api/v1/permissions",
             // Stripe webhooks (verified via signature, not tenant header)

@@ -270,6 +270,9 @@ This section covers the complete Okta setup end-to-end.
 
 ## 4. Complete Google Workspace SSO Setup Guide (OIDC)
 
+> **⚠️ IMPORTANT:** Cognito reserves the `GOOGLE` provider name for its built-in social login.
+> For enterprise Google Workspace SSO, the app uses `GWORKSPACE-{tenantId}` as the provider name.
+
 ### 4.1 Create Google Cloud Account
 
 1. Go to https://console.cloud.google.com
@@ -281,7 +284,9 @@ This section covers the complete Okta setup end-to-end.
 ### 4.2 Configure OAuth Consent Screen
 
 1. **APIs & Services → OAuth consent screen**
-2. **User Type:** External (for testing) or Internal (for production)
+2. **User Type:**
+   - **External:** For development/testing (requires adding test users)
+   - **Internal:** For production (only works with Google Workspace domains)
 3. Fill in:
    - App name: "SaaS Platform"
    - Support email: Your email
@@ -290,7 +295,9 @@ This section covers the complete Okta setup end-to-end.
    - `email`
    - `profile`
    - `openid`
-5. **Test users:** Add your test Gmail accounts
+5. **Test users:** Add Gmail accounts that can test SSO login
+
+> **Note:** Test users must be real Google accounts. Fake emails won't work.
 
 ---
 
@@ -298,11 +305,17 @@ This section covers the complete Okta setup end-to-end.
 
 1. **APIs & Services → Credentials → Create Credentials → OAuth client ID**
 2. **Application type:** Web application
-3. **Name:** "Cognito SSO"
+3. **Name:** "AWS Cognito SSO" (or any descriptive name)
 4. **Authorized redirect URIs:** Add:
    ```
    https://<cognito-domain>.auth.<region>.amazoncognito.com/oauth2/idpresponse
    ```
+   
+   Example for our dev environment:
+   ```
+   https://cloud-infra-dev-9dosle0q.auth.us-east-1.amazoncognito.com/oauth2/idpresponse
+   ```
+
 5. Click **Create**
 6. **Save the Client ID and Client Secret** - you'll need these!
 
@@ -317,10 +330,11 @@ This section covers the complete Okta setup end-to-end.
 | **Issuer URL** | `https://accounts.google.com` |
 | **Authorization endpoint** | `https://accounts.google.com/o/oauth2/v2/auth` |
 | **Token endpoint** | `https://oauth2.googleapis.com/token` |
+| **JWKS URI** | `https://www.googleapis.com/oauth2/v3/certs` |
 
 ---
 
-### 4.5 Set Up Google SSO in Our App
+### 4.5 Set Up Google SSO via the App (Recommended)
 
 1. Login as tenant admin
 2. Navigate to **Settings → SSO Configuration**
@@ -329,17 +343,28 @@ This section covers the complete Okta setup end-to-end.
    - **Client ID:** From step 4.3
    - **Client Secret:** From step 4.3
    - **Issuer URL:** `https://accounts.google.com`
-5. Click **Save Configuration** → **Enable SSO**
+5. Click **Save Configuration**
+6. Click **Enable SSO**
+
+The app automatically:
+- Creates Cognito provider as `GWORKSPACE-{tenantId}` (e.g., `GWORKSPACE-aarohan`)
+- Enables the provider for the app client
+- Stores the `cognitoProviderName` in the tenant's `idp_config_json`
 
 ---
 
-### 4.6 Set Up Google SSO Directly in Cognito
+### 4.6 Set Up Google SSO Directly in Cognito (Alternative)
+
+Use this method if testing Cognito directly without the app.
 
 **Step 1: Add Identity Provider**
 1. AWS Console → Cognito → User Pools → Your Pool
-2. **Social and external providers** → **Add identity provider** → **OpenID Connect**
+2. **Sign-in experience** → **Federated identity provider sign-in** → **Add identity provider** → **OpenID Connect**
 3. Configure:
-   - **Provider name:** `GOOGLE-{tenantId}` (e.g., `GOOGLE-aarohan`)
+   - **Provider name:** `GWORKSPACE-{tenantId}` (e.g., `GWORKSPACE-aarohan`)
+   
+   > ⚠️ **DO NOT use `GOOGLE-{tenantId}`** - Cognito reserves names starting with `GOOGLE` for built-in social login
+   
    - **Client ID:** From step 4.3
    - **Client secret:** From step 4.3
    - **Issuer URL:** `https://accounts.google.com`
@@ -352,8 +377,70 @@ This section covers the complete Okta setup end-to-end.
 
 **Step 2: Enable for App Client**
 1. **App integration** → Your app client → **Hosted UI** → Edit
-2. Check the OIDC provider
+2. Check `GWORKSPACE-{tenantId}` under identity providers
 3. Save changes
+
+**Step 3: Update Database (if testing directly in Cognito)**
+```sql
+UPDATE tenant 
+SET idp_type = 'GOOGLE',
+    sso_enabled = true,
+    idp_config_json = '{"cognitoProviderName": "GWORKSPACE-aarohan"}'
+WHERE id = 'aarohan';
+```
+
+---
+
+### 4.7 Test Google SSO Login
+
+1. Go to login page
+2. Click **"Sign in with SSO"**
+3. Enter organization name (e.g., `aarohan`)
+4. Click **"Continue to SSO"**
+5. You should be redirected to Google sign-in
+6. Sign in with a test user account
+7. After authentication, you should be redirected back to the app
+
+---
+
+### 4.8 Google SSO Troubleshooting
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| "Provider GOOGLE-xxx cannot be of type Google" | Using reserved `GOOGLE` prefix | Use `GWORKSPACE-` prefix instead |
+| "redirect_uri_mismatch" | Callback URL not added to OAuth client | Add Cognito callback URL to Google OAuth client |
+| "Access denied" | User not in test users list | Add user to OAuth consent screen test users |
+| "Login pages unavailable" | Provider not enabled for app client | Enable provider in Cognito app client settings |
+
+---
+
+### 4.9 Google Workspace SAML (With Group Mapping)
+
+For **enterprise users who need group-to-role mapping**, use Google SAML instead of OIDC.
+
+> **Requires:** Google Workspace admin access
+
+**Step 1: Create SAML App in Google Admin Console**
+1. Go to https://admin.google.com
+2. **Apps** → **Web and mobile apps** → **Add app** → **Add custom SAML app**
+3. Configure:
+   - **App name:** "AWS Cognito SSO"
+   - **ACS URL:** `https://<cognito-domain>.auth.<region>.amazoncognito.com/saml2/idpresponse`
+   - **Entity ID:** `urn:amazon:cognito:sp:<user-pool-id>`
+   - **Name ID format:** Email
+4. Add attribute mappings:
+   - `email` → `email`
+   - `name` → `name`
+   - Add `groups` attribute for group membership
+
+**Step 2: Configure in Our App**
+1. Select **Google Workspace (SAML)** as provider type
+2. Upload the SAML metadata or paste metadata URL
+3. Provider will be created as `GSAML-{tenantId}`
+
+**Step 3: Verify Group Mapping**
+- Groups from Google will appear in the SAML assertion
+- Configure group mappings in **Settings → Group Mapping**
 
 ---
 
@@ -450,16 +537,18 @@ This section covers the complete Okta setup end-to-end.
 
 ### Provider Name Convention
 
-| Provider | Cognito Provider Name Format |
-|----------|------------------------------|
-| Okta | `OKTA-{tenantId}` |
-| Azure AD | `AZURE-{tenantId}` |
-| Google | `GOOGLE-{tenantId}` |
-| Ping Identity | `PING-{tenantId}` |
-| OneLogin | `ONELOGIN-{tenantId}` |
-| Auth0 | `AUTH0-{tenantId}` |
+| Provider | Cognito Provider Name Format | Protocol |
+|----------|------------------------------|----------|
+| Okta | `OKTA-{tenantId}` | SAML |
+| Azure AD | `AZURE-{tenantId}` | SAML |
+| Google Workspace | `GWORKSPACE-{tenantId}` | OIDC |
+| Ping Identity | `PING-{tenantId}` | SAML |
+| OneLogin | `ONELOGIN-{tenantId}` | SAML |
+| Auth0 | `AUTH0-{tenantId}` | OIDC |
 
-> **⚠️ IMPORTANT:** Provider names are case-sensitive. Always use UPPERCASE for the IdP type.
+> **⚠️ IMPORTANT:** 
+> - Provider names are **case-sensitive**. Always use UPPERCASE for the IdP type prefix.
+> - `GOOGLE-` is reserved by Cognito for built-in social login. Use `GWORKSPACE-` for enterprise Google Workspace SSO.
 
 ---
 

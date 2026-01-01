@@ -177,6 +177,42 @@ export class AuthService {
   }
 
   /**
+   * Login with a social identity provider (Google, Facebook, etc.).
+   * Uses Cognito's built-in social providers for personal sign-in (B2C).
+   * This is separate from organization SSO which uses tenant-specific providers.
+   *
+   * @param provider Social provider name (e.g., 'Google')
+   */
+  async loginWithSocialProvider(provider: string): Promise<void> {
+    console.log(`[Auth] Initiating ${provider} social login via Amplify`);
+
+    try {
+      // Use Amplify's signInWithRedirect for proper OAuth handling
+      // Amplify will handle the code exchange on callback
+      const { signInWithRedirect } = await import('aws-amplify/auth');
+      await signInWithRedirect({
+        provider: { custom: provider }
+      });
+    } catch (err) {
+      console.error(`[Auth] ${provider} login failed:`, err);
+      // Fallback to direct URL if Amplify fails
+      const cognitoDomain = environment.cognito.domain;
+      const clientId = environment.cognito.userPoolWebClientId;
+      const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`);
+
+      const socialUrl = `https://${cognitoDomain}/oauth2/authorize` +
+        `?identity_provider=${encodeURIComponent(provider)}` +
+        `&response_type=code` +
+        `&client_id=${clientId}` +
+        `&redirect_uri=${redirectUri}` +
+        `&scope=openid+email+profile`;
+
+      console.log(`[Auth] Fallback: Redirecting to ${provider} social login:`, socialUrl);
+      window.location.href = socialUrl;
+    }
+  }
+
+  /**
    * JIT provision an SSO user after successful login.
    * Called from callback component after SSO auth completes.
    * This is needed because Lambda can't reach local services during development.
@@ -188,15 +224,17 @@ export class AuthService {
     try {
       console.log('[Auth] JIT provisioning SSO user:', { tenantId, email, cognitoUserId });
 
+      // Call auth-service sso-complete endpoint (unified signup pipeline)
       const jitResponse = await firstValueFrom(
-        this.http.post<{ success: boolean; message: string }>(
-          `${environment.apiUrl}/platform-service/platform/internal/users/jit-provision`,
+        this.http.post<{ success: boolean; message: string; tenantId?: string }>(
+          `${environment.apiUrl}/auth-service/api/v1/auth/sso-complete`,
           {
             tenantId,
             email,
             cognitoUserId,
-            source: 'SSO',
-            defaultRole: 'admin'
+            source: 'GOOGLE',
+            defaultRole: 'admin',
+            groups: []
           }
         )
       );
@@ -210,6 +248,53 @@ export class AuthService {
         return true;
       }
       console.warn('[Auth] JIT provision failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Ensure personal tenant exists for social login users.
+   * Creates a PERSONAL type tenant if it doesn't exist.
+   * This is called for users who sign in with Google/Facebook/etc.
+   *
+   * @param tenantId Personal tenant ID (e.g., 'personal-pawanweblink')
+   * @param email User's email address
+   * @param cognitoUserId Cognito user sub
+   */
+  async ensurePersonalTenantExists(tenantId: string, email: string, cognitoUserId: string): Promise<boolean> {
+    if (!tenantId.startsWith('personal-')) {
+      // Not a personal tenant, skip creation
+      return true;
+    }
+
+    try {
+      console.log('[Auth] Ensuring personal tenant exists:', { tenantId, email });
+
+      // Call auth-service sso-complete endpoint (unified signup pipeline)
+      // This creates the personal tenant, membership, and roles in one call
+      const response = await firstValueFrom(
+        this.http.post<{ success: boolean; message: string; tenantId?: string }>(
+          `${environment.apiUrl}/auth-service/api/v1/auth/sso-complete`,
+          {
+            tenantId,
+            email,
+            cognitoUserId,
+            source: 'GOOGLE',
+            defaultRole: 'admin',
+            groups: []
+          }
+        )
+      );
+
+      console.log('[Auth] Personal tenant creation result:', response);
+      return response.success;
+    } catch (error: any) {
+      // 409 = tenant already exists, 200/201 with already exists message
+      if (error.status === 409 || error.error?.message?.includes('already exists')) {
+        console.log('[Auth] Personal tenant already exists');
+        return true;
+      }
+      console.error('[Auth] Failed to create personal tenant:', error);
       return false;
     }
   }

@@ -213,50 +213,65 @@ Understanding how requests flow through the gateway to backend services is criti
 
 ### Service Configuration Table
 
-| Service | Port | Context Path | Eureka Name | Gateway Route |
-|---------|------|--------------|-------------|---------------|
-| **Gateway** | 8080 | `/` (root) | GATEWAY-SERVICE | N/A (entry point) |
-| **Auth Service** | 8081 | `/` (root) | AUTH-SERVICE | `/auth/**` |
-| **Backend Service** | 8082 | `/` (root) | BACKEND-SERVICE | `/api/**` |
-| **Platform Service** | 8083 | `/platform` | PLATFORM-SERVICE | `/platform-service/**` |
-| **Eureka Server** | 8761 | `/` (root) | N/A | N/A (discovery only) |
+| Service | Port | Context Path | Eureka Name | Frontend Route | Internal Route |
+|---------|------|--------------|-------------|----------------|----------------|
+| **Gateway** | 8080 | `/` (root) | GATEWAY-SERVICE | N/A (entry point) | N/A |
+| **Auth Service** | 8081 | `/auth` | AUTH-SERVICE | `/auth-service/**` → `/auth/**` | `/auth/**` |
+| **Backend Service** | 8082 | `/` (root) | BACKEND-SERVICE | `/backend-service/**` → `/**` | `/api/**` |
+| **Platform Service** | 8083 | `/platform` | PLATFORM-SERVICE | `/platform-service/**` → `/platform/**` | `/platform/**` |
+| **Eureka Server** | 8761 | `/` (root) | N/A | N/A (discovery only) | N/A |
+
+### Gateway Route Patterns
+
+The gateway uses two routing patterns:
+
+1. **Frontend Proxy Routes** (`*-service/**`): Rewrites service name prefix to context path
+2. **Internal Routes** (context paths): Direct routing for internal services
+
+| Frontend Calls | Gateway Rewrites | Target Service |
+|----------------|------------------|----------------|
+| `/auth-service/api/v1/auth/login` | `/auth/api/v1/auth/login` | auth-service:8081 |
+| `/platform-service/platform/api/v1/...` | `/platform/api/v1/...` | platform-service:8083 |
+| `/backend-service/api/v1/entries` | `/api/v1/entries` | backend-service:8082 |
 
 ### URL Construction Examples
 
-When calling services through the gateway, construct URLs as:
+**From Frontend (via Gateway):**
 ```
-http://localhost:8080/{gateway-route}/{context-path}/{endpoint}
+http://localhost:8080/{service-name}/{context-path}/{endpoint}
 ```
 
 **Examples:**
 
 | Service | Endpoint | Full Gateway URL |
 |---------|----------|------------------|
-| Auth | `/api/v1/auth/login` | `http://localhost:8080/auth/api/v1/auth/login` |
-| Backend | `/api/v1/entries` | `http://localhost:8080/api/v1/entries` |
-| Platform | `/internal/tenants/{id}` | `http://localhost:8080/platform-service/platform/internal/tenants/{id}` |
-| Platform | `/api/v1/sso/config` | `http://localhost:8080/platform-service/platform/api/v1/sso/config` |
+| Auth | Login | `http://localhost:8080/auth-service/api/v1/auth/login` |
+| Auth | SSO Complete | `http://localhost:8080/auth-service/api/v1/auth/sso-complete` |
+| Platform | SSO Config | `http://localhost:8080/platform-service/platform/api/v1/sso/config` |
+| Backend | Entries | `http://localhost:8080/backend-service/api/v1/entries` |
 
 ### Direct Service Access (Development Only)
 
-For debugging, you can bypass the gateway:
+For debugging, you can bypass the gateway (include context path):
 
 | Service | Direct URL Example |
 |---------|-------------------|
-| Auth | `http://localhost:8081/api/v1/auth/login` |
+| Auth | `http://localhost:8081/auth/api/v1/auth/login` |
 | Backend | `http://localhost:8082/api/v1/entries` |
 | Platform | `http://localhost:8083/platform/internal/tenants/xyz` |
 
-> **⚠️ Important:** Platform-service has context path `/platform`. All its endpoints are prefixed with `/platform`.
+> **⚠️ Important:** Auth-service has context path `/auth`, Platform-service has context path `/platform`. All endpoints are prefixed with the context path.
 
-### Internal API Paths
+### Internal API Paths (Service-to-Service)
 
-Internal APIs (service-to-service) use `/internal/**` prefix and bypass JWT authentication:
+Internal APIs use `/internal/**` prefix and bypass JWT authentication. **Include context path!**
 
-| Service | Internal API Examples |
-|---------|----------------------|
-| Platform | `/platform/internal/tenants/{id}`, `/platform/internal/users/jit-provision` |
-| Auth | `/internal/roles/lookup`, `/internal/groups/resolve-role` |
+| From Service | To Service | Internal URL Pattern |
+|--------------|------------|---------------------|
+| auth-service | platform-service | `http://platform-service:8083/platform/internal/tenants/{id}` |
+| auth-service | platform-service | `http://platform-service:8083/platform/internal/users/jit-provision` |
+| backend-service | auth-service | `http://auth-service:8081/auth/internal/roles/lookup` |
+
 
 ---
 
@@ -776,6 +791,20 @@ if (tenant.getTenantType() == TenantType.PERSONAL) {
 - ✅ **Database User Management** - Creates DB credentials, stores in AWS Secrets Manager
 - ✅ **Schema Initialization** - Runs Flyway migrations for each tenant
 - ✅ **Tenant Registry** - Maintains master metadata (JDBC URLs, status, tier)
+
+#### SSO/Social Login JIT Provisioning
+
+> [!IMPORTANT]
+> **All tenant creation flows MUST use `TenantProvisioningService.provision()`** to ensure proper database setup. Never create tenant records directly in the repository.
+
+- ✅ **Personal Accounts (Google Social Login):**
+  - Lambda generates `personal-{username}` tenant ID in JWT
+  - Callback calls JIT endpoint → `TenantProvisioningService.provision()`
+  - Uses `ProvisionTenantRequest.forPersonal(id, email)` factory method
+  - Same pipeline as manual signup: creates DB + runs migrations
+- ✅ **Organization SSO (SAML/OIDC):**
+  - Tenants must be pre-provisioned via admin flow
+  - JIT only creates user membership, not tenant
 
 #### Tenant Management
 - ✅ **Lifecycle Operations:**

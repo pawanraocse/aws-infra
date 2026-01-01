@@ -127,8 +127,18 @@ export class AuthCallbackComponent implements OnInit, OnDestroy {
         // Format: providerName = "OKTA-aarohan" -> tenantId = "aarohan"
         let tenantId = sessionStorage.getItem('sso_pending_tenant');
 
+        // For social login (Google, etc.), Lambda sets custom:tenantId in JWT
+        // This is the personal tenant ID (e.g., "personal-pawanweblink")
         if (!tenantId) {
-          // Try to extract from identities claim
+          const jwtTenantId = payload['custom:tenantId'] as string | undefined;
+          if (jwtTenantId) {
+            tenantId = jwtTenantId;
+            console.log('[Callback] Extracted tenantId from JWT claims:', tenantId);
+          }
+        }
+
+        if (!tenantId) {
+          // Try to extract from identities claim (for org SSO)
           const identities = payload['identities'] as Array<{ providerName: string }> | undefined;
           if (identities && identities.length > 0) {
             const providerName = identities[0].providerName;
@@ -144,7 +154,7 @@ export class AuthCallbackComponent implements OnInit, OnDestroy {
           // NOTE: Only use client-side JIT in development. In production,
           // the Lambda handles JIT provisioning before token generation.
           if (!environment.production) {
-            console.log('[Callback] JIT provisioning SSO user (dev mode):', { tenantId, email, cognitoUserId });
+            console.log('[Callback] JIT provisioning user (dev mode):', { tenantId, email, cognitoUserId });
             await this.authService.jitProvisionSsoUser(tenantId, email, cognitoUserId);
           }
         }

@@ -50,6 +50,9 @@ public class SecurityConfig {
                                                                 // Multi-tenant login endpoints
                                                                 "/auth/api/v1/auth/lookup",
                                                                 "/auth/api/v1/auth/last-accessed",
+                                                                // SSO signup completion (JIT provisioning)
+                                                                "/auth/api/v1/auth/sso-complete",
+                                                                "/auth-service/api/v1/auth/sso-complete",
                                                                 "/auth/.well-known/**", "/auth/oauth2/**",
                                                                 // Invitation acceptance (public)
                                                                 "/auth/api/v1/invitations/validate",
@@ -63,6 +66,9 @@ public class SecurityConfig {
                                                                 // Frontend config endpoint (public - needed before
                                                                 // auth)
                                                                 "/api/config/**",
+                                                                // SSO lookup endpoint (public - needed for SSO login)
+                                                                "/api/v1/sso/lookup",
+                                                                "/platform-service/platform/api/v1/sso/lookup",
                                                                 // System endpoints
                                                                 "/actuator/**", "/fallback")
                                                 .permitAll()

@@ -73,4 +73,14 @@ public interface SsoConfigurationService {
      * @return SP metadata XML
      */
     String getSpMetadata(String tenantId);
+
+    /**
+     * Lookup SSO configuration for a tenant (public, minimal info).
+     * Used by login page to get the correct provider name for SSO redirect.
+     *
+     * @param tenantId Tenant ID
+     * @return SSO lookup response if SSO is configured
+     */
+    Optional<com.learning.platformservice.sso.controller.SsoConfigurationController.SsoLookupResponse> getSsoLookup(
+            String tenantId);
 }

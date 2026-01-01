@@ -146,3 +146,21 @@ variable "project_display_name" {
   type        = string
   default     = "Cloud Infra"
 }
+
+# ==========================================================================
+# Google Social Login (Personal Gmail - B2C)
+# ==========================================================================
+# To enable personal Gmail sign-in:
+# 1. Create OAuth 2.0 credentials in Google Cloud Console
+# 2. Run: ./scripts/identity/setup-ssm-secrets.sh (sets SSM params)  
+# 3. Set enable_google_social_login = true
+# 4. Run: terraform apply
+# ==========================================================================
+
+variable "enable_google_social_login" {
+  description = "Enable 'Sign in with Google' for personal Gmail accounts. Requires SSM params from setup-ssm-secrets.sh"
+  type        = bool
+  default     = false
+}
+
+

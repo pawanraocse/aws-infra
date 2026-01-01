@@ -1,77 +1,57 @@
 package com.learning.authservice.signup;
 
-import com.learning.authservice.authorization.service.UserRoleService;
-import com.learning.authservice.config.CognitoProperties;
+import com.learning.authservice.signup.pipeline.SignupContext;
+import com.learning.authservice.signup.pipeline.SignupContext.SignupType;
+import com.learning.authservice.signup.pipeline.SignupPipeline;
+import com.learning.authservice.signup.pipeline.SignupResult;
 import com.learning.common.dto.SignupResponse;
-import com.learning.common.infra.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
-import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserRequest;
-import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserResponse;
-import software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType;
 
 /**
- * Implementation of SignupService.
- * Orchestrates the signup flow by delegating to specialized components.
+ * Implementation of SignupService using the unified SignupPipeline.
  * 
- * Single Responsibility: Coordinates the signup steps.
- * Open/Closed: New signup types can be added by implementing SignupRequest.
+ * Delegates all signup orchestration to SignupPipeline which:
+ * - Executes actions in order (GenerateTenantId → Provision → Cognito →
+ * Membership → Roles → Email)
+ * - Handles idempotency (skips already-done actions on retry)
+ * - Supports rollback on failure
+ * 
+ * SOLID Principles:
+ * - Single Responsibility: Translates request types to pipeline context
+ * - Open/Closed: New actions can be added without modifying this class
  */
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class SignupServiceImpl implements SignupService {
 
-    private final TenantIdGenerator tenantIdGenerator;
-    private final TenantProvisioner tenantProvisioner;
-    private final CognitoUserRegistrar cognitoUserRegistrar;
-    private final UserRoleService userRoleService;
-    private final CognitoIdentityProviderClient cognitoClient;
-    private final CognitoProperties cognitoProperties;
+    private final SignupPipeline signupPipeline;
 
     @Override
     public SignupResponse signup(SignupRequest request) {
         log.info("Processing {} signup for: {}", request.tenantType(), request.email());
 
         try {
-            // 1. Generate tenant ID (polymorphic - different strategy per type)
-            String tenantId = tenantIdGenerator.generate(request);
-            log.debug("Generated tenant ID: {}", tenantId);
+            // Convert request to pipeline context
+            SignupContext ctx = toSignupContext(request);
 
-            // 2. Provision tenant (polymorphic - org includes tier/maxUsers)
-            // This also creates the user_tenant_membership in platform DB
-            tenantProvisioner.provision(request, tenantId);
+            // Execute the unified pipeline
+            SignupResult result = signupPipeline.execute(ctx);
 
-            // 3. Register user in Cognito (or skip if exists)
-            // Enables multi-account per email: existing users can create additional orgs
-            String role = determineRole(request);
-            CognitoUserRegistrar.RegistrationResult result = cognitoUserRegistrar.registerIfNotExists(
-                    request.email(),
-                    request.password(),
-                    request.name(),
-                    tenantId,
-                    role);
+            if (result.success()) {
+                String message = result.requiresEmailVerification()
+                        ? "Signup complete. Please verify your email."
+                        : "New workspace created! Please login to access it.";
 
-            log.info("Signup completed: email={} tenantId={} result={}",
-                    request.email(), tenantId, result);
-
-            // 4. For existing users, assign role immediately (no email verification step)
-            if (result == CognitoUserRegistrar.RegistrationResult.ALREADY_EXISTS) {
-                assignRoleForExistingUser(request.email(), tenantId, role);
+                return SignupResponse.success(
+                        message,
+                        result.tenantId(),
+                        !result.requiresEmailVerification());
+            } else {
+                return SignupResponse.failure(result.message());
             }
-
-            // Message varies based on whether user was created or already existed
-            String message = switch (result) {
-                case CREATED -> "Signup complete. Please verify your email.";
-                case ALREADY_EXISTS -> "New workspace created! Please login to access it.";
-            };
-
-            // Only need email verification for newly created users
-            boolean confirmed = (result == CognitoUserRegistrar.RegistrationResult.ALREADY_EXISTS);
-
-            return SignupResponse.success(message, tenantId, confirmed);
 
         } catch (IllegalArgumentException e) {
             log.warn("Signup validation failed: {}", e.getMessage());
@@ -83,48 +63,25 @@ public class SignupServiceImpl implements SignupService {
     }
 
     /**
-     * Assign admin role to existing user in the new tenant database.
-     * This is needed because existing users skip email verification,
-     * so the role assignment in verify() is never called.
+     * Convert SignupRequest to SignupContext for pipeline processing.
      */
-    private void assignRoleForExistingUser(String email, String tenantId, String role) {
-        log.info("Assigning role for existing user: email={} tenantId={} role={}", email, tenantId, role);
-
-        try {
-            // Get user's sub from Cognito
-            AdminGetUserRequest getUserRequest = AdminGetUserRequest.builder()
-                    .userPoolId(cognitoProperties.getUserPoolId())
-                    .username(email)
+    private SignupContext toSignupContext(SignupRequest request) {
+        return switch (request) {
+            case PersonalSignupData p -> SignupContext.builder()
+                    .email(p.email())
+                    .password(p.password())
+                    .name(p.name())
+                    .signupType(SignupType.PERSONAL)
                     .build();
 
-            AdminGetUserResponse userResponse = cognitoClient.adminGetUser(getUserRequest);
-            String userId = userResponse.userAttributes().stream()
-                    .filter(attr -> "sub".equals(attr.name()))
-                    .map(AttributeType::value)
-                    .findFirst()
-                    .orElseThrow(() -> new RuntimeException("Failed to get user sub from Cognito"));
-
-            // Set tenant context and assign role
-            TenantContext.setCurrentTenant(tenantId);
-            try {
-                userRoleService.assignRole(userId, role, "system");
-                log.info("✅ Admin role assigned for existing user: userId={} tenantId={}", userId, tenantId);
-            } finally {
-                TenantContext.clear();
-            }
-        } catch (Exception e) {
-            log.error("Failed to assign role for existing user: email={} tenantId={} error={}",
-                    email, tenantId, e.getMessage(), e);
-            // Don't fail the signup - user can be added manually later
-        }
-    }
-
-    /**
-     * Determine the initial role for the user.
-     * Both personal and organization admins get admin role.
-     */
-    private String determineRole(SignupRequest request) {
-        // Both types get admin role initially
-        return "admin";
+            case OrganizationSignupData o -> SignupContext.builder()
+                    .email(o.email())
+                    .password(o.password())
+                    .name(o.name())
+                    .companyName(o.companyName())
+                    .tier(o.tier())
+                    .signupType(SignupType.ORGANIZATION)
+                    .build();
+        };
     }
 }

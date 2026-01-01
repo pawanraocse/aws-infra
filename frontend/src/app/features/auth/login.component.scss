@@ -195,3 +195,22 @@
     }
   }
 }
+
+// ========== Google Sign-in Button ==========
+
+.google-btn {
+  &::ng-deep .p-button {
+    border-color: var(--surface-300) !important;
+    color: var(--surface-700) !important;
+    
+    &:hover {
+      background: var(--surface-100) !important;
+      border-color: var(--surface-400) !important;
+    }
+    
+    .pi-google {
+      color: #4285f4;
+    }
+  }
+}
+

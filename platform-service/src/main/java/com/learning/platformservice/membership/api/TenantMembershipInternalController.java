@@ -49,6 +49,24 @@ public class TenantMembershipInternalController {
     private final MembershipService membershipService;
 
     /**
+     * Check if a membership exists for given email and tenant.
+     * Used for idempotency checks during signup.
+     *
+     * @param tenantId Tenant ID
+     * @param email    User's email
+     * @return true if membership exists
+     */
+    @GetMapping("/exists")
+    public ResponseEntity<Boolean> membershipExists(
+            @RequestParam @NotBlank String tenantId,
+            @RequestParam @NotBlank @Email String email) {
+
+        log.debug("Internal API: membershipExists check for tenantId={}", tenantId);
+        boolean exists = membershipService.membershipExists(email, tenantId);
+        return ResponseEntity.ok(exists);
+    }
+
+    /**
      * Find all tenants for a given email address.
      * Used during login to populate the tenant selector.
      *

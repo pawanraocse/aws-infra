@@ -221,8 +221,12 @@ resource "aws_cognito_user_pool_client" "spa" {
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
 
-  # Support both Cognito and federated identity providers
-  supported_identity_providers = concat(["COGNITO"], var.identity_providers)
+  # Support Cognito, Google social login (if enabled), and federated identity providers
+  supported_identity_providers = concat(
+    ["COGNITO"],
+    var.enable_google_social_login ? ["Google"] : [],
+    var.identity_providers
+  )
 
   # OAuth callback URLs
   callback_urls = var.callback_urls
@@ -256,8 +260,14 @@ resource "aws_cognito_user_pool_client" "spa" {
     "name"
   ]
 
-  # Ignore changes to supported_identity_providers because they are
-  # managed dynamically by the platform-service when tenants configure SSO
+  # Depends on Google social provider if enabled
+  depends_on = [
+    aws_cognito_identity_provider.google
+  ]
+
+  # Note: supported_identity_providers is ignored because tenant SSO providers
+  # (OKTA-xxx, GWORKSPACE-xxx, GSAML-xxx) are added dynamically by platform-service.
+  # The built-in Google social provider is included via the enable_google_social_login variable.
   lifecycle {
     ignore_changes = [
       supported_identity_providers
@@ -306,3 +316,36 @@ resource "aws_cognito_managed_login_branding" "main" {
     aws_cognito_user_pool_domain.main
   ]
 }
+
+# =============================================================================
+# Google Social Identity Provider (Personal Gmail - B2C)
+# =============================================================================
+# This is the built-in Cognito Google social provider for personal Gmail sign-in.
+# It's separate from organization SSO which uses GWORKSPACE-{tenant} or GSAML-{tenant}.
+
+resource "aws_cognito_identity_provider" "google" {
+  count = var.enable_google_social_login ? 1 : 0
+
+  user_pool_id  = aws_cognito_user_pool.main.id
+  provider_name = "Google"
+  provider_type = "Google"
+
+  provider_details = {
+    client_id        = var.google_client_id
+    client_secret    = var.google_client_secret
+    authorize_scopes = "email openid profile"
+  }
+
+  attribute_mapping = {
+    email    = "email"
+    username = "sub"
+    name     = "name"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      provider_details["client_secret"]
+    ]
+  }
+}
+

@@ -118,14 +118,24 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         idp_type = _detect_idp_type(user_attributes)
         is_sso_user = idp_type in ('SAML', 'OIDC', 'OKTA', 'AZURE_AD', 'GOOGLE', 'PING')
         
+        # Check if this is a social login (built-in Google, not GWORKSPACE-/GSAML-)
+        is_social_login = _is_social_login(user_attributes)
+        
         # For SSO users, try to extract tenant from identity provider name
         # Provider names follow pattern: OKTA-{tenantId}, SAML-{tenantId}, etc.
         sso_tenant_id = None
-        if is_sso_user:
+        if is_sso_user and not is_social_login:
             sso_tenant_id = _extract_tenant_from_idp(user_attributes)
             if sso_tenant_id:
                 logger.info(f"Extracted tenant '{sso_tenant_id}' from SSO identity provider")
                 stored_tenant_type = 'ORGANIZATION'  # SSO users are always org users
+        
+        # For social login (personal Gmail), create personal tenant from email
+        if is_social_login and not stored_tenant_id:
+            email = user_attributes.get('email', username)
+            sso_tenant_id = _generate_personal_tenant_id(email)
+            stored_tenant_type = 'PERSONAL'
+            logger.info(f"Generated personal tenant '{sso_tenant_id}' for social login user: {email}")
         
         # Determine final tenant ID - SSO tenant takes precedence for federated users
         final_tenant_id = _determine_tenant_id(
@@ -258,6 +268,70 @@ def _detect_idp_type(user_attributes: Dict[str, str]) -> str:
         return 'SAML'
     
     return 'OIDC'
+
+
+def _is_social_login(user_attributes: Dict[str, str]) -> bool:
+    """
+    Check if this is a social login (built-in Google, Apple, Facebook, etc.).
+    
+    Social providers use simple names like 'Google', not prefixed like 'GWORKSPACE-tenant'.
+    This distinguishes personal Gmail sign-in (B2C) from organization SSO (B2B).
+    
+    Returns:
+        True if social login (e.g., Google built-in), False for org SSO
+    """
+    identities_raw = user_attributes.get('identities', '')
+    
+    if not identities_raw:
+        return False
+    
+    try:
+        identities = json.loads(identities_raw)
+        if identities and isinstance(identities, list):
+            provider_name = identities[0].get('providerName', '')
+            
+            # Built-in social providers have simple names without tenant suffix
+            # e.g., 'Google' vs 'GWORKSPACE-aarohan' or 'GSAML-aarohan'
+            social_providers = {'Google', 'Facebook', 'Amazon', 'Apple', 'SignInWithApple'}
+            
+            return provider_name in social_providers
+    except json.JSONDecodeError:
+        pass
+    
+    return False
+
+
+def _generate_personal_tenant_id(email: str) -> str:
+    """
+    Generate a personal tenant ID from user's email.
+    
+    For B2C personal sign-in via social login (Google, etc.), we create
+    a personal tenant based on the user's email to isolate their data.
+    
+    Args:
+        email: User's email address
+    
+    Returns:
+        Personal tenant ID in format 'personal-{username}' (max 32 chars)
+    """
+    import re
+    import hashlib
+    
+    if not email or '@' not in email:
+        # Fallback to hash if email is invalid
+        return f"personal-{hashlib.md5(email.encode()).hexdigest()[:8]}"
+    
+    # Extract username part of email (before @)
+    username = email.split('@')[0]
+    
+    # Sanitize: only alphanumeric and hyphens
+    sanitized = re.sub(r'[^a-zA-Z0-9]', '', username).lower()
+    
+    # Limit length and add prefix
+    if len(sanitized) > 20:
+        sanitized = sanitized[:20]
+    
+    return f"personal-{sanitized}"
 
 
 def _extract_tenant_from_idp(user_attributes: Dict[str, str]) -> Optional[str]:
@@ -499,23 +573,30 @@ def _provision_user(
     source: str
 ) -> None:
     """
-    Provision a new user in the tenant's user registry via platform-service.
+    Provision a new SSO user via auth-service sso-complete endpoint.
+    
+    This calls the unified signup pipeline in auth-service which:
+    - Creates tenant (if needed for personal accounts)
+    - Creates membership in platform DB
+    - Assigns user_roles in tenant DB
     
     Args:
         tenant_id: The tenant ID
         email: User email
         user_sub: Cognito user sub (user ID)
         role_id: Role to assign
-        source: User source (SAML, OIDC, OKTA, etc.)
+        source: User source (SAML, OIDC, OKTA, GOOGLE, etc.)
     """
-    url = f"{PLATFORM_SERVICE_URL}/internal/users/jit-provision"
+    # Call auth-service sso-complete endpoint (unified signup pipeline)
+    url = f"{AUTH_SERVICE_URL}/api/v1/auth/sso-complete"
     
     payload = {
         'tenantId': tenant_id,
         'email': email,
-        'userId': user_sub,
-        'roleId': role_id,
-        'source': source
+        'cognitoUserId': user_sub,
+        'source': source,
+        'defaultRole': role_id,
+        'groups': []  # Groups are synced separately
     }
     
     data = json.dumps(payload).encode('utf-8')
@@ -529,11 +610,24 @@ def _provision_user(
         method='POST'
     )
     
-    with urllib.request.urlopen(req, timeout=10) as response:
-        if response.status in (200, 201):
-            logger.info(f"User {email} provisioned successfully in tenant {tenant_id}")
-        else:
-            logger.warning(f"User provision returned unexpected status: {response.status}")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            if response.status in (200, 201):
+                result = json.loads(response.read().decode('utf-8'))
+                if result.get('success'):
+                    logger.info(f"SSO user provisioned successfully: email={email} tenant={tenant_id}")
+                else:
+                    logger.warning(f"SSO provision returned success=false: {result.get('message')}")
+            else:
+                logger.warning(f"SSO provision unexpected status: {response.status}")
+    except urllib.error.HTTPError as e:
+        # Log error body for debugging
+        error_body = e.read().decode('utf-8') if e.fp else 'No body'
+        logger.error(f"SSO provision HTTP error {e.code}: {error_body}")
+        raise
+    except Exception as e:
+        logger.error(f"SSO provision error: {str(e)}")
+        raise
 
 
 

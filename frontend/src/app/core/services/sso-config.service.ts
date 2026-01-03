@@ -21,7 +21,7 @@ export interface SsoConfig {
  * SAML configuration request
  */
 export interface SamlConfigRequest {
-    idpType: 'SAML' | 'OKTA';
+    idpType: 'SAML' | 'OKTA' | 'GOOGLE_SAML' | 'AZURE_AD_SAML' | 'GENERIC_SAML';
     providerName: string;
     metadataUrl?: string;
     metadataXml?: string;
@@ -61,13 +61,19 @@ export interface SpMetadata {
 
 /**
  * Available SSO provider options
+ * - Google Workspace uses SAML (OIDC doesn't support groups)
+ * - Azure AD supports both OIDC (simpler, <200 groups) and SAML (enterprise)
+ * - Other enterprise providers use SAML (industry standard)
+ * Note: Personal Google Sign-in uses OIDC separately via Cognito Hosted UI
  */
 export const SSO_PROVIDERS = [
-    { value: 'GOOGLE', label: 'Google Workspace', icon: 'pi pi-google', protocol: 'OIDC' },
-    { value: 'AZURE_AD', label: 'Microsoft Azure AD', icon: 'pi pi-microsoft', protocol: 'OIDC' },
+    { value: 'GOOGLE_SAML', label: 'Google Workspace', icon: 'pi pi-google', protocol: 'SAML' },
+    { value: 'AZURE_AD_OIDC', label: 'Microsoft Azure AD (OIDC)', icon: 'pi pi-microsoft', protocol: 'OIDC' },
+    { value: 'AZURE_AD_SAML', label: 'Microsoft Azure AD (SAML)', icon: 'pi pi-microsoft', protocol: 'SAML' },
     { value: 'OKTA', label: 'Okta', icon: 'pi pi-shield', protocol: 'SAML' },
-    { value: 'GENERIC_SAML', label: 'Generic SAML 2.0', icon: 'pi pi-key', protocol: 'SAML' },
-    { value: 'GENERIC_OIDC', label: 'Generic OIDC', icon: 'pi pi-lock', protocol: 'OIDC' }
+    { value: 'PING', label: 'Ping Identity', icon: 'pi pi-verified', protocol: 'SAML' },
+    { value: 'ONELOGIN', label: 'OneLogin', icon: 'pi pi-users', protocol: 'SAML' },
+    { value: 'GENERIC_SAML', label: 'Other SAML Provider', icon: 'pi pi-key', protocol: 'SAML' }
 ] as const;
 
 /**
@@ -90,7 +96,7 @@ export const SSO_PROVIDERS = [
 export class SsoConfigService extends BaseApiService {
 
     constructor() {
-        super('/api/v1/sso');
+        super('/platform-service/api/v1/sso'); // Routes through gateway to platform-service
     }
 
     /**
@@ -118,7 +124,7 @@ export class SsoConfigService extends BaseApiService {
      * Toggle SSO enabled/disabled
      */
     toggleSso(enabled: boolean): Observable<SsoConfig> {
-        return this.http.patch<SsoConfig>(`${this.resourceUrl}/toggle`, { enabled });
+        return this.http.patch<SsoConfig>(`${this.resourceUrl}/config/toggle?enabled=${enabled}`, {});
     }
 
     /**

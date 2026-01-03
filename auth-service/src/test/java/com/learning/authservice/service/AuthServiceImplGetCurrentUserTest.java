@@ -1,5 +1,6 @@
 package com.learning.authservice.service;
 
+import com.learning.authservice.authorization.service.GroupRoleMappingService;
 import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.authservice.config.CognitoProperties;
 import com.learning.authservice.dto.UserInfoDto;
@@ -43,9 +44,11 @@ class AuthServiceImplGetCurrentUserTest {
                 .mock(org.springframework.web.reactive.function.client.WebClient.class);
         UserRoleService userRoleService = Mockito.mock(UserRoleService.class);
         Mockito.when(userRoleService.getUserRoles(anyString())).thenReturn(Collections.emptyList());
+        GroupRoleMappingService groupRoleMappingService = Mockito.mock(GroupRoleMappingService.class);
         // Note: Not calling props.validate() to avoid throwing during these tests; we
         // only test getCurrentUser.
-        return new AuthServiceImpl(props, req, resp, cognitoIdentityProviderClient, webClient, userRoleService);
+        return new AuthServiceImpl(props, req, resp, cognitoIdentityProviderClient, webClient, userRoleService,
+                groupRoleMappingService);
     }
 
     private DefaultOidcUser oidcUser(String sub, String email, String name) {

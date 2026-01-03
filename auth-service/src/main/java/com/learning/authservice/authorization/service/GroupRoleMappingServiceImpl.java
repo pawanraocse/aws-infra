@@ -132,4 +132,27 @@ public class GroupRoleMappingServiceImpl implements GroupRoleMappingService {
     public boolean mappingExists(String externalGroupId) {
         return mappingRepository.existsByExternalGroupId(externalGroupId);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    @Cacheable(value = CACHE_NAME, key = "'resolve_' + #externalGroupIds.hashCode()")
+    public java.util.Optional<String> resolveRoleFromGroups(List<String> externalGroupIds) {
+        if (externalGroupIds == null || externalGroupIds.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+
+        // Query mappings for all groups, sorted by priority (highest first)
+        List<GroupRoleMapping> mappings = mappingRepository
+                .findAutoAssignMappingsByExternalGroupIds(externalGroupIds);
+
+        if (mappings.isEmpty()) {
+            log.debug("No role mappings found for groups: {}", externalGroupIds);
+            return java.util.Optional.empty();
+        }
+
+        // Return highest priority role
+        String roleId = mappings.get(0).getRole().getId();
+        log.info("Resolved role '{}' from group mappings for groups: {}", roleId, externalGroupIds);
+        return java.util.Optional.of(roleId);
+    }
 }

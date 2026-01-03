@@ -1,17 +1,21 @@
 package com.learning.authservice.authorization.controller;
 
 import com.learning.authservice.authorization.domain.UserRole;
+import com.learning.authservice.authorization.service.GroupRoleMappingService;
 import com.learning.authservice.authorization.service.UserRoleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Internal API for role lookup.
@@ -25,35 +29,43 @@ import java.util.Map;
 public class RoleLookupInternalController {
 
     private final UserRoleService userRoleService;
+    private final GroupRoleMappingService groupRoleMappingService;
 
     /**
      * Get the primary role for a user.
-     * Returns the highest-priority role (admin > editor > viewer > guest).
+     * Priority: IdP group mappings > user_roles > default 'viewer'
      * Called by gateway-service after JWT validation.
      *
      * @param userId Cognito user ID (from JWT sub claim)
+     * @param groups Comma-separated IdP groups from X-Groups header
      * @return JSON with roleId field
      */
     @GetMapping("/{userId}/role")
-    public ResponseEntity<Map<String, String>> getUserRole(@PathVariable String userId) {
-        log.debug("Role lookup for userId={}", userId);
+    public ResponseEntity<Map<String, String>> getUserRole(
+            @PathVariable String userId,
+            @RequestHeader(value = "X-Groups", required = false) String groups) {
+        log.debug("Role lookup for userId={} groups={}", userId, groups);
 
-        List<UserRole> roles = userRoleService.getUserRoles(userId);
-
-        if (roles.isEmpty()) {
-            // SSO users may not have explicit role assignments
-            // Gateway already validated JWT, so user is authenticated
-            // Return 'viewer' as default role (least privilege) until group mappings are
-            // configured
-            log.info("No roles found for userId={}, returning default 'viewer' role (SSO user)", userId);
-            return ResponseEntity.ok(Map.of("roleId", "viewer"));
+        // Priority 1: Check IdP group mappings
+        if (groups != null && !groups.isBlank()) {
+            List<String> groupList = Arrays.asList(groups.split(","));
+            Optional<String> mappedRole = groupRoleMappingService.resolveRoleFromGroups(groupList);
+            if (mappedRole.isPresent()) {
+                log.info("Role from group mapping: userId={} groups={} roleId={}", userId, groups, mappedRole.get());
+                return ResponseEntity.ok(Map.of("roleId", mappedRole.get()));
+            }
         }
 
-        // Return first role (primary role)
-        // In our simplified model, users typically have one role
-        String roleId = roles.get(0).getRoleId();
-        log.debug("Role lookup result: userId={} roleId={}", userId, roleId);
+        // Priority 2: Check user_roles table
+        List<UserRole> roles = userRoleService.getUserRoles(userId);
+        if (!roles.isEmpty()) {
+            String roleId = roles.get(0).getRoleId();
+            log.debug("Role lookup result: userId={} roleId={}", userId, roleId);
+            return ResponseEntity.ok(Map.of("roleId", roleId));
+        }
 
-        return ResponseEntity.ok(Map.of("roleId", roleId));
+        // Priority 3: Default to viewer (SSO users with no mappings)
+        log.info("No roles found for userId={}, returning default 'viewer' role", userId);
+        return ResponseEntity.ok(Map.of("roleId", "viewer"));
     }
 }

@@ -77,6 +77,8 @@ public class SecurityConfiguration {
                                                                 "/api/v1/roles/**",
                                                                 "/api/v1/invitations/**",
                                                                 "/api/v1/users/**",
+                                                                "/api/v1/groups/**", // Group mappings (Gateway validates JWT)
+                                                                "/api/v1/sso/**", // SSO config (Gateway validates JWT)
                                                                 "/api/v1/account/**") // Account deletion (Gateway
                                                                                       // validates JWT)
                                                 .permitAll()

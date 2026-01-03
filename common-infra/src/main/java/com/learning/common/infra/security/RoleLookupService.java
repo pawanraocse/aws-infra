@@ -24,6 +24,20 @@ public interface RoleLookupService {
     Optional<String> getUserRole(String userId, String tenantId);
 
     /**
+     * Get the primary role for a user with SSO group information.
+     * Checks group-to-role mappings first, then falls back to user_roles.
+     * 
+     * @param userId   Cognito user ID (from X-User-Id header)
+     * @param tenantId Tenant ID for context (from X-Tenant-Id header)
+     * @param groups   Comma-separated IdP groups (from X-Groups header)
+     * @return Role ID or empty if not found
+     */
+    default Optional<String> getUserRole(String userId, String tenantId, String groups) {
+        // Default implementation ignores groups - override in RemoteRoleLookupService
+        return getUserRole(userId, tenantId);
+    }
+
+    /**
      * Check if user has super-admin role.
      * Super-admins have access to all resources.
      * 

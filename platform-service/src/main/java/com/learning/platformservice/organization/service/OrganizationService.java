@@ -77,6 +77,51 @@ public class OrganizationService {
     }
 
     /**
+     * Initialize organization settings during signup.
+     * 
+     * <p>
+     * Called by auth-service's CreateOrgSettingsAction during organization signup
+     * to set initial organization-specific settings after tenant is provisioned.
+     * 
+     * <p>
+     * This updates the existing tenant record (created by ProvisionTenantAction)
+     * with additional organization metadata like company name and tier.
+     *
+     * @param tenantId    Tenant ID (must already exist)
+     * @param companyName Company name for the organization
+     * @param tier        Subscription tier (e.g., STANDARD, PREMIUM)
+     * @return Organization profile DTO
+     * @throws IllegalArgumentException if tenant does not exist
+     */
+    @Transactional
+    public OrganizationProfileDTO initializeOrganizationSettings(
+            String tenantId, String companyName, String tier) {
+
+        log.info("Initializing organization settings for tenant: {}, company: {}, tier: {}",
+                tenantId, companyName, tier);
+
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Tenant not found: " + tenantId + ". Tenant must be provisioned first."));
+
+        // Update organization-specific fields
+        if (companyName != null && !companyName.isBlank()) {
+            tenant.setCompanyName(companyName);
+        }
+
+        // Map tier to SLA tier if provided
+        if (tier != null && !tier.isBlank()) {
+            tenant.setSlaTier(tier);
+        }
+
+        tenant.setUpdatedAt(OffsetDateTime.now());
+        Tenant savedTenant = tenantRepository.save(tenant);
+
+        log.info("Organization settings initialized successfully for tenant: {}", tenantId);
+        return mapToDTO(savedTenant);
+    }
+
+    /**
      * Map Tenant entity to OrganizationProfileDTO.
      */
     private OrganizationProfileDTO mapToDTO(Tenant tenant) {

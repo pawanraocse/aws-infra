@@ -67,6 +67,20 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
+  # Custom attribute for SAML IdP group memberships (e.g., from Okta)
+  # Used for group-to-role mapping during SSO
+  schema {
+    name                = "samlGroups"
+    attribute_data_type = "String"
+    mutable             = true
+    required            = false
+
+    string_attribute_constraints {
+      min_length = 0
+      max_length = 2048 # Allow multiple comma-separated groups
+    }
+  }
+
   # Password policy
   password_policy {
     minimum_length                   = 12
@@ -252,12 +266,14 @@ resource "aws_cognito_user_pool_client" "spa" {
     "name",
     "custom:tenantId",
     "custom:role",
-    "custom:tenantType"
+    "custom:tenantType",
+    "custom:samlGroups"
   ]
 
   write_attributes = [
     "email",
-    "name"
+    "name",
+    "custom:samlGroups"
   ]
 
   # Depends on Google social provider if enabled

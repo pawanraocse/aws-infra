@@ -84,7 +84,6 @@ interface Provider {
                   <div class="flex align-items-center gap-2">
                     <i [class]="item.icon"></i>
                     <span>{{ item.label }}</span>
-                    <p-tag [value]="item.protocol" [severity]="item.protocol === 'OIDC' ? 'info' : 'warn'" styleClass="ml-auto"></p-tag>
                   </div>
                 </ng-template>
               </p-select>
@@ -94,11 +93,11 @@ interface Provider {
               <p-divider></p-divider>
 
               @if (isOidcProvider()) {
-                <!-- OIDC Configuration Form -->
+                <!-- OIDC Configuration Form (Azure AD OIDC) -->
                 <div class="grid">
                   <div class="col-12">
                     <p-message severity="info"
-                      [text]="'Configure OpenID Connect for ' + selectedProvider.label">
+                      text="Configure OpenID Connect for Microsoft Azure AD. Best for organizations with fewer than 200 groups.">
                     </p-message>
                   </div>
 
@@ -107,7 +106,7 @@ interface Provider {
                     <input pInputText
                       class="w-full"
                       [(ngModel)]="oidcForm.clientId"
-                      placeholder="Enter your OAuth Client ID" />
+                      placeholder="Enter your Azure AD Application (Client) ID" />
                   </div>
 
                   <div class="col-12 md:col-6 field">
@@ -118,7 +117,7 @@ interface Provider {
                       [toggleMask]="true"
                       styleClass="w-full"
                       inputStyleClass="w-full"
-                      placeholder="Enter your OAuth Client Secret">
+                      placeholder="Enter your Azure AD Client Secret">
                     </p-password>
                   </div>
 
@@ -127,8 +126,8 @@ interface Provider {
                     <input pInputText
                       class="w-full"
                       [(ngModel)]="oidcForm.issuerUrl"
-                      [placeholder]="getOidcIssuerPlaceholder()" />
-                    <small class="text-500">The OpenID Connect issuer URL</small>
+                      placeholder="https://login.microsoftonline.com/YOUR-TENANT-ID/v2.0" />
+                    <small class="text-500">Replace YOUR-TENANT-ID with your Azure AD tenant ID</small>
                   </div>
                 </div>
               } @else {
@@ -289,7 +288,7 @@ export class SsoConfigComponent implements OnInit {
   selectedProvider: Provider | null = null;
 
   oidcForm: OidcConfigRequest = {
-    idpType: 'OIDC',
+    idpType: 'AZURE_AD',
     providerName: '',
     clientId: '',
     clientSecret: '',
@@ -339,13 +338,13 @@ export class SsoConfigComponent implements OnInit {
   }
 
   onProviderChange() {
-    this.oidcForm = { idpType: 'OIDC', providerName: '', clientId: '', clientSecret: '', issuerUrl: '' };
+    // Reset forms
+    this.oidcForm = { idpType: 'AZURE_AD', providerName: '', clientId: '', clientSecret: '', issuerUrl: '' };
     this.samlForm = { idpType: 'SAML', providerName: '', metadataUrl: '', entityId: '', ssoUrl: '' };
+
     if (this.selectedProvider) {
-      // Set idpType and providerName based on selected provider
-      if (this.selectedProvider.protocol === 'OIDC') {
-        this.oidcForm.idpType = this.selectedProvider.value === 'GOOGLE' ? 'GOOGLE' :
-          this.selectedProvider.value === 'AZURE_AD' ? 'AZURE_AD' : 'OIDC';
+      if (this.isOidcProvider()) {
+        this.oidcForm.idpType = 'AZURE_AD';
         this.oidcForm.providerName = this.selectedProvider.label;
       } else {
         this.samlForm.idpType = this.selectedProvider.value === 'OKTA' ? 'OKTA' : 'SAML';
@@ -356,14 +355,6 @@ export class SsoConfigComponent implements OnInit {
 
   isOidcProvider(): boolean {
     return this.selectedProvider?.protocol === 'OIDC';
-  }
-
-  getOidcIssuerPlaceholder(): string {
-    switch (this.selectedProvider?.value) {
-      case 'GOOGLE': return 'https://accounts.google.com';
-      case 'AZURE_AD': return 'https://login.microsoftonline.com/{tenant}/v2.0';
-      default: return 'https://your-idp.com/.well-known/openid-configuration';
-    }
   }
 
   canTest(): boolean {

@@ -1,5 +1,6 @@
 package com.learning.authservice.service;
 
+import com.learning.authservice.authorization.service.GroupRoleMappingService;
 import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.authservice.config.CognitoProperties;
 import com.learning.authservice.dto.AuthRequestDto;
@@ -16,11 +17,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.reactive.function.client.WebClient;
 import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
-import software.amazon.awssdk.services.cognitoidentityprovider.model.*;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminInitiateAuthRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminInitiateAuthResponse;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AuthenticationResultType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.CognitoIdentityProviderException;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.NotAuthorizedException;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UserNotFoundException;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for AuthServiceImpl.login method.
@@ -44,6 +52,9 @@ class AuthServiceImplLoginTest {
         @Mock
         private UserRoleService userRoleService;
 
+        @Mock
+        private GroupRoleMappingService groupRoleMappingService;
+
         private AuthServiceImpl authService;
 
         @BeforeEach
@@ -55,7 +66,7 @@ class AuthServiceImplLoginTest {
                 props.setRegion("us-east-1");
 
                 authService = new AuthServiceImpl(props, request, response, cognitoClient, platformWebClient,
-                                userRoleService);
+                                userRoleService, groupRoleMappingService);
         }
 
         @Test

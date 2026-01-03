@@ -114,6 +114,43 @@ public class JwtAuthenticationGatewayFilterFactory
                     if (!authorities.isBlank()) {
                         builder.header("X-Authorities", authorities);
                     }
+                    // Pass IdP groups for group-to-role mapping
+                    // Priority: 1) custom:samlGroups (SAML IdPs like Okta), 2) cognito:groups
+                    // (Cognito groups)
+                    java.util.Set<String> allGroups = new java.util.LinkedHashSet<>();
+
+                    // 1. Read SAML groups from custom:samlGroups (contains actual IdP group names
+                    // like "dev", "Admins")
+                    String samlGroups = jwt.getClaimAsString("custom:samlGroups");
+                    if (samlGroups != null && !samlGroups.isBlank()) {
+                        // Cognito stores multi-valued SAML attributes as "[val1, val2]" format
+                        // Strip brackets if present
+                        String cleaned = samlGroups.trim();
+                        if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
+                            cleaned = cleaned.substring(1, cleaned.length() - 1);
+                        }
+                        // Split by comma and trim each value
+                        for (String g : cleaned.split(",")) {
+                            if (g != null && !g.isBlank()) {
+                                allGroups.add(g.trim());
+                            }
+                        }
+                        log.debug("Found SAML groups in custom:samlGroups: {} -> parsed: {}", samlGroups, allGroups);
+                    }
+
+                    // 2. Also read cognito:groups (filter out tenant_ groups)
+                    List<String> cognitoGroups = jwt.getClaimAsStringList("cognito:groups");
+                    if (cognitoGroups != null) {
+                        cognitoGroups.stream()
+                                .filter(g -> g != null && !g.startsWith(TENANT_GROUP_PREFIX))
+                                .forEach(allGroups::add);
+                    }
+
+                    if (!allGroups.isEmpty()) {
+                        String groups = String.join(",", allGroups);
+                        builder.header("X-Groups", groups);
+                        log.debug("Passing IdP groups to downstream: {}", groups);
+                    }
 
                     log.debug("NT-01 allow path={} userId={} tenantId={}",
                             exchange.getRequest().getPath(), userId, tenantId);

@@ -90,7 +90,8 @@ public class AssignRolesAction implements SignupAction {
                 throw new SignupActionException(getName(), "Cannot get user ID for role assignment");
             }
 
-            String role = ctx.getAssignedRole() != null ? ctx.getAssignedRole() : "admin";
+            String role = ctx.getAssignedRole() != null ? ctx.getAssignedRole()
+                    : (ctx.isSsoSignup() ? "viewer" : "admin"); // SSO users get viewer, org creators get admin
 
             log.info("Assigning role {} to user {} in tenant {}", role, userId, ctx.getTenantId());
 

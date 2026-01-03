@@ -1,6 +1,6 @@
-import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
-import { BaseApiService } from '../../core/base-api.service';
+import {Injectable} from '@angular/core';
+import {Observable} from 'rxjs';
+import {BaseApiService} from '../../core/base-api.service';
 
 /**
  * Group-Role Mapping DTO
@@ -48,7 +48,7 @@ export interface IdpGroup {
 
 /**
  * Service for managing group-to-role mappings.
- * 
+ *
  * Allows tenant admins to configure how IdP groups (from Okta, Azure AD, etc.)
  * map to application roles for automatic role assignment on SSO login.
  */
@@ -58,7 +58,7 @@ export interface IdpGroup {
 export class GroupMappingService extends BaseApiService {
 
     constructor() {
-        super('/api/v1/groups');
+        super('/auth-service/api/v1/groups'); // Routes through gateway to auth-service
     }
 
     /**

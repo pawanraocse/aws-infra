@@ -419,9 +419,13 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
         Map<String, String> mapping = new HashMap<>();
         mapping.put("email", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress");
         mapping.put("name", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name");
-        // Note: custom:groups requires the attribute to be pre-created in Cognito
-        // mapping.put("custom:groups",
-        // "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups");
+        // Map SAML group attribute to custom:samlGroups
+        // Different IdPs use different attribute names:
+        // - Okta: "group" (configured in Okta Group Attribute Statements)
+        // - Azure AD: "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups"
+        // We use "group" as it's the most common configuration for Okta
+        // Note: custom:samlGroups attribute must exist in Cognito User Pool
+        mapping.put("custom:samlGroups", "group");
         return mapping;
     }
 

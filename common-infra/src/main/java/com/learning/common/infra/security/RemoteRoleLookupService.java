@@ -82,4 +82,54 @@ public class RemoteRoleLookupService implements RoleLookupService {
             return Optional.empty();
         }
     }
+
+    @Override
+    @Cacheable(value = CACHE_NAME, key = "#userId + ':' + #tenantId + ':' + #groups", unless = "#result.isEmpty()")
+    public Optional<String> getUserRole(String userId, String tenantId, String groups) {
+        if (userId == null || userId.isBlank()) {
+            log.debug("getUserRole called with empty userId");
+            return Optional.empty();
+        }
+
+        String url = authServiceUrl + "/auth/internal/users/" + userId + "/role";
+        log.debug("Looking up role: url={} tenantId={} groups={}", url, tenantId, groups);
+
+        try {
+            WebClient webClient = webClientBuilder.build();
+            var requestSpec = webClient.get()
+                    .uri(url)
+                    .header("X-Tenant-Id", tenantId != null ? tenantId : "system");
+
+            // Pass groups header for SSO group-to-role mapping
+            if (groups != null && !groups.isBlank()) {
+                requestSpec = requestSpec.header("X-Groups", groups);
+            }
+
+            Map<String, String> response = requestSpec
+                    .retrieve()
+                    .onStatus(HttpStatusCode::isError, clientResponse -> {
+                        log.warn("Role lookup failed: status={}", clientResponse.statusCode());
+                        return Mono.empty();
+                    })
+                    .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, String>>() {
+                    })
+                    .timeout(LOOKUP_TIMEOUT)
+                    .block();
+
+            if (response != null && response.containsKey("roleId")) {
+                String roleId = response.get("roleId");
+                if (roleId != null && !roleId.isBlank()) {
+                    log.debug("Role lookup success: userId={} roleId={} (groups={})", userId, roleId, groups);
+                    return Optional.of(roleId);
+                }
+            }
+
+            log.debug("No role found for userId={}", userId);
+            return Optional.empty();
+
+        } catch (Exception e) {
+            log.warn("Role lookup failed for userId={}: {}", userId, e.getMessage());
+            return Optional.empty();
+        }
+    }
 }

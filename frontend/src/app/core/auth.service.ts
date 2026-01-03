@@ -232,8 +232,8 @@ export class AuthService {
             tenantId,
             email,
             cognitoUserId,
-            source: 'GOOGLE',
-            defaultRole: 'admin',
+            source: 'SAML_SSO',
+            defaultRole: 'viewer', // SSO users get least privilege, group mapping can elevate
             groups: []
           }
         )
@@ -242,9 +242,11 @@ export class AuthService {
       console.log('[Auth] JIT provision result:', jitResponse);
       return jitResponse.success;
     } catch (error: any) {
-      // 409 Conflict or similar means user already exists, which is fine
-      if (error.status === 409 || error.error?.message?.includes('already exists')) {
-        console.log('[Auth] User already provisioned');
+      // 409 Conflict, duplicate membership, or similar means user already exists, which is fine
+      if (error.status === 409 ||
+        error.status === 400 && error.error?.message?.includes('Membership') ||
+        error.error?.message?.includes('already exists')) {
+        console.log('[Auth] User already provisioned (ignoring duplicate)');
         return true;
       }
       console.warn('[Auth] JIT provision failed:', error);
@@ -279,8 +281,8 @@ export class AuthService {
             tenantId,
             email,
             cognitoUserId,
-            source: 'GOOGLE',
-            defaultRole: 'admin',
+            source: 'GOOGLE', // Personal Google sign-in
+            defaultRole: 'admin', // Personal account owners are admin
             groups: []
           }
         )

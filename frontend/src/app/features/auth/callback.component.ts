@@ -55,6 +55,7 @@ export class AuthCallbackComponent implements OnInit, OnDestroy {
 
   loading = true;
   error: string | null = null;
+  private isHandlingAuth = false; // Guard to prevent duplicate handleSignInSuccess calls
 
   ngOnInit() {
     // Check for error in URL params
@@ -94,6 +95,13 @@ export class AuthCallbackComponent implements OnInit, OnDestroy {
   }
 
   private async handleSignInSuccess() {
+    // Guard against duplicate calls from Hub + checkExistingSession racing
+    if (this.isHandlingAuth) {
+      console.log('[Callback] Already handling auth, skipping duplicate call');
+      return;
+    }
+    this.isHandlingAuth = true;
+
     try {
       // Get the session to extract user info
       const session = await fetchAuthSession();

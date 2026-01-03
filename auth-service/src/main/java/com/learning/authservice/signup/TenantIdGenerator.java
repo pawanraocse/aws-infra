@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 /**
  * Strategy for generating tenant IDs based on signup type.
@@ -12,8 +13,8 @@ import org.springframework.web.reactive.function.client.WebClient;
  * 
  * <p>
  * <b>Collision Prevention:</b> For organization signups, checks if the
- * slugified company name already exists and throws an error if so.
- * Users must choose a unique company name.
+ * slugified company name already exists. If it exists with the same owner,
+ * returns the existing ID (idempotency). If different owner, throws error.
  * </p>
  */
 @Component
@@ -28,12 +29,13 @@ public class TenantIdGenerator {
      * Personal: user-{sanitized-username}-{timestamp}
      * Organization: slugified company name (must be unique)
      * 
-     * @throws AuthSignupException if organization name already exists
+     * @throws AuthSignupException if organization name already exists with
+     *                             different owner
      */
     public String generate(SignupRequest request) {
         return switch (request) {
             case PersonalSignupData p -> generatePersonalTenantId(p.email());
-            case OrganizationSignupData o -> generateOrganizationTenantId(o.companyName());
+            case OrganizationSignupData o -> generateOrganizationTenantId(o.companyName(), o.email());
         };
     }
 
@@ -50,24 +52,28 @@ public class TenantIdGenerator {
 
     /**
      * Generate an organization tenant ID from company name.
-     * Throws AuthSignupException if the name already exists.
+     * If tenant exists with same owner, returns existing ID (idempotency).
+     * If tenant exists with different owner, throws AuthSignupException.
      */
-    public String generateOrganizationTenantId(String companyName) {
-        return generateOrganizationId(companyName);
-    }
-
-    /**
-     * Generate organization tenant ID from company name.
-     * Throws AuthSignupException if the name already exists.
-     */
-    private String generateOrganizationId(String companyName) {
+    public String generateOrganizationTenantId(String companyName, String ownerEmail) {
         String slug = slugify(companyName);
 
-        if (tenantExists(slug)) {
-            log.info("Organization name already exists: {} (slug: {})", companyName, slug);
-            throw new AuthSignupException(
-                    "COMPANY_NAME_EXISTS",
-                    "An organization with this name already exists. Please choose a different name.");
+        // Check if tenant already exists
+        TenantExistsResult result = checkTenantExists(slug);
+
+        if (result.exists()) {
+            if (ownerEmail != null && ownerEmail.equalsIgnoreCase(result.ownerEmail())) {
+                // Same owner retrying - return existing ID for idempotency
+                log.info("Tenant {} already exists with same owner {}, returning existing ID (idempotency)",
+                        slug, ownerEmail);
+                return slug;
+            } else {
+                // Different owner - block
+                log.info("Organization name already exists: {} (slug: {}) with different owner", companyName, slug);
+                throw new AuthSignupException(
+                        "COMPANY_NAME_EXISTS",
+                        "An organization with this name already exists. Please choose a different name.");
+            }
         }
 
         log.debug("Tenant ID available: {}", slug);
@@ -75,20 +81,34 @@ public class TenantIdGenerator {
     }
 
     /**
-     * Check if a tenant ID already exists by calling platform-service.
+     * Backward compatibility - generate without owner check (new signup).
      */
-    private boolean tenantExists(String tenantId) {
+    public String generateOrganizationTenantId(String companyName) {
+        return generateOrganizationTenantId(companyName, null);
+    }
+
+    /**
+     * Check if a tenant ID already exists and get owner email.
+     */
+    private TenantExistsResult checkTenantExists(String tenantId) {
         try {
-            Boolean exists = platformWebClient.get()
-                    .uri("/internal/tenants/{tenantId}/exists", tenantId)
+            // Try to get tenant details
+            var response = platformWebClient.get()
+                    .uri("/internal/tenants/{tenantId}", tenantId)
                     .retrieve()
-                    .bodyToMono(Boolean.class)
+                    .bodyToMono(TenantResponse.class)
                     .block();
-            return Boolean.TRUE.equals(exists);
+
+            if (response != null) {
+                return new TenantExistsResult(true, response.ownerEmail());
+            }
+            return new TenantExistsResult(false, null);
+        } catch (WebClientResponseException.NotFound e) {
+            return new TenantExistsResult(false, null);
         } catch (Exception e) {
             log.warn("Failed to check tenant existence: {} - assuming available", tenantId, e);
-            // Changed: assume available to allow signup (better UX than blocking)
-            return false;
+            // Assume available to allow signup (better UX than blocking)
+            return new TenantExistsResult(false, null);
         }
     }
 
@@ -96,5 +116,11 @@ public class TenantIdGenerator {
         return companyName.toLowerCase()
                 .replaceAll("[^a-z0-9]+", "-")
                 .replaceAll("^-|-$", "");
+    }
+
+    private record TenantExistsResult(boolean exists, String ownerEmail) {
+    }
+
+    private record TenantResponse(String id, String ownerEmail) {
     }
 }

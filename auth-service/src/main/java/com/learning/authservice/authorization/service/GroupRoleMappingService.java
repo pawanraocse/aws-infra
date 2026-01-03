@@ -74,4 +74,13 @@ public interface GroupRoleMappingService {
      * @return true if mapping exists
      */
     boolean mappingExists(String externalGroupId);
+
+    /**
+     * Resolve the highest-priority role for given IdP groups.
+     * Used at login time to determine user's effective role.
+     *
+     * @param externalGroupIds List of external group IDs the user belongs to
+     * @return Optional containing role ID if mapping found, empty otherwise
+     */
+    java.util.Optional<String> resolveRoleFromGroups(List<String> externalGroupIds);
 }

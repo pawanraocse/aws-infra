@@ -75,7 +75,14 @@ public class CreateMembershipAction implements SignupAction {
                     ctx.getTenantId(),
                     ctx.getEmail(),
                     ctx.getCognitoUserId(),
-                    ctx.getAssignedRole() != null ? ctx.getAssignedRole() : "admin",
+                    ctx.getAssignedRole() != null ? ctx.getAssignedRole() : (ctx.isSsoSignup() ? "viewer" : "admin"), // SSO
+                                                                                                                      // users
+                                                                                                                      // get
+                                                                                                                      // viewer,
+                                                                                                                      // org
+                                                                                                                      // creators
+                                                                                                                      // get
+                                                                                                                      // admin
                     true, // isOwner for first user
                     true // isDefault
             );

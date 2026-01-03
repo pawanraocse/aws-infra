@@ -489,10 +489,10 @@ sequenceDiagram
   - SSO (Google, Microsoft, Azure AD)
   - SAML 2.0 (Ping, Okta, etc.)
   - OAuth2/OIDC flows
-- ✅ **User Signup Orchestration:**
-  - B2C (personal) and B2B (organization) flows
-  - Calls Platform Service for tenant provisioning
-  - Creates Cognito users with custom attributes
+- ✅ **Signup Pipeline Orchestration:** (See [Signup Pipeline Architecture](#-signup-pipeline-architecture) below)
+  - Unified idempotent pipeline for Personal, Organization, and SSO signups
+  - 7 ordered actions with retry support and rollback
+  - Calls Platform Service for tenant/database provisioning
 - ✅ **Account Deletion:**
   - `POST /api/v1/account/delete` with "DELETE" confirmation
   - Calls Platform Service for tenant soft-delete
@@ -702,6 +702,218 @@ CREATE TABLE user_tenant_memberships (
 - `auth-service/.../TenantLookupController.java` - Public lookup API
 - `frontend/src/app/core/models/` - TypeScript interfaces and enums
 - `frontend/src/app/features/auth/login.component.*` - Multi-step UI
+
+---
+
+## 🔄 Signup Pipeline Architecture
+
+> **Single Source of Truth:** Auth-service orchestrates ALL signup flows through a unified, idempotent pipeline.
+
+### Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   UNIFIED SIGNUP PIPELINE                       │
+│                   (auth-service orchestrates ALL)               │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+        Personal         Organization     Google SSO
+        Signup           Signup           (via Lambda)
+              │               │               │
+              └───────────────┼───────────────┘
+                              ▼
+                    SignupPipeline.execute(ctx)
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+   Action 10             Action 20             Action 30...
+   (idempotent)          (idempotent)          (idempotent)
+```
+
+### Pipeline Actions Matrix
+
+| Order | Action | Personal | Org | Google SSO | Idempotency Check |
+|-------|--------|:--------:|:---:|:----------:|-------------------|
+| 10 | GenerateTenantId | ✅ | ✅ | ✅ | Skip if `ctx.tenantId` set |
+| 20 | ProvisionTenant | ✅ | ✅ | ✅ | `platformClient.tenantExists()` |
+| 30 | CreateCognitoUser | ✅ | ✅ | ❌ | `cognitoClient.getUser()` |
+| 40 | CreateMembership | ✅ | ✅ | ✅ | `membershipRepo.exists()` |
+| 50 | AssignRoles | ✅ | ✅ | ✅ | `userRoleRepo.exists()` |
+| 60 | SendVerificationEmail | ✅ | ✅ | ❌ | `ctx.emailSent` flag |
+| 70 | CreateOrgSettings | ❌ | ✅ | ❌ | `orgSettingsRepo.exists()` |
+
+### State Machine Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> GenerateTenantId: Start Signup
+    
+    GenerateTenantId --> ProvisionTenant: tenantId generated
+    GenerateTenantId --> ProvisionTenant: [already exists] skip
+    
+    ProvisionTenant --> CreateCognitoUser: tenant provisioned
+    ProvisionTenant --> CreateCognitoUser: [SSO] skip
+    
+    CreateCognitoUser --> CreateMembership: cognito user created
+    CreateCognitoUser --> CreateMembership: [exists] skip
+    
+    CreateMembership --> AssignRoles: membership created
+    
+    AssignRoles --> SendVerificationEmail: roles assigned
+    AssignRoles --> CreateOrgSettings: [SSO] skip email
+    
+    SendVerificationEmail --> CreateOrgSettings: email sent
+    SendVerificationEmail --> [*]: [Personal] complete
+    
+    CreateOrgSettings --> [*]: [Org] complete
+    
+    note right of GenerateTenantId
+        Personal: user-{name}-{ts}
+        Org: slugified-company-name
+        SSO: user-{email}-{ts}
+    end note
+```
+
+### Flow Comparison
+
+| Aspect | Personal Signup | Organization Signup | Google SSO |
+|--------|-----------------|---------------------|------------|
+| **Entry Point** | `POST /signup/personal` | `POST /signup/organization` | Lambda → `POST /sso-complete` |
+| **Tenant ID** | `user-john-84567` | `acme-corp` | `user-john-84567` |
+| **Tenant Type** | PERSONAL | ORGANIZATION | PERSONAL |
+| **Initial Role** | viewer | admin | viewer |
+| **Cognito User** | Created by auth-service | Created by auth-service | Created by Cognito/Google |
+| **Email Verification** | Required | Required | Skipped (Google verified) |
+| **Org Settings** | Skipped | Created (tier, limits) | Skipped |
+| **Steps Executed** | 10,20,30,40,50,60 | 10,20,30,40,50,60,70 | 10,20,40,50 |
+
+### Personal Signup Sequence
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend
+    participant A as Auth Service
+    participant P as Platform Service
+    participant C as Cognito
+    
+    U->>F: Fill signup form
+    F->>A: POST /api/v1/signup/personal
+    
+    Note over A: Pipeline starts
+    A->>A: GenerateTenantId (user-john-12345)
+    A->>P: ProvisionTenant
+    A->>C: CreateCognitoUser
+    A->>P: CreateMembership
+    A->>A: AssignRoles (viewer)
+    A->>C: SendVerificationEmail
+    
+    A->>F: {tenantId, message: "Verify email"}
+    F->>U: Show verification page
+```
+
+### Organization Signup Sequence
+
+```mermaid
+sequenceDiagram
+    participant U as Admin
+    participant F as Frontend
+    participant A as Auth Service
+    participant P as Platform Service
+    participant C as Cognito
+    
+    U->>F: Fill org signup form
+    F->>A: POST /api/v1/signup/organization
+    
+    Note over A: Pipeline starts (all 7 steps)
+    A->>A: GenerateTenantId (acme-corp)
+    A->>P: ProvisionTenant (with tier, maxUsers)
+    A->>C: CreateCognitoUser
+    A->>P: CreateMembership (role: admin)
+    A->>A: AssignRoles (admin)
+    A->>C: SendVerificationEmail
+    A->>P: CreateOrgSettings
+    
+    A->>F: {tenantId, message: "Verify email"}
+```
+
+### Google SSO Sequence (JIT Provisioning)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend
+    participant C as Cognito Hosted UI
+    participant G as Google
+    participant L as Lambda
+    participant A as Auth Service
+    participant P as Platform Service
+    
+    U->>F: Click "Sign in with Google"
+    F->>C: Redirect to Hosted UI
+    C->>G: OAuth redirect
+    U->>G: Authenticate
+    G->>C: ID token
+    
+    Note over L: PreTokenGeneration Lambda
+    L->>A: POST /sso-complete
+    
+    Note over A: Pipeline (4 steps only)
+    A->>A: GenerateTenantId
+    A->>P: ProvisionTenant
+    A->>P: CreateMembership
+    A->>A: AssignRoles
+    Note over A: Skip Cognito user (exists)<br/>Skip email (Google verified)
+    
+    A->>L: {tenantId, role}
+    L->>C: Set custom:tenantId in token
+    C->>F: Tokens
+```
+
+### Idempotent Action Pattern
+
+```java
+public interface SignupAction {
+    String getName();
+    int getOrder();
+    boolean supports(SignupContext ctx);      // Should run for this signup type?
+    boolean isAlreadyDone(SignupContext ctx); // Idempotency check
+    void execute(SignupContext ctx);
+    void rollback(SignupContext ctx);
+}
+
+// Pipeline execution
+for (SignupAction action : orderedActions) {
+    if (action.supports(ctx)) {
+        if (action.isAlreadyDone(ctx)) {
+            log.info("Skipping {} (already done)", action.getName());
+            continue;
+        }
+        action.execute(ctx);
+    }
+}
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `auth-service/signup/pipeline/SignupPipeline.java` | Orchestrator |
+| `auth-service/signup/pipeline/SignupContext.java` | State tracking |
+| `auth-service/signup/pipeline/SignupAction.java` | Action interface |
+| `auth-service/signup/actions/*.java` | Action implementations |
+| `auth-service/controller/SsoCompletionController.java` | Lambda callback |
+
+### Retry & Error Handling
+
+| Scenario | Behavior |
+|----------|----------|
+| Network failure mid-pipeline | Retry safe: completed actions skipped |
+| Duplicate signup request | Returns existing tenant info |
+| Lambda timeout + retry | Idempotent: checks state before each action |
+| Partial failure | Rollback executed for completed actions |
 
 ---
 

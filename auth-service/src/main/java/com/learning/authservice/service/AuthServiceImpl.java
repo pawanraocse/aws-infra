@@ -1,6 +1,7 @@
 package com.learning.authservice.service;
 
 import com.learning.authservice.authorization.domain.UserRole;
+import com.learning.authservice.authorization.service.GroupRoleMappingService;
 import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.authservice.config.CognitoProperties;
 import com.learning.authservice.dto.AuthRequestDto;
@@ -51,6 +52,7 @@ public class AuthServiceImpl implements AuthService {
         private final CognitoIdentityProviderClient cognitoClient;
         private final org.springframework.web.reactive.function.client.WebClient platformWebClient;
         private final UserRoleService userRoleService;
+        private final GroupRoleMappingService groupRoleMappingService;
 
         @Override
         @Transactional(readOnly = true)
@@ -65,10 +67,28 @@ public class AuthServiceImpl implements AuthService {
                 String email = request.getHeader("X-Email");
                 String name = request.getHeader("X-Username");
 
-                // Fetch role from database - 'viewer' default for SSO users without role
-                // assignments
-                List<UserRole> userRoles = userRoleService.getUserRoles(userId);
-                String role = userRoles.isEmpty() ? "viewer" : userRoles.get(0).getRoleId();
+                // Priority 1: Check group mappings from X-Groups header (SSO users)
+                String groups = request.getHeader("X-Groups");
+                String role = null;
+                if (groups != null && !groups.isBlank()) {
+                        java.util.List<String> groupList = java.util.Arrays.asList(groups.split(","));
+                        role = groupRoleMappingService.resolveRoleFromGroups(groupList).orElse(null);
+                        if (role != null) {
+                                log.debug("Role from group mapping: userId={} groups={} role={}", userId, groups, role);
+                        }
+                }
+
+                // Priority 2: Check user_roles table
+                if (role == null) {
+                        List<UserRole> userRoles = userRoleService.getUserRoles(userId);
+                        role = userRoles.isEmpty() ? null : userRoles.get(0).getRoleId();
+                }
+
+                // Priority 3: Default to viewer
+                if (role == null) {
+                        role = "viewer";
+                        log.debug("No role found for userId={}, defaulting to viewer", userId);
+                }
 
                 log.info("operation=getCurrentUser, userId={}, role={}, requestId={}, status=success", userId, role,
                                 request.getAttribute("X-Request-Id"));

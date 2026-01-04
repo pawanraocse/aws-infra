@@ -81,9 +81,11 @@ terraform output cognito_domain          # e.g., cloud-infra-dev-xxxxx.auth.us-e
 | **Microsoft Azure AD (OIDC)** | OIDC | Simpler setup, <200 groups | ✅ Free tier |
 | **Microsoft Azure AD (SAML)** | SAML | Enterprise, unlimited groups | ✅ Free tier |
 | **Okta** | SAML | Enterprise SSO | ✅ Developer account |
-| **Ping Identity** | SAML | Enterprise SSO | ✅ Free trial |
-| **OneLogin** | SAML | Enterprise SSO | ✅ Developer account |
+| **Ping Identity** | SAML | Enterprise SSO | ⚠️ Business email required |
+| **OneLogin** | SAML | Enterprise SSO | ⚠️ Business email required |
 | **Other SAML Provider** | SAML | Generic SAML support | Varies |
+
+> **Note:** Ping Identity and OneLogin require a business email domain for trial signup. The SAML integration uses the same code path as Okta/Azure, which has been fully tested.
 
 ### 2.2 Protocol Comparison
 

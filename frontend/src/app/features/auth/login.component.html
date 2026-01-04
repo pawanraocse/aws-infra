@@ -93,7 +93,8 @@
                   id="ssoTenant" 
                   [(ngModel)]="ssoTenantName"
                   class="w-full" 
-                  placeholder="Enter your organization name" />
+                  placeholder="Enter your organization name"
+                  (keyup.enter)="ssoTenantName && loginWithSsoTenant()" />
               </span>
               <small class="text-500 mt-1 block">Enter your company name or organization identifier</small>
             </div>

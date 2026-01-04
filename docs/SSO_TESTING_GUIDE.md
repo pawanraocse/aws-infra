@@ -258,6 +258,19 @@ For groups (optional):
    | `email` | `email` |
    | `name` | `name` |
 
+### 4.8 Group-to-Role Mapping with OIDC
+
+> **⚠️ OIDC Limitation:** Azure AD OIDC has a **200 group limit** and sends group **GUIDs** (not names). For organizations with many groups or needing group names, use **Azure AD SAML** (Section 5) instead.
+
+If you have fewer than 200 groups, OIDC groups work with our group-to-role mapping:
+
+1. Ensure **Token configuration** includes groups claim (Step 4.5)
+2. Groups appear in JWT as `groups` claim with GUIDs
+3. Configure group mappings in **Admin → Group Mappings** using the Azure Group Object IDs
+
+To find Azure Group Object IDs:
+- Azure Portal → Azure AD → Groups → Select group → Copy **Object ID**
+
 ---
 
 ## 5. Microsoft Azure AD SAML Setup
@@ -308,6 +321,57 @@ For groups (optional):
 4. Enter **IdP Metadata URL**
 5. Click **Save Configuration**
 6. Toggle **Enable SSO**
+
+### 5.6 Configure Group-to-Role Mapping (Recommended)
+
+This feature allows automatic role assignment based on Azure AD group membership.
+
+#### Step 1: Configure Azure AD Group Claims
+
+In Azure Portal → Enterprise Application → Single sign-on → Attributes & Claims:
+
+1. Click **Add a group claim**
+2. Select **Groups assigned to the application** (recommended) or **All groups**
+3. **Source attribute:** Group ID (or sAMAccountName for on-prem)
+4. Under **Advanced options:**
+   - Check **Customize the name of the group claim**
+   - **Name:** `group` (must match our Cognito mapping)
+5. Save
+
+> **Note:** Azure sends group IDs (GUIDs) by default. For group names, use `sAMAccountName` (requires Azure AD Connect) or create group mappings using the GUIDs.
+
+#### Step 2: Verify Cognito Attribute Mapping
+
+Our platform automatically maps the `group` attribute to `custom:samlGroups`. Verify:
+
+```bash
+aws cognito-idp describe-identity-provider \
+  --user-pool-id us-east-1_XXXXX \
+  --provider-name AZURE-SAML-{tenantId} \
+  --query 'IdentityProvider.AttributeMapping'
+```
+
+#### Step 3: Create Group Mappings in the App
+
+1. Login as tenant admin
+2. Navigate to **Admin** → **Group Mappings**
+3. Add mappings using Azure AD group IDs or names:
+
+   | IdP Group (Azure) | Role | Priority |
+   |-------------------|------|----------|
+   | `a1b2c3d4-...` (Admin Group ID) | admin | 1 |
+   | `e5f6g7h8-...` (Dev Group ID) | editor | 10 |
+
+> **Tip:** To find Azure group IDs: Azure Portal → Azure AD → Groups → Click group → Copy Object ID
+
+#### Azure AD SAML vs OIDC for Groups
+
+| Feature | SAML | OIDC |
+|---------|------|------|
+| Group limit | Unlimited | 200 groups max |
+| Group format | Customizable (ID or name) | Always GUIDs |
+| Setup complexity | Higher | Lower |
+| Best for | Enterprise with many groups | Smaller organizations |
 
 ---
 
@@ -504,6 +568,42 @@ docker logs auth-service 2>&1 | grep -i 'group mapping'
 5. Click **Save Configuration**
 6. Toggle **Enable SSO**
 
+### 7.5 Configure Group-to-Role Mapping (Optional)
+
+PingOne supports group claims for role-based access.
+
+#### Step 1: Configure Group Attribute in PingOne
+
+1. Go to your SAML Application → **Attribute Mappings**
+2. Click **+ Add Attribute**
+3. Configure:
+
+   | Setting | Value |
+   |---------|-------|
+   | **Application Attribute** | `group` |
+   | **Identity Bridge Attribute** | `Group Names` or `Group IDs` |
+
+4. Save
+
+#### Step 2: Assign Groups to Application
+
+1. **Connections** → **Applications** → Your App
+2. **Access** tab → **Enable** access for specific groups
+3. Add groups that should have app access
+
+#### Step 3: Create Group Mappings in Our App
+
+1. **Admin** → **Group Mappings**
+2. Add mappings for each PingOne group:
+
+   | PingOne Group | Role | Priority |
+   |---------------|------|----------|
+   | `Administrators` | admin | 1 |
+   | `Developers` | editor | 10 |
+   | `Users` | viewer | 20 |
+
+> **Note:** PingOne free trial includes basic group functionality.
+
 ---
 
 ## 8. OneLogin SAML Setup
@@ -556,6 +656,41 @@ docker logs auth-service 2>&1 | grep -i 'group mapping'
 4. Enter **IdP Metadata URL**
 5. Click **Save Configuration**
 6. Toggle **Enable SSO**
+
+### 8.6 Configure Group-to-Role Mapping (Optional)
+
+OneLogin supports group/role claims for access control.
+
+#### Step 1: Add Group Parameter in OneLogin
+
+1. Go to your App → **Parameters** tab
+2. Click **+ Add Parameter**
+3. Configure:
+
+   | Setting | Value |
+   |---------|-------|
+   | **Field name** | `group` |
+   | **Value** | User Roles or Groups |
+   | **Include in SAML assertion** | ✅ |
+
+4. Save
+
+#### Step 2: Configure Roles in OneLogin
+
+1. **Users** → **Roles**
+2. Create roles that match your app needs (e.g., `Admin`, `Developer`, `User`)
+3. Assign users to roles
+
+#### Step 3: Create Group Mappings in Our App
+
+1. **Admin** → **Group Mappings**
+2. Add mappings for each OneLogin role:
+
+   | OneLogin Role | App Role | Priority |
+   |---------------|----------|----------|
+   | `Admin` | admin | 1 |
+   | `Developer` | editor | 10 |
+   | `User` | viewer | 20 |
 
 ---
 

@@ -297,14 +297,16 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
             sanitizedTenantId = sanitizedTenantId.substring(0, 20);
         }
 
-        // Provider prefixes:
+        // Provider prefixes (no underscores allowed):
         // - GWORKSPACE: Google OIDC (no groups)
         // - GSAML: Google SAML (with groups)
-        // - Others use IdpType name directly
+        // - AZUREOIDC: Azure AD OIDC
+        // - Others use IdpType name directly (if no underscores)
         String providerPrefix = switch (idpType) {
             case GOOGLE -> "GWORKSPACE";
             case GOOGLE_SAML -> "GSAML";
-            default -> idpType.name();
+            case AZURE_AD -> "AZUREOIDC";
+            default -> idpType.name().replace("_", "");
         };
         return providerPrefix + "-" + sanitizedTenantId;
     }

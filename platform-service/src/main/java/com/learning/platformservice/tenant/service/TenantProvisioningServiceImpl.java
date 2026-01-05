@@ -1,12 +1,12 @@
 package com.learning.platformservice.tenant.service;
 
+import com.learning.common.dto.ProvisionTenantRequest;
+import com.learning.common.dto.TenantType;
 import com.learning.platformservice.membership.dto.AddMembershipRequest;
 import com.learning.platformservice.membership.entity.MembershipRoleHint;
 import com.learning.platformservice.membership.service.MembershipService;
 import com.learning.platformservice.tenant.action.TenantProvisionAction;
 import com.learning.platformservice.tenant.action.TenantProvisionContext;
-import com.learning.common.dto.ProvisionTenantRequest;
-import com.learning.common.dto.TenantType;
 import com.learning.platformservice.tenant.config.PlatformTenantProperties;
 import com.learning.platformservice.tenant.dto.TenantDto;
 import com.learning.platformservice.tenant.entity.Tenant;
@@ -68,11 +68,25 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
     public TenantDto provision(ProvisionTenantRequest request) {
         attemptsCounter.increment();
         String tenantId = request.id();
-        if (tenantRepository.findById(tenantId).isPresent()) {
-            throw new TenantAlreadyExistsException(tenantId);
+
+        Tenant tenant;
+        java.util.Optional<Tenant> existingOpt = tenantRepository.findById(tenantId);
+
+        if (existingOpt.isPresent()) {
+            Tenant existing = existingOpt.get();
+            if (!TenantStatus.DELETED.name().equals(existing.getStatus())) {
+                throw new TenantAlreadyExistsException(tenantId);
+            }
+            // Reactivate existing tenant
+            log.info("Reactivating deleted tenant: {}", tenantId);
+            tenant = existing;
+            // Keep original createdAt, but reset other fields logic continues below
+        } else {
+            tenant = new Tenant();
+            tenant.setId(tenantId);
+            tenant.setCreatedAt(OffsetDateTime.now());
         }
-        Tenant tenant = new Tenant();
-        tenant.setId(tenantId);
+
         tenant.setName(request.name());
         tenant.setStatus(TenantStatus.PROVISIONING.name());
         tenant.setStorageMode(request.storageMode());
@@ -87,9 +101,12 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         if (request.tenantType() == TenantType.ORGANIZATION) {
             tenant.setTrialEndsAt(OffsetDateTime.now().plusDays(30));
             tenant.setSubscriptionStatus(com.learning.platformservice.tenant.entity.SubscriptionStatus.TRIAL);
+        } else {
+            // Reset if previously set (e.g. if switching types on reuse, though unlikely)
+            tenant.setTrialEndsAt(null);
+            tenant.setSubscriptionStatus(null);
         }
 
-        tenant.setCreatedAt(OffsetDateTime.now());
         tenant.setUpdatedAt(OffsetDateTime.now());
         tenantRepository.save(tenant);
 

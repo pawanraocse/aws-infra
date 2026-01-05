@@ -50,6 +50,12 @@ public class MigrationInvokeAction implements TenantProvisionAction {
                     lastVersion = result.lastVersion();
                     log.info("tenant_migration_success service={} tenant={} version={}",
                             strategy.serviceName(), tenantId, lastVersion);
+
+                    // If auth-service created an OpenFGA store, save the ID
+                    if (result.fgaStoreId() != null) {
+                        log.info("Saving OpenFGA store ID for tenant {}: {}", tenantId, result.fgaStoreId());
+                        context.getTenant().setFgaStoreId(result.fgaStoreId());
+                    }
                 }
             } catch (Exception e) {
                 log.error("tenant_migration_failed service={} tenant={} error={}",

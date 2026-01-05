@@ -128,6 +128,14 @@
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
+        <!-- OpenFGA SDK for fine-grained authorization -->
+        <!-- Required when openfga.enabled=true in docker-compose -->
+        <dependency>
+            <groupId>dev.openfga</groupId>
+            <artifactId>openfga-sdk</artifactId>
+            <version>0.7.2</version>
+        </dependency>
+
         <!-- Test Dependencies -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

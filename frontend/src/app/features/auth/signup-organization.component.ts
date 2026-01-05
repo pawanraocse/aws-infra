@@ -1,14 +1,14 @@
-import { Component, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
-import { HttpClient } from '@angular/common/http';
-import { CardModule } from 'primeng/card';
-import { ButtonModule } from 'primeng/button';
-import { InputTextModule } from 'primeng/inputtext';
-import { PasswordModule } from 'primeng/password';
-import { MessageModule } from 'primeng/message';
-import { environment } from '../../../environments/environment';
+import {Component, inject, signal} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {FormBuilder, ReactiveFormsModule, Validators} from '@angular/forms';
+import {Router, RouterModule} from '@angular/router';
+import {HttpClient} from '@angular/common/http';
+import {CardModule} from 'primeng/card';
+import {ButtonModule} from 'primeng/button';
+import {InputTextModule} from 'primeng/inputtext';
+import {PasswordModule} from 'primeng/password';
+import {MessageModule} from 'primeng/message';
+import {environment} from '../../../environments/environment';
 
 @Component({
   selector: 'app-signup-organization',
@@ -18,9 +18,9 @@ import { environment } from '../../../environments/environment';
     CardModule, ButtonModule, InputTextModule, PasswordModule, MessageModule
   ],
   template: `
-    <div class="flex justify-content-center align-items-center min-h-screen bg-blue-50" 
+    <div class="flex justify-content-center align-items-center min-h-screen bg-blue-50"
          style="background: linear-gradient(135deg, var(--surface-50) 0%, var(--primary-50) 100%);">
-      
+
       <div class="w-full" style="max-width: 500px;">
         <div class="text-center mb-5">
           <div class="text-3xl font-bold text-900 mb-2">Create Organization</div>
@@ -29,7 +29,7 @@ import { environment } from '../../../environments/environment';
 
         <p-card styleClass="card-glass shadow-soft p-4">
           <form [formGroup]="signupForm" (ngSubmit)="onSubmit()" class="flex flex-column gap-4">
-            
+
             <div *ngIf="error()" class="mb-2">
               <p-message severity="error" [text]="error()!" styleClass="w-full"></p-message>
             </div>
@@ -74,9 +74,9 @@ import { environment } from '../../../environments/environment';
 
             <div class="field">
               <label for="password" class="font-medium text-900 mb-2 block">Password</label>
-              <p-password 
-                id="password" 
-                formControlName="password" 
+              <p-password
+                id="password"
+                formControlName="password"
                 [toggleMask]="true"
                 styleClass="w-full"
                 inputStyleClass="w-full"
@@ -96,10 +96,26 @@ import { environment } from '../../../environments/environment';
               </p-password>
             </div>
 
-            <p-button 
-              type="submit" 
-              label="Create Organization" 
-              [loading]="loading()" 
+            <div class="field">
+              <label for="confirmPassword" class="font-medium text-900 mb-2 block">Confirm Password</label>
+              <p-password
+                id="confirmPassword"
+                formControlName="confirmPassword"
+                [toggleMask]="true"
+                [feedback]="false"
+                styleClass="w-full"
+                inputStyleClass="w-full"
+                placeholder="Re-enter password">
+              </p-password>
+              <small *ngIf="signupForm.hasError('mismatch') && signupForm.get('confirmPassword')?.dirty" class="p-error">
+                  Passwords do not match
+              </small>
+            </div>
+
+            <p-button
+              type="submit"
+              label="Create Organization"
+              [loading]="loading()"
               [disabled]="signupForm.invalid"
               styleClass="w-full p-button-lg">
             </p-button>
@@ -110,7 +126,7 @@ import { environment } from '../../../environments/environment';
             </div>
           </form>
         </p-card>
-        
+
         <div class="text-center mt-4 text-500 text-sm">
           &copy; 2025 Cloud Infra Template. All rights reserved.
         </div>
@@ -131,8 +147,14 @@ export class SignupOrganizationComponent {
     adminName: ['', [Validators.required, Validators.minLength(2)]],
     adminEmail: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required, Validators.minLength(8)]],
+    confirmPassword: ['', Validators.required],
     tier: ['STANDARD', Validators.required]
-  });
+  }, { validators: this.passwordMatchValidator });
+
+  passwordMatchValidator(g: any) {
+    return g.get('password')?.value === g.get('confirmPassword')?.value
+      ? null : { mismatch: true };
+  }
 
   onSubmit() {
     if (this.signupForm.invalid) return;

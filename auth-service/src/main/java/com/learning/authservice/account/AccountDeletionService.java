@@ -3,7 +3,6 @@ package com.learning.authservice.account;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -94,7 +93,7 @@ public class AccountDeletionService {
             @SuppressWarnings("unchecked")
             Map<String, Long> response = webClient.get()
                     .uri(uriBuilder -> uriBuilder
-                            .path("/internal/memberships/count-active")
+                            .path("/platform/internal/memberships/count-active")
                             .queryParam("email", userEmail)
                             .build())
                     .retrieve()
@@ -131,8 +130,13 @@ public class AccountDeletionService {
                     .header("X-Deleted-By", deletedBy)
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, response -> {
-                        if (response.statusCode() == HttpStatus.NOT_FOUND) {
-                            log.warn("Tenant not found in platform-service: {}", tenantId);
+                        // Idempotency: If tenant is not found (404) or already deleted/invalid
+                        // (400/409),
+                        // treat as success and proceed with cleanup.
+                        if (response.statusCode().is4xxClientError()) {
+                            log.warn(
+                                    "Tenant deletion skipped in platform-service (already deleted or not found): {} - {}",
+                                    tenantId, response.statusCode());
                             return Mono.empty();
                         }
                         return response.bodyToMono(String.class)

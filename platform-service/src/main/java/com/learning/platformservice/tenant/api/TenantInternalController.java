@@ -95,7 +95,10 @@ public class TenantInternalController {
         @GetMapping("/{tenantId}/exists")
         public ResponseEntity<Boolean> checkTenantExists(@PathVariable String tenantId) {
                 log.debug("Internal tenant existence check: tenantId={}", tenantId);
-                boolean exists = tenantRepository.existsById(tenantId);
+                boolean exists = tenantRepository.findById(tenantId)
+                                .map(t -> !com.learning.platformservice.tenant.entity.TenantStatus.DELETED.name()
+                                                .equals(t.getStatus()))
+                                .orElse(false);
                 return ResponseEntity.ok(exists);
         }
 }

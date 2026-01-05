@@ -1,6 +1,6 @@
-package com.learning.platformservice.sso.dto;
+package com.learning.authservice.sso.dto;
 
-import com.learning.platformservice.tenant.entity.IdpType;
+import com.learning.common.dto.IdpType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 

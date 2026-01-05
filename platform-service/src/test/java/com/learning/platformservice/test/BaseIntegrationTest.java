@@ -21,8 +21,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.*;
 
 @SpringBootTest(classes = {
                 PlatformServiceApplication.class,
-                TestWebClientOverrideConfig.class,
-                SsoTestConfig.class
+                TestWebClientOverrideConfig.class
 })
 @AutoConfigureMockMvc
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)

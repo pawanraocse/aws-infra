@@ -10,6 +10,7 @@ services:
       - awsinfra-net
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-openfga.sh:/docker-entrypoint-initdb.d/init-openfga.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -34,6 +35,51 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  # ============================================================================
+  # OpenFGA - Fine-Grained Authorization (OPTIONAL)
+  # ============================================================================
+  # Uncomment to enable OpenFGA for resource-level permissions (DAM, file sharing)
+  # Also set openfga.enabled=true in your application.yml
+  #
+  # Migration service runs once on startup to apply database schema
+  openfga-migrate:
+    image: openfga/openfga:latest
+    container_name: openfga-migrate
+    command: migrate --datastore-engine postgres --datastore-uri "postgres://postgres:postgres@postgres:5432/openfga?sslmode=disable"
+    networks:
+      - awsinfra-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  openfga:
+    image: openfga/openfga:latest
+    container_name: openfga
+    command: run
+    ports:
+      - "8090:8080"   # HTTP API
+      - "8091:8081"   # gRPC
+      - "3000:3000"   # Playground UI (localhost:3000)
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgres://postgres:postgres@postgres:5432/openfga
+      - OPENFGA_PLAYGROUND_ENABLED=true
+    networks:
+      - awsinfra-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      openfga-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=:8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
 
   # OpenTelemetry Collector for AWS X-Ray distributed tracing

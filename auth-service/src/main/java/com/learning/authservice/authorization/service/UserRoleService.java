@@ -4,9 +4,11 @@ import com.learning.authservice.authorization.domain.Role;
 import com.learning.authservice.authorization.domain.UserRole;
 import com.learning.authservice.authorization.repository.RoleRepository;
 import com.learning.authservice.authorization.repository.UserRoleRepository;
+import com.learning.common.infra.cache.CacheNames;
+import com.learning.common.infra.openfga.OpenFgaWriter;
+import com.learning.common.infra.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import com.learning.common.infra.cache.CacheNames;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +20,11 @@ import java.util.List;
  * Service for managing user role assignments.
  * Tenant isolation is handled via TenantDataSourceRouter - all operations
  * automatically run against the current tenant's database.
+ * 
+ * OpenFGA Integration:
+ * - When roles are assigned, tuples are written to OpenFGA
+ * - When roles are revoked, tuples are deleted from OpenFGA
+ * - Tuples: user:userId -> roleId -> organization:tenantId
  */
 @Service
 @RequiredArgsConstructor
@@ -27,6 +34,7 @@ public class UserRoleService {
 
     private final UserRoleRepository userRoleRepository;
     private final RoleRepository roleRepository;
+    private final OpenFgaWriter fgaWriter;
 
     /**
      * Assign a role to a user.
@@ -64,6 +72,9 @@ public class UserRoleService {
 
         userRoleRepository.save(userRole);
         log.info("Role assigned successfully");
+
+        // 5. Write tuple to OpenFGA (non-blocking)
+        writeOpenFgaTuple(userId, roleId);
     }
 
     /**
@@ -83,6 +94,9 @@ public class UserRoleService {
 
         userRoleRepository.deleteByUserIdAndRoleId(userId, roleId);
         log.info("Role revoked successfully");
+
+        // Delete tuple from OpenFGA (non-blocking)
+        deleteOpenFgaTuple(userId, roleId);
     }
 
     /**
@@ -179,5 +193,43 @@ public class UserRoleService {
         log.info("Created role: id={}, name={}, accessLevel={}", saved.getId(), saved.getName(),
                 saved.getAccessLevel());
         return saved;
+    }
+
+    // ========================================================================
+    // OpenFGA Helper Methods
+    // ========================================================================
+
+    /**
+     * Write a role tuple to OpenFGA.
+     * Format: user:userId -> roleId -> organization:tenantId
+     * 
+     * Non-blocking: OpenFgaWriter.writeTuple is non-throwing.
+     * Errors are logged in the wrapper but don't fail role assignment.
+     */
+    private void writeOpenFgaTuple(String userId, String roleId) {
+        String tenantId = TenantContext.getCurrentTenant();
+        if (tenantId == null || tenantId.isBlank()) {
+            log.debug("No tenant context, skipping OpenFGA tuple write");
+            return;
+        }
+
+        log.debug("Writing OpenFGA tuple: user:{} -> {} -> organization:{}", userId, roleId, tenantId);
+        fgaWriter.writeTuple(userId, roleId, "organization", tenantId);
+    }
+
+    /**
+     * Delete a role tuple from OpenFGA.
+     * 
+     * Non-blocking: OpenFgaWriter.deleteTuple is non-throwing.
+     */
+    private void deleteOpenFgaTuple(String userId, String roleId) {
+        String tenantId = TenantContext.getCurrentTenant();
+        if (tenantId == null || tenantId.isBlank()) {
+            log.debug("No tenant context, skipping OpenFGA tuple delete");
+            return;
+        }
+
+        log.debug("Deleting OpenFGA tuple: user:{} -/-> {} -> organization:{}", userId, roleId, tenantId);
+        fgaWriter.deleteTuple(userId, roleId, "organization", tenantId);
     }
 }

@@ -66,8 +66,14 @@ public class SecurityConfig {
                                                                 // Frontend config endpoint (public - needed before
                                                                 // auth)
                                                                 "/api/config/**",
-                                                                // SSO lookup endpoint (public - needed for SSO login)
-                                                                "/api/v1/sso/lookup",
+                                                                // SSO lookup endpoint (public - needed for SSO login
+                                                                // before auth)
+                                                                "/auth/api/v1/sso/lookup",
+                                                                "/auth-service/api/v1/sso/lookup",
+                                                                // SSO SP metadata endpoint (public - IdP needs to
+                                                                // fetch)
+                                                                "/auth/api/v1/sso/sp-metadata",
+                                                                "/auth-service/api/v1/sso/sp-metadata",
                                                                 "/platform-service/platform/api/v1/sso/lookup",
                                                                 // System endpoints
                                                                 "/actuator/**", "/fallback")

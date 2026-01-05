@@ -89,6 +89,15 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-jdbc</artifactId>
         </dependency>
+
+        <!-- OpenFGA SDK for fine-grained authorization (OPTIONAL) -->
+        <!-- Enable via openfga.enabled=true in application.yml -->
+        <dependency>
+            <groupId>dev.openfga</groupId>
+            <artifactId>openfga-sdk</artifactId>
+            <version>0.7.2</version>
+            <optional>true</optional>
+        </dependency>
     </dependencies>
 
 </project>

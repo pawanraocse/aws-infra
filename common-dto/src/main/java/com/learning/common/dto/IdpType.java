@@ -1,4 +1,4 @@
-package com.learning.platformservice.tenant.entity;
+package com.learning.common.dto;
 
 /**
  * Identity Provider (IdP) type enumeration.

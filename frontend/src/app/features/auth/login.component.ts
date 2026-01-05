@@ -291,7 +291,7 @@ export class LoginComponent {
       const tenantId = this.ssoTenantName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
 
       // Fetch SSO configuration from backend
-      const response = await fetch(`http://localhost:8080/api/v1/sso/lookup?tenantId=${tenantId}`);
+      const response = await fetch(`http://localhost:8080/auth/api/v1/sso/lookup?tenantId=${tenantId}`);
 
       if (!response.ok) {
         if (response.status === 404) {

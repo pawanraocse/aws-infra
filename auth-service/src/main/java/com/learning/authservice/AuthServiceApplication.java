@@ -11,7 +11,8 @@ import org.springframework.context.annotation.ComponentScan;
 @SpringBootApplication
 @ComponentScan(basePackages = {
         "com.learning.authservice",
-        "com.learning.common.infra.tenant"
+        "com.learning.common.infra.tenant",
+        "com.learning.common.infra.openfga"
 })
 public class AuthServiceApplication {
 

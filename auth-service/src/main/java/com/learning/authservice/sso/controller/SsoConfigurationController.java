@@ -1,11 +1,11 @@
-package com.learning.platformservice.sso.controller;
+package com.learning.authservice.sso.controller;
 
+import com.learning.authservice.sso.dto.OidcConfigRequest;
+import com.learning.authservice.sso.dto.SamlConfigRequest;
+import com.learning.authservice.sso.dto.SsoConfigDto;
+import com.learning.authservice.sso.dto.SsoTestResult;
+import com.learning.authservice.sso.service.SsoConfigurationService;
 import com.learning.common.infra.security.RequirePermission;
-import com.learning.platformservice.sso.dto.OidcConfigRequest;
-import com.learning.platformservice.sso.dto.SamlConfigRequest;
-import com.learning.platformservice.sso.dto.SsoConfigDto;
-import com.learning.platformservice.sso.dto.SsoTestResult;
-import com.learning.platformservice.sso.service.SsoConfigurationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -116,14 +116,22 @@ public class SsoConfigurationController {
 
     /**
      * Get SAML Service Provider (SP) metadata.
-     * This endpoint is public so IdP admins can access it.
+     * Accepts tenantId as query param (for public access) OR from header (for
+     * authenticated calls).
      */
     @GetMapping("/sp-metadata")
     public ResponseEntity<String> getSpMetadata(
-            @RequestParam String tenantId) {
-        log.info("Getting SP metadata for tenant: {}", tenantId);
+            @RequestParam(required = false) String tenantId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId) {
 
-        String metadata = ssoConfigurationService.getSpMetadata(tenantId);
+        String resolvedTenantId = tenantId != null ? tenantId : headerTenantId;
+        if (resolvedTenantId == null || resolvedTenantId.isBlank()) {
+            return ResponseEntity.badRequest().body("tenantId is required (query param or X-Tenant-Id header)");
+        }
+
+        log.info("Getting SP metadata for tenant: {}", resolvedTenantId);
+
+        String metadata = ssoConfigurationService.getSpMetadata(resolvedTenantId);
         return ResponseEntity.ok()
                 .header("Content-Type", "application/xml")
                 .body(metadata);
@@ -132,24 +140,14 @@ public class SsoConfigurationController {
     /**
      * Public endpoint to lookup SSO provider info for a tenant.
      * Used by the login page to redirect to the correct identity provider.
-     * Returns minimal info: ssoEnabled and cognitoProviderName.
      */
     @GetMapping("/lookup")
-    public ResponseEntity<SsoLookupResponse> lookupSso(
+    public ResponseEntity<SsoConfigurationService.SsoLookupResponse> lookupSso(
             @RequestParam String tenantId) {
         log.info("Looking up SSO for tenant: {}", tenantId);
 
         return ssoConfigurationService.getSsoLookup(tenantId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
-    }
-
-    /**
-     * DTO for SSO lookup response (minimal info for login redirect).
-     */
-    public record SsoLookupResponse(
-            boolean ssoEnabled,
-            String cognitoProviderName,
-            String idpType) {
     }
 }

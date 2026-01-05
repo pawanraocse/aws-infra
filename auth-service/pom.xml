@@ -143,6 +143,13 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!-- OpenFGA SDK (for permission tuple management) -->
+        <dependency>
+            <groupId>dev.openfga</groupId>
+            <artifactId>openfga-sdk</artifactId>
+            <version>0.7.2</version>
+        </dependency>
+
         <dependency>
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>

@@ -9,6 +9,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Internal API for tenant registry lookups.
+ * Used by TenantRegistryService implementations in other services
+ * to fetch tenant database and OpenFGA configuration.
+ */
 @RestController
 @RequestMapping("/internal/tenants")
 @RequiredArgsConstructor
@@ -21,7 +26,8 @@ public class TenantRegistryController {
                 .map(t -> ResponseEntity.ok(new TenantDbConfig(
                         t.getJdbcUrl(),
                         t.getDbUserSecretRef(),
-                        t.getDbUserPasswordEnc())))
+                        t.getDbUserPasswordEnc(),
+                        t.getFgaStoreId()))) // Include OpenFGA store ID
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }

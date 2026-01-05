@@ -60,6 +60,225 @@ Services available at:
 
 ---
 
+## 📋 Service Roles & Responsibilities
+
+This section provides a complete breakdown of what each service does and what it owns.
+
+### Core Services Overview
+
+| Service | Port | Primary Role | Database | OpenFGA | Key Responsibility |
+|---------|------|--------------|----------|---------|-------------------|
+| **gateway-service** | 8080 | API Gateway | None | ❌ None | Request routing, JWT validation, rate limiting |
+| **auth-service** | 8081 | Identity & Authorization | Tenant DBs | ✏️ **WRITE** | User auth, RBAC, permissions, **writes tuples** |
+| **platform-service** | 8083 | Tenant Lifecycle | Platform DB | 🏗️ Store Create | Tenant provisioning, billing, creates FGA stores |
+| **backend-service** | 8082 | Business Logic (Mimic) | Tenant DBs | 👁️ **READ** | Domain logic, **checks permissions via OpenFGA** |
+| **eureka-server** | 8761 | Service Discovery | None | ❌ None | Service registration, health checks |
+
+**OpenFGA Legend:**
+- ✏️ **WRITE** = Uses `OpenFgaWriter` to create/delete tuples (permission changes)
+- 👁️ **READ** = Uses `OpenFgaReader` to check permissions (access decisions)
+- 🏗️ **Store Create** = Creates OpenFGA stores during tenant provisioning
+
+---
+
+### Detailed Service Responsibilities
+
+#### 🚪 gateway-service
+
+| Category | Responsibility | Key Classes/Files |
+|----------|----------------|-------------------|
+| **Request Routing** | Routes `/auth/**`, `/platform/**`, `/api/**` to correct services | `application.yml` routes |
+| **JWT Validation** | Validates Cognito tokens, rejects unauthenticated requests | `JwtAuthFilter` |
+| **Tenant Resolution** | Extracts tenant from JWT claims, resolves for SSO users | `TenantResolverFilter` |
+| **Header Injection** | Injects `X-Tenant-Id`, `X-User-Id`, `X-Authorities` downstream | `HeaderInjectionFilter` |
+| **Rate Limiting** | Per-tenant and per-user rate limits | `RateLimitFilter` |
+| **CORS** | Cross-origin request handling | `CorsConfiguration` |
+| **API Key Auth** | Validates API keys via platform-service internal API | `ApiKeyAuthenticationFilter` |
+| **Health Aggregation** | Aggregates health from all services | Actuator endpoints |
+
+**Databases:** None  
+**Does NOT:** Store data, manage users, enforce permissions, run business logic
+
+---
+
+#### 🔐 auth-service
+
+| Category | Responsibility | Key Classes/Files |
+|----------|----------------|-------------------|
+| **Login/Logout** | Cognito-based authentication, token exchange | `AuthController`, `AuthServiceImpl` |
+| **Token Refresh** | Refresh access tokens using Cognito refresh tokens | `AuthController.refreshToken()` |
+| **Password Reset** | Forgot password, reset confirmation | `ForgotPasswordService` |
+| **User Registration** | Personal & organization signup orchestration | `SignupController`, `SignupServiceImpl` |
+| **Email Verification** | Verification codes, resend logic | `EmailVerificationService` |
+| **User Management** | CRUD operations for tenant users | `TenantUserController`, `TenantUserService` |
+| **Role Management** | Roles table, role hierarchy | `RoleRepository`, `UserRoleService` |
+| **Permission Management** | Role-permission mappings | `PermissionService`, `RolePermissionRepository` |
+| **User-Role Assignment** | Assign/remove roles from users | `UserRoleService.assignRole()` |
+| **ACL Management** | Resource-level access control | `AclController`, `AclService`, `AclEntry` |
+| **Invitation System** | Create, send, accept invitations | `InvitationController`, `InvitationService` |
+| **Group-Role Mapping** | SSO groups to internal roles | `GroupRoleMappingController` |
+| **SSO Configuration** | SAML/OIDC IdP setup per tenant | `SsoConfigurationController`, `SsoConfigurationService` |
+| **Account Deletion** | Delete user accounts (GDPR) | `AccountDeletionService` |
+| **OpenFGA Tuples** | **ONLY auth-service writes/deletes tuples** | `OpenFgaWriter` (when enabled) |
+
+**Databases:** Per-tenant databases via `TenantDataSourceRouter`  
+**Tables Owned:** `roles`, `permissions`, `role_permissions`, `user_roles`, `acl_entries`, `group_role_mappings`, `invitations`, `tenant_users`, `sso_configurations`  
+**Does NOT:** Create tenants, manage billing, enforce permissions at runtime (that's backend's job)
+
+---
+
+#### 🏢 platform-service
+
+| Category | Responsibility | Key Classes/Files |
+|----------|----------------|-------------------|
+| **Tenant Creation** | Create tenant records (PERSONAL, ORGANIZATION) | `TenantController`, `TenantProvisioningService` |
+| **Tenant Provisioning** | Database/schema creation, user provisioning | `StorageProvisionAction`, `TenantProvisioner` |
+| **Flyway Orchestration** | Triggers migrations on auth-service, backend-service | `MigrationInvokeAction` |
+| **OpenFGA Store Creation** | Creates FGA store per tenant during signup | `OpenFgaProvisionAction` |
+| **Tenant Status Management** | Activate, suspend, archive tenants | `TenantService.updateStatus()` |
+| **Tenant Lookup** | Get tenant by ID, email, list all | `TenantInternalController` |
+| **Membership Management** | User-tenant mappings, default workspace | `MembershipController`, `MembershipService` |
+| **Tenant Switching** | Set default tenant, list user's tenants | `MembershipService.setDefaultTenant()` |
+| **Stripe Integration** | Customer creation, subscriptions | `StripeService`, `BillingController` |
+| **Checkout Sessions** | Create Stripe checkout sessions | `BillingController.createCheckoutSession()` |
+| **Customer Portal** | Stripe billing portal access | `BillingController.createPortalSession()` |
+| **Webhook Processing** | Handle Stripe events (subscription updates) | `WebhookController`, `WebhookService` |
+| **IdP Group Sync** | Sync groups from external IdPs | `GroupSyncService` |
+| **API Key Management** | Create, validate, revoke, list keys | `ApiKeyController`, `ApiKeyService` |
+| **Organization Profile** | Company name, logo, industry settings | `OrganizationController`, `OrganizationService` |
+| **Usage Metrics** | Track API calls, storage per tenant | `TenantUsageMetrics` |
+| **Audit Logging** | Log tenant lifecycle events | `TenantAuditLog` |
+
+**Databases:** Platform DB (shared across all tenants)  
+**Tables Owned:** `tenant`, `user_tenant_memberships`, `stripe_customers`, `webhook_events`, `api_keys`, `idp_groups`, `tenant_audit_log`, `tenant_usage_metrics`, `deleted_accounts`  
+**Does NOT:** Write permission tuples, enforce access, manage users within tenant
+
+---
+
+#### 📦 backend-service (REPLACEABLE MIMIC)
+
+| Category | Responsibility | Key Classes/Files |
+|----------|----------------|-------------------|
+| **Domain Logic** | **YOUR BUSINESS LOGIC GOES HERE** | Replace entirely |
+| **Resource CRUD** | Create, read, update, delete domain entities | Controllers, Services, Repositories |
+| **Permission Checks** | Enforce `@RequirePermission` annotations | `AuthorizationAspect` |
+| **OpenFGA Checks** | Check resource access via `OpenFgaReader` | `fgaReader.check()` |
+| **Tenant Data Access** | Automatic tenant isolation via datasource router | `TenantDataSourceRouter` |
+| **Flyway Migrations** | Run domain-specific schema migrations | `db/migration/V*.sql` |
+
+**Databases:** Per-tenant databases via `TenantDataSourceRouter`  
+**Tables Owned:** Your domain tables (this is a mimic - replace with your actual domain)  
+**Does NOT:** Write tuples, create users, manage permissions (that's auth-service's job)
+
+---
+
+#### 🔗 common-infra (Shared Library)
+
+| Category | Components | Purpose |
+|----------|------------|---------|
+| **Tenant Context** | `TenantContext`, `TenantHolder`, `TenantContextFilter` | Thread-local tenant ID |
+| **Datasource Routing** | `TenantDataSourceRouter`, `DynamicDataSource` | Multi-tenant connection pooling |
+| **Tenant Registry** | `TenantRegistryService`, `TenantLocalCache` | Cache tenant configs from platform |
+| **Authorization** | `@RequirePermission`, `AuthorizationAspect`, `PermissionEvaluator` | Method-level RBAC |
+| **OpenFGA Client** | `OpenFgaReader`, `OpenFgaWriter`, `OpenFgaClientWrapper`, `OpenFgaNoOpClient` | Fine-grained permissions |
+| **Security** | `ApiKeyAuthenticationFilter`, JWT utilities | Authentication helpers |
+| **DTOs** | Request/response objects shared across services | `common-dto` module |
+
+---
+
+#### 📡 eureka-server
+
+| Category | Responsibility |
+|----------|----------------|
+| **Service Registration** | All services register on startup |
+| **Service Discovery** | Clients lookup service instances by name |
+| **Health Monitoring** | Heartbeats, automatic de-registration |
+| **Load Balancing** | Client-side load balancing via Ribbon/LoadBalancer |
+
+**Databases:** None  
+**Does NOT:** Route traffic, validate tokens, any business logic
+
+---
+
+### Complete Ownership Matrix
+
+| What | Owned By | Stored In |
+|------|----------|-----------|
+| Tenant records | platform-service | Platform DB |
+| User-tenant mappings | platform-service | Platform DB |
+| Stripe customers | platform-service | Platform DB |
+| API keys | platform-service | Platform DB |
+| SSO IdP configs | platform-service | Platform DB |
+| Roles & Permissions | auth-service | Tenant DBs |
+| User-role assignments | auth-service | Tenant DBs |
+| ACL entries | auth-service | Tenant DBs |
+| Invitations | auth-service | Tenant DBs |
+| Tenant users | auth-service | Tenant DBs |
+| OpenFGA tuples | auth-service | OpenFGA |
+| OpenFGA stores | platform-service | OpenFGA |
+| Domain entities | backend-service | Tenant DBs |
+| JWT validation | gateway-service | None (stateless) |
+
+---
+
+### OpenFGA Architecture Summary
+
+**Multi-Tenant Store Strategy:** Each tenant gets their own OpenFGA store. Store ID is stored in `tenant.fga_store_id` and looked up dynamically per-request.
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         OpenFGA Multi-Tenant Flow                        │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   TENANT SIGNUP                                                          │
+│   ─────────────                                                          │
+│   1. platform-service creates tenant                                     │
+│   2. OpenFgaProvisionAction creates dedicated FGA store                  │
+│   3. Store ID saved to tenant.fga_store_id                               │
+│                                                                          │
+│   RUNTIME (per-request)                                                  │
+│   ─────────────────────                                                  │
+│   1. TenantContext provides current tenant ID                            │
+│   2. OpenFgaClientWrapper looks up fga_store_id from TenantDbConfig      │
+│   3. Creates/caches client per store (ConcurrentHashMap)                 │
+│   4. Executes FGA operation against tenant's store                       │
+│                                                                          │
+│   WRITE PATH (auth-service only)          READ PATH (any service)        │
+│   ───────────────────────────             ────────────────────           │
+│                                                                          │
+│   Role Assign/Revoke                      Can User View Folder?          │
+│        │                                         │                       │
+│        ▼                                         ▼                       │
+│   ┌─────────────┐                         ┌─────────────┐               │
+│   │ auth-service│                         │backend-svc  │               │
+│   │             │                         │             │               │
+│   │ OpenFgaWriter                         │ OpenFgaReader                │
+│   └──────┬──────┘                         └──────┬──────┘               │
+│          │ writeTuple()                          │ check()               │
+│          │ (non-throwing)                        │ (fail-safe deny)      │
+│          └───────────────┬───────────────────────┘                       │
+│                          ▼                                               │
+│              ┌───────────────────────┐                                   │
+│              │ Tenant's FGA Store    │                                   │
+│              │ (store-per-tenant)    │                                   │
+│              └───────────────────────┘                                   │
+│                                                                          │
+│   Production Hardening:                                                  │
+│   - Client caching (ConcurrentHashMap by storeId)                        │
+│   - Input validation on all params                                       │
+│   - Non-throwing write ops (log errors, don't fail caller)               │
+│   - Fail-safe deny on read errors                                        │
+│                                                                          │
+│   When openfga.enabled=false:                                            │
+│   - OpenFgaNoOpClient is injected (no-op, returns false/empty)          │
+│   - No calls to OpenFGA container                                        │
+│   - Existing RBAC via @RequirePermission still works                    │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## 🔧 Adding Your Own Service
 
 This template is designed to be extended. Here's how to add a new multi-tenant service:
@@ -2481,22 +2700,29 @@ cd frontend && npm start
 ```
 AWS-Infra/
 ├── auth-service/           # Identity & permission management
-├── platform-service/       # Tenant lifecycle control plane
+├── platform-service/       # Tenant lifecycle control plane + OpenFGA store provisioning
 ├── backend-service/        # REPLACE THIS - domain logic mimic
 ├── gateway-service/        # API gateway & security enforcement
 ├── eureka-server/          # Service discovery
 ├── common-dto/             # Shared DTOs across services
-├── common-infra/           # Shared multi-tenant infrastructure (TenantDataSourceRouter, TenantContext, etc.)
+├── common-infra/           # Shared multi-tenant infrastructure:
+│                           #   - TenantDataSourceRouter, TenantContext
+│                           #   - @RequirePermission, AuthorizationAspect
+│                           #   - OpenFGA client (optional fine-grained permissions)
+├── openfga/                # OpenFGA authorization model (optional add-on)
+│   ├── model.fga           #   - DSL model for resource permissions
+│   └── README.md           #   - Usage guide
 ├── terraform/              # Infrastructure as Code
 │   ├── modules/
 │   │   ├── vpc/
 │   │   ├── rds/
 │   │   ├── cognito/
-│   │   └── ecs/
+│   │   ├── ecs/
+│   │   └── openfga/        # OpenFGA ECS deployment (optional)
 │   └── environments/
 │       ├── dev/
 │       └── prod/
-├── docker-compose.yml      # Local dev environment
+├── docker-compose.yml      # Local dev environment (includes openfga container)
 └── HLD.md                  # This document
 ```
 
@@ -2676,82 +2902,6 @@ This section outlines features for enterprise-grade deployments.
 | Feature | Description | Status |
 |---------|-------------|--------|
 | **Tenant Archival** | Auto-archive inactive tenants to S3 after 90 days | 🔜 Planned |
-| **Database Sharding** | Multi-shard support for 1000s of tenants | 🔜 Planned |
-
----
-
-## 🛣️ Request Flow Example
-
-
-
-**User wants to create an Entry in their tenant**
-
-1. **User** sends: `POST /api/entries` with JWT token
-2. **Gateway** validates JWT, extracts `tenantId=acme` from token
-3. **Gateway** adds headers: `X-Tenant-Id: acme`, `X-User-Id: user123`
-4. **Gateway** routes to Backend Service via Eureka
-5. **Backend** reads `X-Tenant-Id: acme` header
-6. **Backend** connects to `tenant_acme` database
-7. **Backend** creates entry, sets `created_by=user123`
-8. **Backend** returns success
-9. **Gateway** forwards response to user
-
-**Security:** No tenant can access another tenant's data - enforced at database level
-
----
-
-## 📁 Project Structure
-
-```
-AWS-Infra/
-├── auth-service/           # Identity & permission management
-├── platform-service/       # Tenant lifecycle control plane
-├── backend-service/        # REPLACE THIS - domain logic mimic
-├── gateway-service/        # API gateway & security enforcement
-├── eureka-server/          # Service discovery
-├── common-dto/             # Shared DTOs across services
-├── common-infra/           # Shared multi-tenant infrastructure (TenantDataSourceRouter, TenantContext, etc.)
-├── terraform/              # Infrastructure as Code
-│   ├── modules/
-│   │   ├── vpc/
-│   │   ├── rds/
-│   │   ├── cognito/
-│   │   └── ecs/
-│   └── environments/
-│       ├── dev/
-│       └── prod/
-├── docker-compose.yml      # Local dev environment
-└── HLD.md                  # This document
-```
-
----
-
-## 🎓 Key Concepts
-
-### Tenant Context Propagation
-Every request carries tenant context through headers:
-- `X-Tenant-Id` - Database to connect to
-- `X-User-Id` - User making the request
-- `X-Authorities` - User permissions/roles
-
-### Fail-Closed Security
-- Gateway rejects requests without valid JWT
-- Gateway rejects requests without tenant context
-- Services trust headers from Gateway (network isolation required)
-
-### Dynamic Tenant Onboarding
-- No code deployment needed to add new tenant
-- Platform Service provisions on-demand
-- Fully automated via signup API
-
----
-
-## 📚 Additional Documentation
-
-- **[Implementation Guide](docs/tenant-onboarding/IMPLEMENTATION_GUIDE.md)** - Step-by-step setup
-- **[Roadmap](docs/ROADMAP.md)** - Future phases and feature plans
-- **[Terraform Guide](terraform/README.md)** - Infrastructure setup
-- **[Status](docs/STATUS.md)** - Sprint tracking and current progress
 
 ---
 
@@ -2759,6 +2909,3 @@ Every request carries tenant context through headers:
 
 See **[ROADMAP.md](docs/ROADMAP.md)** for future phases and feature plans.
 
-
-
-**Questions?** This template is designed to be self-explanatory. Start with Gateway → Auth → Platform → Your Service.

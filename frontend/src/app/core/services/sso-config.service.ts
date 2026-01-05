@@ -96,7 +96,7 @@ export const SSO_PROVIDERS = [
 export class SsoConfigService extends BaseApiService {
 
     constructor() {
-        super('/platform-service/api/v1/sso'); // Routes through gateway to platform-service
+        super('/auth-service/api/v1/sso'); // Routes through gateway to auth-service
     }
 
     /**

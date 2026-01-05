@@ -1,7 +1,7 @@
 package com.learning.platformservice.idp.repository;
 
+import com.learning.common.dto.IdpType;
 import com.learning.platformservice.idp.entity.IdpGroup;
-import com.learning.platformservice.tenant.entity.IdpType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;

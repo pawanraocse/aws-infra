@@ -1,7 +1,7 @@
 package com.learning.platformservice.idp.service;
 
+import com.learning.common.dto.IdpType;
 import com.learning.platformservice.idp.entity.IdpGroup;
-import com.learning.platformservice.tenant.entity.IdpType;
 
 import java.util.List;
 

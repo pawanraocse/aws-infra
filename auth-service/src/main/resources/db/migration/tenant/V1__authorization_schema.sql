@@ -263,3 +263,49 @@ EXECUTE FUNCTION update_updated_at_column();
 -- Resource ACLs: Fine-grained sharing via acl_entries table
 -- ============================================================================
 
+-- ============================================================================
+-- 13. SSO CONFIGURATIONS TABLE
+-- ============================================================================
+-- SSO Configuration for tenant-specific SAML/OIDC identity providers
+CREATE TABLE IF NOT EXISTS sso_configurations (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(255) NOT NULL UNIQUE,
+    sso_enabled BOOLEAN DEFAULT FALSE,
+    idp_type VARCHAR(50),
+    provider_name VARCHAR(255),
+    
+    -- SAML Configuration
+    saml_metadata_url VARCHAR(1024),
+    saml_metadata_xml TEXT,
+    saml_entity_id VARCHAR(255),
+    saml_sso_url VARCHAR(1024),
+    saml_certificate TEXT,
+    
+    -- OIDC Configuration
+    oidc_issuer VARCHAR(1024),
+    oidc_client_id VARCHAR(255),
+    oidc_client_secret VARCHAR(255),
+    oidc_scopes VARCHAR(255) DEFAULT 'openid email profile',
+    
+    -- Attribute mappings (IdP attr -> Cognito attr)
+    attribute_mappings JSONB,
+    
+    -- JIT Provisioning
+    jit_provisioning_enabled BOOLEAN DEFAULT FALSE,
+    default_role VARCHAR(100),
+    
+    -- Cognito Identity Provider name (auto-generated)
+    cognito_provider_name VARCHAR(255),
+    
+    -- Test status
+    last_tested_at TIMESTAMPTZ,
+    test_status VARCHAR(50),
+    
+    -- Audit fields
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_sso_configurations_tenant_id ON sso_configurations(tenant_id);
+
+COMMENT ON TABLE sso_configurations IS 'Tenant SSO/IDP configuration for SAML and OIDC providers';

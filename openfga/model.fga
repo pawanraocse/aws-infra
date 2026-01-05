@@ -1,0 +1,85 @@
+model
+  schema 1.1
+
+# =============================================================================
+# OpenFGA Authorization Model for SaaS Template
+# =============================================================================
+# This model defines fine-grained permissions for resource-level access control.
+# It supplements org-level RBAC (@RequirePermission) with per-resource sharing.
+#
+# To test: Use OpenFGA Playground at http://localhost:3000
+# Docs: https://openfga.dev/docs/modeling
+# =============================================================================
+
+# User type - represents authenticated users
+type user
+
+# Organization type - represents tenants
+type organization
+  relations
+    # Organization roles
+    define admin: [user]
+    define member: [user] or admin
+
+# Project type - top-level resource container
+type project
+  relations
+    # Parent organization
+    define organization: [organization]
+    
+    # Direct access relations
+    define owner: [user]
+    define editor: [user] or owner
+    define viewer: [user] or editor
+    
+    # Inherited access from organization
+    define org_admin: admin from organization
+    define org_member: member from organization
+    
+    # Computed permissions
+    define can_view: viewer or org_member
+    define can_edit: editor or org_admin
+    define can_delete: owner or org_admin
+    define can_share: owner or org_admin
+
+# Folder type - nested within projects
+type folder
+  relations
+    # Parent project (for inheritance)
+    define project: [project]
+    
+    # Direct access relations
+    define owner: [user]
+    define editor: [user] or owner
+    define viewer: [user] or editor
+    
+    # Inherited access from project
+    define project_editor: editor from project
+    define project_viewer: viewer from project
+    
+    # Computed permissions (additive: direct OR inherited)
+    define can_view: viewer or project_viewer
+    define can_edit: editor or project_editor
+    define can_delete: owner or project_editor
+    define can_share: owner or project_editor
+
+# Document/File type - leaf resource
+type document
+  relations
+    # Parent folder (for inheritance)
+    define parent: [folder]
+    
+    # Direct access relations
+    define owner: [user]
+    define editor: [user] or owner
+    define viewer: [user] or editor
+    
+    # Inherited access from parent folder
+    define folder_editor: editor from parent
+    define folder_viewer: viewer from parent
+    
+    # Computed permissions
+    define can_view: viewer or folder_viewer
+    define can_edit: editor or folder_editor
+    define can_delete: owner or folder_editor
+    define can_share: owner or folder_editor

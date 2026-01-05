@@ -1,13 +1,14 @@
-package com.learning.platformservice.sso.service;
+package com.learning.authservice.sso.service;
 
-import com.learning.platformservice.config.CognitoProperties;
-import com.learning.platformservice.sso.dto.OidcConfigRequest;
-import com.learning.platformservice.sso.dto.SamlConfigRequest;
-import com.learning.platformservice.sso.dto.SsoConfigDto;
-import com.learning.platformservice.sso.dto.SsoTestResult;
-import com.learning.platformservice.tenant.entity.IdpType;
-import com.learning.platformservice.tenant.entity.Tenant;
-import com.learning.platformservice.tenant.repo.TenantRepository;
+import com.learning.authservice.config.CognitoProperties;
+import com.learning.authservice.sso.dto.OidcConfigRequest;
+import com.learning.authservice.sso.dto.SamlConfigRequest;
+import com.learning.authservice.sso.dto.SsoConfigDto;
+import com.learning.authservice.sso.dto.SsoTestResult;
+import com.learning.authservice.sso.entity.SsoConfiguration;
+import com.learning.authservice.sso.exception.SsoConfigurationException;
+import com.learning.authservice.sso.repository.SsoConfigurationRepository;
+import com.learning.common.dto.IdpType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,26 +29,28 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.UpdateUserP
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 /**
- * Implementation of SSO configuration service.
+ * Implementation of SSO configuration service for auth-service.
  * Uses AWS Cognito SDK to manage identity providers.
+ * Stores SSO config in tenant-specific databases via SsoConfiguration entity.
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class SsoConfigurationServiceImpl implements SsoConfigurationService {
 
-    private final TenantRepository tenantRepository;
+    private final SsoConfigurationRepository ssoConfigurationRepository;
     private final CognitoIdentityProviderClient cognitoClient;
     private final CognitoProperties cognitoProperties;
 
     @Override
     public Optional<SsoConfigDto> getConfiguration(String tenantId) {
-        return tenantRepository.findById(tenantId)
-                .filter(tenant -> tenant.getIdpType() != null)
+        return ssoConfigurationRepository.findByTenantId(tenantId)
+                .filter(config -> config.getIdpType() != null)
                 .map(this::toSsoConfigDto);
     }
 
@@ -56,9 +59,12 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
     public SsoConfigDto saveSamlConfiguration(String tenantId, SamlConfigRequest request) {
         log.info("Configuring SAML SSO for tenant: {}, provider: {}", tenantId, request.providerName());
 
-        Tenant tenant = getTenantOrThrow(tenantId);
+        SsoConfiguration config = getOrCreateConfig(tenantId);
 
-        // Build Cognito Identity Provider name (must be unique within pool)
+        // Validate request
+        validateSamlRequest(request);
+
+        // Build Cognito Identity Provider name
         String providerName = buildProviderName(tenantId, request.idpType());
 
         // Prepare provider details for SAML
@@ -79,26 +85,24 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
         // Create or update Cognito Identity Provider
         createOrUpdateCognitoProvider(providerName, IdentityProviderTypeType.SAML, providerDetails, attributeMapping);
 
-        // Update tenant record
-        tenant.setIdpType(request.idpType());
-        tenant.setIdpMetadataUrl(request.metadataUrl());
-        tenant.setIdpEntityId(request.entityId());
-        tenant.setSsoEnabled(true);
+        // Update SSO configuration
+        config.setIdpType(request.idpType());
+        config.setProviderName(request.providerName());
+        config.setSamlMetadataUrl(request.metadataUrl());
+        config.setSamlMetadataXml(request.metadataXml());
+        config.setSamlEntityId(request.entityId());
+        config.setSamlSsoUrl(request.ssoUrl());
+        config.setSamlCertificate(request.certificate());
+        config.setSsoEnabled(true);
+        config.setCognitoProviderName(providerName);
+        config.setJitProvisioningEnabled(request.jitProvisioningEnabled());
+        config.setDefaultRole(request.defaultRole() != null ? request.defaultRole() : "viewer");
+        config.setAttributeMappings(attributeMapping);
 
-        // Store additional config in JSONB
-        Map<String, Object> idpConfig = new HashMap<>();
-        idpConfig.put("providerName", request.providerName());
-        idpConfig.put("cognitoProviderName", providerName);
-        idpConfig.put("jitProvisioningEnabled", request.jitProvisioningEnabled());
-        idpConfig.put("defaultRole", request.defaultRole() != null ? request.defaultRole() : "user");
-        idpConfig.put("attributeMappings", attributeMapping);
-        tenant.setIdpConfigJson(idpConfig);
-
-        tenant.setUpdatedAt(OffsetDateTime.now());
-        tenantRepository.save(tenant);
+        ssoConfigurationRepository.save(config);
 
         log.info("SAML SSO configured successfully for tenant: {}", tenantId);
-        return toSsoConfigDto(tenant);
+        return toSsoConfigDto(config);
     }
 
     @Override
@@ -106,12 +110,15 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
     public SsoConfigDto saveOidcConfiguration(String tenantId, OidcConfigRequest request) {
         log.info("Configuring OIDC SSO for tenant: {}, provider: {}", tenantId, request.providerName());
 
-        Tenant tenant = getTenantOrThrow(tenantId);
+        SsoConfiguration config = getOrCreateConfig(tenantId);
+
+        // Validate request
+        validateOidcRequest(request);
 
         // Build provider name
         String providerName = buildProviderName(tenantId, request.idpType());
 
-        // Determine provider type and details based on IdpType
+        // Determine provider type and details
         IdentityProviderTypeType providerType = mapIdpTypeToProviderType(request.idpType());
         Map<String, String> providerDetails = buildOidcProviderDetails(request);
 
@@ -124,66 +131,58 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
         // Create or update Cognito Identity Provider
         createOrUpdateCognitoProvider(providerName, providerType, providerDetails, attributeMapping);
 
-        // Update tenant record
-        tenant.setIdpType(request.idpType());
-        tenant.setSsoEnabled(true);
+        // Update SSO configuration
+        config.setIdpType(request.idpType());
+        config.setProviderName(request.providerName());
+        config.setOidcIssuer(request.issuerUrl());
+        config.setOidcClientId(request.clientId());
+        config.setOidcClientSecret(request.clientSecret());
+        config.setOidcScopes(request.scopes() != null ? request.scopes() : "openid email profile");
+        config.setSsoEnabled(true);
+        config.setCognitoProviderName(providerName);
+        config.setJitProvisioningEnabled(request.jitProvisioningEnabled());
+        config.setDefaultRole(request.defaultRole() != null ? request.defaultRole() : "viewer");
+        config.setAttributeMappings(attributeMapping);
 
-        // Store config in JSONB (note: client secret is NOT stored in DB)
-        Map<String, Object> idpConfig = new HashMap<>();
-        idpConfig.put("providerName", request.providerName());
-        idpConfig.put("cognitoProviderName", providerName);
-        idpConfig.put("oidcIssuer", request.issuerUrl());
-        idpConfig.put("oidcClientId", request.clientId());
-        idpConfig.put("jitProvisioningEnabled", request.jitProvisioningEnabled());
-        idpConfig.put("defaultRole", request.defaultRole() != null ? request.defaultRole() : "user");
-        idpConfig.put("attributeMappings", attributeMapping);
-        tenant.setIdpConfigJson(idpConfig);
-
-        tenant.setUpdatedAt(OffsetDateTime.now());
-        tenantRepository.save(tenant);
+        ssoConfigurationRepository.save(config);
 
         log.info("OIDC SSO configured successfully for tenant: {}", tenantId);
-        return toSsoConfigDto(tenant);
+        return toSsoConfigDto(config);
     }
 
     @Override
     @Transactional
     public SsoConfigDto toggleSso(String tenantId, boolean enabled) {
-        Tenant tenant = getTenantOrThrow(tenantId);
-        tenant.setSsoEnabled(enabled);
-        tenant.setUpdatedAt(OffsetDateTime.now());
-        tenantRepository.save(tenant);
+        SsoConfiguration config = ssoConfigurationRepository.findByTenantId(tenantId)
+                .orElseThrow(() -> SsoConfigurationException.notConfigured(tenantId));
+
+        config.setSsoEnabled(enabled);
+        ssoConfigurationRepository.save(config);
 
         log.info("SSO {} for tenant: {}", enabled ? "enabled" : "disabled", tenantId);
-        return toSsoConfigDto(tenant);
+        return toSsoConfigDto(config);
     }
 
     @Override
     @Transactional
     public void deleteConfiguration(String tenantId) {
-        Tenant tenant = getTenantOrThrow(tenantId);
+        Optional<SsoConfiguration> configOpt = ssoConfigurationRepository.findByTenantId(tenantId);
+        if (configOpt.isEmpty()) {
+            return;
+        }
 
-        // Delete Cognito Identity Provider if exists
-        if (tenant.getIdpConfigJson() != null) {
-            String cognitoProviderName = (String) tenant.getIdpConfigJson().get("cognitoProviderName");
-            if (cognitoProviderName != null) {
-                try {
-                    deleteCognitoProvider(cognitoProviderName);
-                } catch (ResourceNotFoundException e) {
-                    log.warn("Cognito provider not found: {}", cognitoProviderName);
-                }
+        SsoConfiguration config = configOpt.get();
+
+        // Delete Cognito Identity Provider
+        if (config.getCognitoProviderName() != null) {
+            try {
+                deleteCognitoProvider(config.getCognitoProviderName());
+            } catch (ResourceNotFoundException e) {
+                log.warn("Cognito provider not found: {}", config.getCognitoProviderName());
             }
         }
 
-        // Clear SSO fields
-        tenant.setSsoEnabled(false);
-        tenant.setIdpType(null);
-        tenant.setIdpMetadataUrl(null);
-        tenant.setIdpEntityId(null);
-        tenant.setIdpConfigJson(null);
-        tenant.setUpdatedAt(OffsetDateTime.now());
-        tenantRepository.save(tenant);
-
+        ssoConfigurationRepository.delete(config);
         log.info("SSO configuration deleted for tenant: {}", tenantId);
     }
 
@@ -192,9 +191,8 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
         long startTime = System.currentTimeMillis();
 
         try {
-            Tenant tenant = getTenantOrThrow(tenantId);
-
-            if (tenant.getIdpConfigJson() == null) {
+            Optional<SsoConfiguration> configOpt = ssoConfigurationRepository.findByTenantId(tenantId);
+            if (configOpt.isEmpty()) {
                 return SsoTestResult.builder()
                         .success(false)
                         .message("SSO not configured for this tenant")
@@ -202,23 +200,21 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
                         .build();
             }
 
-            String cognitoProviderName = (String) tenant.getIdpConfigJson().get("cognitoProviderName");
+            SsoConfiguration config = configOpt.get();
 
-            // Describe the provider to verify it exists and is valid
+            // Describe the provider to verify it exists
             DescribeIdentityProviderResponse response = cognitoClient.describeIdentityProvider(
                     DescribeIdentityProviderRequest.builder()
                             .userPoolId(cognitoProperties.getUserPoolId())
-                            .providerName(cognitoProviderName)
+                            .providerName(config.getCognitoProviderName())
                             .build());
 
             IdentityProviderType provider = response.identityProvider();
 
-            // Update test status in idpConfigJson
-            Map<String, Object> config = new HashMap<>(tenant.getIdpConfigJson());
-            config.put("lastTestedAt", java.time.OffsetDateTime.now().toString());
-            config.put("testStatus", "SUCCESS");
-            tenant.setIdpConfigJson(config);
-            tenantRepository.save(tenant);
+            // Update test status
+            config.setLastTestedAt(OffsetDateTime.now());
+            config.setTestStatus("SUCCESS");
+            ssoConfigurationRepository.save(config);
 
             return SsoTestResult.builder()
                     .success(true)
@@ -247,61 +243,90 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
         }
     }
 
-    private void updateTestStatus(String tenantId, String status) {
-        try {
-            Tenant tenant = getTenantOrThrow(tenantId);
-            if (tenant.getIdpConfigJson() != null) {
-                Map<String, Object> config = new HashMap<>(tenant.getIdpConfigJson());
-                config.put("lastTestedAt", java.time.OffsetDateTime.now().toString());
-                config.put("testStatus", status);
-                tenant.setIdpConfigJson(config);
-                tenantRepository.save(tenant);
-            }
-        } catch (Exception ex) {
-            log.warn("Failed to update test status for tenant: {}", tenantId, ex);
-        }
-    }
-
     @Override
     public String getSpMetadata(String tenantId) {
-        // Construct the SP metadata URL for this user pool
         String domain = getCognitoDomain();
-        String metadataUrl = String.format(
-                "https://%s.auth.%s.amazoncognito.com/saml2/idpmetadata?client_id=%s",
-                domain, cognitoProperties.getRegion(), getDefaultClientId());
-
-        // In production, you might fetch and return the actual XML
-        // For now, return instructions
         return String.format("""
                 SAML Service Provider Metadata
 
                 ACS URL: https://%s.auth.%s.amazoncognito.com/saml2/idpresponse
                 Entity ID: urn:amazon:cognito:sp:%s
-                Metadata URL: %s
-                """, domain, cognitoProperties.getRegion(), cognitoProperties.getUserPoolId(), metadataUrl);
+                Metadata URL: https://%s.auth.%s.amazoncognito.com/saml2/idpmetadata
+                """, domain, cognitoProperties.getRegion(), cognitoProperties.getUserPoolId(),
+                domain, cognitoProperties.getRegion());
+    }
+
+    @Override
+    public Optional<SsoLookupResponse> getSsoLookup(String tenantId) {
+        // Set tenant context to route query to correct tenant database
+        // This is a public endpoint, so we set context from the request parameter
+        com.learning.common.infra.tenant.TenantContext.setCurrentTenant(tenantId);
+        try {
+            return ssoConfigurationRepository.findByTenantId(tenantId)
+                    .filter(config -> Boolean.TRUE.equals(config.getSsoEnabled()))
+                    .map(config -> new SsoLookupResponse(
+                            true,
+                            config.getCognitoProviderName(),
+                            config.getIdpType() != null ? config.getIdpType().name() : null));
+        } finally {
+            com.learning.common.infra.tenant.TenantContext.clear();
+        }
     }
 
     // ========== Private Helpers ==========
 
-    private Tenant getTenantOrThrow(String tenantId) {
-        return tenantRepository.findById(tenantId)
-                .orElseThrow(() -> new IllegalArgumentException("Tenant not found: " + tenantId));
+    private SsoConfiguration getOrCreateConfig(String tenantId) {
+        return ssoConfigurationRepository.findByTenantId(tenantId)
+                .orElseGet(() -> SsoConfiguration.builder()
+                        .tenantId(tenantId)
+                        .ssoEnabled(false)
+                        .build());
+    }
+
+    private void updateTestStatus(String tenantId, String status) {
+        ssoConfigurationRepository.findByTenantId(tenantId).ifPresent(config -> {
+            config.setLastTestedAt(OffsetDateTime.now());
+            config.setTestStatus(status);
+            ssoConfigurationRepository.save(config);
+        });
+    }
+
+    private void validateSamlRequest(SamlConfigRequest request) {
+        if (request.idpType() == null) {
+            throw SsoConfigurationException.invalidConfiguration("IdP type is required");
+        }
+        boolean hasMetadata = (request.metadataUrl() != null && !request.metadataUrl().isBlank())
+                || (request.metadataXml() != null && !request.metadataXml().isBlank());
+        boolean hasManualConfig = request.entityId() != null && request.ssoUrl() != null;
+        if (!hasMetadata && !hasManualConfig) {
+            throw SsoConfigurationException.invalidConfiguration(
+                    "Either metadata URL/XML or entity ID + SSO URL must be provided");
+        }
+    }
+
+    private void validateOidcRequest(OidcConfigRequest request) {
+        if (request.idpType() == null) {
+            throw SsoConfigurationException.invalidConfiguration("IdP type is required");
+        }
+        if (request.clientId() == null || request.clientId().isBlank()) {
+            throw SsoConfigurationException.invalidConfiguration("Client ID is required");
+        }
+        if (request.clientSecret() == null || request.clientSecret().isBlank()) {
+            throw SsoConfigurationException.invalidConfiguration("Client Secret is required");
+        }
+        // Generic OIDC requires issuer URL
+        if (request.idpType() == IdpType.OIDC &&
+                (request.issuerUrl() == null || request.issuerUrl().isBlank())) {
+            throw SsoConfigurationException.invalidConfiguration("Issuer URL is required for generic OIDC");
+        }
     }
 
     private String buildProviderName(String tenantId, IdpType idpType) {
-        // Provider name: alphanumeric, must NOT contain underscores (Cognito
-        // constraint)
-        // Pattern: [^\p{Z}][\p{L}\p{M}\p{S}\p{N}\p{P}][^\p{Z}]+
         String sanitizedTenantId = tenantId.replaceAll("[^a-zA-Z0-9]", "");
         if (sanitizedTenantId.length() > 20) {
             sanitizedTenantId = sanitizedTenantId.substring(0, 20);
         }
 
-        // Provider prefixes (no underscores allowed):
-        // - GWORKSPACE: Google OIDC (no groups)
-        // - GSAML: Google SAML (with groups)
-        // - AZUREOIDC: Azure AD OIDC
-        // - Others use IdpType name directly (if no underscores)
         String providerPrefix = switch (idpType) {
             case GOOGLE -> "GWORKSPACE";
             case GOOGLE_SAML -> "GSAML";
@@ -312,16 +337,13 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
     }
 
     private void createOrUpdateCognitoProvider(String providerName, IdentityProviderTypeType providerType,
-            Map<String, String> providerDetails,
-            Map<String, String> attributeMapping) {
+            Map<String, String> providerDetails, Map<String, String> attributeMapping) {
         try {
-            // Try to describe to check if exists
             cognitoClient.describeIdentityProvider(DescribeIdentityProviderRequest.builder()
                     .userPoolId(cognitoProperties.getUserPoolId())
                     .providerName(providerName)
                     .build());
 
-            // Provider exists, update it
             cognitoClient.updateIdentityProvider(UpdateIdentityProviderRequest.builder()
                     .userPoolId(cognitoProperties.getUserPoolId())
                     .providerName(providerName)
@@ -332,7 +354,6 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
             log.info("Updated Cognito identity provider: {}", providerName);
 
         } catch (ResourceNotFoundException e) {
-            // Provider doesn't exist, create it
             cognitoClient.createIdentityProvider(CreateIdentityProviderRequest.builder()
                     .userPoolId(cognitoProperties.getUserPoolId())
                     .providerName(providerName)
@@ -342,21 +363,13 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
                     .build());
 
             log.info("Created Cognito identity provider: {}", providerName);
-
-            // Register the new provider with the SPA client
             registerProviderWithClient(providerName);
         }
     }
 
-    /**
-     * Register an identity provider with the SPA client so it can be used for
-     * federated login.
-     */
     private void registerProviderWithClient(String providerName) {
         try {
             String clientId = cognitoProperties.getClientId();
-
-            // Get current client configuration
             DescribeUserPoolClientResponse clientResponse = cognitoClient.describeUserPoolClient(
                     DescribeUserPoolClientRequest.builder()
                             .userPoolId(cognitoProperties.getUserPoolId())
@@ -364,22 +377,17 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
                             .build());
 
             var client = clientResponse.userPoolClient();
-
-            // Check if provider is already registered
-            java.util.List<String> currentProviders = new java.util.ArrayList<>(
+            List<String> currentProviders = new ArrayList<>(
                     client.supportedIdentityProviders() != null
                             ? client.supportedIdentityProviders()
-                            : java.util.List.of("COGNITO"));
+                            : List.of("COGNITO"));
 
             if (currentProviders.contains(providerName)) {
-                log.debug("Provider {} already registered with client {}", providerName, clientId);
                 return;
             }
 
-            // Add the new provider
             currentProviders.add(providerName);
 
-            // Update the client with the new provider
             cognitoClient.updateUserPoolClient(UpdateUserPoolClientRequest.builder()
                     .userPoolId(cognitoProperties.getUserPoolId())
                     .clientId(clientId)
@@ -402,10 +410,8 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
                     .build());
 
             log.info("Registered identity provider {} with client {}", providerName, clientId);
-
         } catch (Exception ex) {
-            log.error("Failed to register provider {} with client: {}", providerName, ex.getMessage(), ex);
-            // Don't fail the overall operation, provider is still created
+            log.error("Failed to register provider {}: {}", providerName, ex.getMessage(), ex);
         }
     }
 
@@ -421,12 +427,6 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
         Map<String, String> mapping = new HashMap<>();
         mapping.put("email", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress");
         mapping.put("name", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name");
-        // Map SAML group attribute to custom:samlGroups
-        // Different IdPs use different attribute names:
-        // - Okta: "group" (configured in Okta Group Attribute Statements)
-        // - Azure AD: "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups"
-        // We use "group" as it's the most common configuration for Okta
-        // Note: custom:samlGroups attribute must exist in Cognito User Pool
         mapping.put("custom:samlGroups", "group");
         return mapping;
     }
@@ -436,8 +436,6 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
         mapping.put("email", "email");
         mapping.put("name", "name");
         mapping.put("username", "sub");
-        // Note: custom:groups requires the attribute to be pre-created in Cognito
-        // mapping.put("custom:groups", "groups");
         return mapping;
     }
 
@@ -448,18 +446,14 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
         details.put("authorize_scopes", request.scopes() != null ? request.scopes() : "openid email profile");
         details.put("attributes_request_method", "GET");
 
-        // Set issuer based on provider type
         switch (request.idpType()) {
             case GOOGLE -> details.put("oidc_issuer", "https://accounts.google.com");
             case AZURE_AD -> {
-                // Azure requires tenant-specific issuer
                 if (request.issuerUrl() != null) {
                     details.put("oidc_issuer", request.issuerUrl());
                 }
-                // user might give URL with v2.0 endpoint; for Azure OIDC, map groups attribute
                 details.put("authorize_scopes", "openid email profile User.Read GroupMember.Read.All");
             }
-            case OKTA, OIDC -> details.put("oidc_issuer", request.issuerUrl());
             default -> details.put("oidc_issuer", request.issuerUrl());
         }
 
@@ -468,74 +462,38 @@ public class SsoConfigurationServiceImpl implements SsoConfigurationService {
 
     private IdentityProviderTypeType mapIdpTypeToProviderType(IdpType idpType) {
         return switch (idpType) {
-            // Note: GOOGLE uses OIDC type because Cognito's GOOGLE type is reserved for
-            // built-in social login
             case GOOGLE, AZURE_AD, OKTA, OIDC -> IdentityProviderTypeType.OIDC;
             case GOOGLE_SAML, SAML, PING -> IdentityProviderTypeType.SAML;
             default -> IdentityProviderTypeType.OIDC;
         };
     }
 
-    private SsoConfigDto toSsoConfigDto(Tenant tenant) {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> config = tenant.getIdpConfigJson();
-
-        SsoConfigDto.SsoConfigDtoBuilder builder = SsoConfigDto.builder()
-                .tenantId(tenant.getId())
-                .ssoEnabled(Boolean.TRUE.equals(tenant.getSsoEnabled()))
-                .idpType(tenant.getIdpType())
-                .samlMetadataUrl(tenant.getIdpMetadataUrl())
-                .samlEntityId(tenant.getIdpEntityId())
-                .createdAt(tenant.getCreatedAt())
-                .updatedAt(tenant.getUpdatedAt());
-
-        if (config != null) {
-            builder.providerName((String) config.get("providerName"));
-            builder.cognitoProviderName((String) config.get("cognitoProviderName"));
-            builder.jitProvisioningEnabled(Boolean.TRUE.equals(config.get("jitProvisioningEnabled")));
-            builder.defaultRole((String) config.get("defaultRole"));
-            builder.oidcIssuer((String) config.get("oidcIssuer"));
-            builder.oidcClientId((String) config.get("oidcClientId"));
-            builder.lastTestedAt((String) config.get("lastTestedAt"));
-            builder.testStatus((String) config.get("testStatus"));
-
-            @SuppressWarnings("unchecked")
-            Map<String, String> attrMap = (Map<String, String>) config.get("attributeMappings");
-            builder.attributeMappings(attrMap);
-        }
-
-        return builder.build();
+    private SsoConfigDto toSsoConfigDto(SsoConfiguration config) {
+        return SsoConfigDto.builder()
+                .tenantId(config.getTenantId())
+                .ssoEnabled(Boolean.TRUE.equals(config.getSsoEnabled()))
+                .idpType(config.getIdpType())
+                .providerName(config.getProviderName())
+                .samlMetadataUrl(config.getSamlMetadataUrl())
+                .samlMetadataXml(config.getSamlMetadataXml())
+                .samlEntityId(config.getSamlEntityId())
+                .samlSsoUrl(config.getSamlSsoUrl())
+                .samlCertificate(config.getSamlCertificate())
+                .oidcIssuer(config.getOidcIssuer())
+                .oidcClientId(config.getOidcClientId())
+                .oidcScopes(config.getOidcScopes())
+                .attributeMappings(config.getAttributeMappings())
+                .jitProvisioningEnabled(Boolean.TRUE.equals(config.getJitProvisioningEnabled()))
+                .defaultRole(config.getDefaultRole())
+                .cognitoProviderName(config.getCognitoProviderName())
+                .lastTestedAt(config.getLastTestedAt() != null ? config.getLastTestedAt().toString() : null)
+                .testStatus(config.getTestStatus())
+                .createdAt(config.getCreatedAt())
+                .updatedAt(config.getUpdatedAt())
+                .build();
     }
 
     private String getCognitoDomain() {
-        // This should be fetched from SSM or cached from Terraform outputs
-        // For now, return a placeholder that should be configured
-        return System.getenv("COGNITO_DOMAIN");
-    }
-
-    private String getDefaultClientId() {
-        return System.getenv("COGNITO_CLIENT_ID");
-    }
-
-    @Override
-    public Optional<com.learning.platformservice.sso.controller.SsoConfigurationController.SsoLookupResponse> getSsoLookup(
-            String tenantId) {
-        Optional<Tenant> tenantOpt = tenantRepository.findById(tenantId);
-        if (tenantOpt.isEmpty()) {
-            return Optional.empty();
-        }
-
-        Tenant tenant = tenantOpt.get();
-        if (!Boolean.TRUE.equals(tenant.getSsoEnabled()) || tenant.getIdpConfigJson() == null) {
-            return Optional.empty();
-        }
-
-        String providerName = (String) tenant.getIdpConfigJson().get("cognitoProviderName");
-        String idpType = tenant.getIdpType() != null ? tenant.getIdpType().name() : null;
-
-        return Optional.of(new com.learning.platformservice.sso.controller.SsoConfigurationController.SsoLookupResponse(
-                Boolean.TRUE.equals(tenant.getSsoEnabled()),
-                providerName,
-                idpType));
+        return cognitoProperties.getDomain();
     }
 }

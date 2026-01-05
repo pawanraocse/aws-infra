@@ -1,8 +1,8 @@
 package com.learning.platformservice.idp.service;
 
+import com.learning.common.dto.IdpType;
 import com.learning.platformservice.idp.entity.IdpGroup;
 import com.learning.platformservice.idp.repository.IdpGroupRepository;
-import com.learning.platformservice.tenant.entity.IdpType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

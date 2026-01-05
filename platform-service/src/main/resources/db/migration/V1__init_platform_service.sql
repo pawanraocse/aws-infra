@@ -292,6 +292,10 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(255);
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_price_id VARCHAR(255);
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ;
 
+-- Add OpenFGA store ID for fine-grained permissions (optional add-on)
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS fga_store_id VARCHAR(255);
+COMMENT ON COLUMN tenant.fga_store_id IS 'OpenFGA store ID for fine-grained resource permissions (optional)';
+
 -- =====================================================
 -- API KEYS TABLE
 -- =====================================================

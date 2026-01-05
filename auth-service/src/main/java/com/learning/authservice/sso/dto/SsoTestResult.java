@@ -1,6 +1,8 @@
-package com.learning.platformservice.sso.dto;
+package com.learning.authservice.sso.dto;
 
 import lombok.Builder;
+
+import java.util.List;
 
 /**
  * Result of SSO connection test.
@@ -11,6 +13,6 @@ public record SsoTestResult(
         String message,
         String providerName,
         String entityId,
-        java.util.List<String> availableAttributes,
+        List<String> availableAttributes,
         long responseTimeMs) {
 }

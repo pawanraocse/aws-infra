@@ -1,9 +1,8 @@
 package com.learning.platformservice.idp.service;
 
+import com.learning.common.dto.IdpType;
 import com.learning.platformservice.idp.entity.IdpGroup;
 import com.learning.platformservice.idp.repository.IdpGroupRepository;
-import com.learning.platformservice.tenant.entity.IdpType;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

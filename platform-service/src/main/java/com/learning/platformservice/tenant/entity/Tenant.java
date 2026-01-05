@@ -1,5 +1,6 @@
 package com.learning.platformservice.tenant.entity;
 
+import com.learning.common.dto.IdpType;
 import com.learning.common.dto.TenantType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -142,4 +143,8 @@ public class Tenant {
 
     @Column(name = "current_period_end")
     private OffsetDateTime currentPeriodEnd;
+
+    // ========== NEW: OpenFGA Fine-Grained Permissions ==========
+    @Column(name = "fga_store_id")
+    private String fgaStoreId;
 }

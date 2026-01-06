@@ -1,9 +1,8 @@
 #!/bin/bash
 # ============================================================================
-# Deploy Budget Environment
+# Full Budget Deployment - One Shot
 # ============================================================================
-# Deploys AWS infrastructure (VPC, RDS, ElastiCache, EC2, Amplify)
-# Configuration is stored in SSM - fetched at runtime by start-budget.sh
+# Deploys infrastructure AND application in one command
 # ============================================================================
 
 set -euo pipefail
@@ -11,6 +10,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR/.."
 TERRAFORM_DIR="$PROJECT_ROOT/terraform/envs/budget"
+
+AWS_REGION="${AWS_REGION:-us-east-1}"
+AWS_PROFILE="${AWS_PROFILE:-personal}"
+SSH_KEY="${SSH_KEY:-}"
 
 # Colors
 RED='\033[0;31m'
@@ -26,86 +29,120 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🚀 Deploy Budget Environment"
+echo "🚀 Full Budget Deployment (Infrastructure + Application)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Check AWS credentials
-export AWS_PROFILE=${AWS_PROFILE:-personal}
-log_info "Using AWS Profile: $AWS_PROFILE"
+# Check SSH key
+if [ -z "$SSH_KEY" ]; then
+    log_warn "SSH_KEY not set. Usage: SSH_KEY=~/.ssh/mykey.pem ./deploy-budget-full.sh"
+    log_info "Continuing without SSH key - will skip EC2 deployment steps"
+fi
 
+# Check AWS credentials
 if ! aws sts get-caller-identity --profile "$AWS_PROFILE" > /dev/null 2>&1; then
     log_error "AWS credentials not configured for profile: $AWS_PROFILE"
     exit 1
 fi
 log_success "AWS credentials verified"
 
-# Check for terraform.tfvars
+# ============================================================================
+# Phase 1: Deploy Infrastructure
+# ============================================================================
+echo ""
+log_info "━━━ Phase 1: Infrastructure ━━━"
+
 cd "$TERRAFORM_DIR"
 
+# Check terraform.tfvars
 if [ ! -f "terraform.tfvars" ]; then
-    if [ -f "terraform.tfvars.example" ]; then
-        log_warn "terraform.tfvars not found. Copying from example..."
-        cp terraform.tfvars.example terraform.tfvars
-        log_warn "Please edit terraform/envs/budget/terraform.tfvars"
-        exit 1
-    fi
+    log_error "terraform.tfvars not found"
+    log_info "Run: cd terraform/envs/budget && cp terraform.tfvars.example terraform.tfvars"
+    exit 1
 fi
 
-# Terraform operations
-log_info "Initializing Terraform..."
 terraform init -upgrade
-
-log_info "Validating configuration..."
 terraform validate
-
-log_info "Planning deployment..."
-terraform plan -out=tfplan
-
-# Confirmation
-if [ -t 0 ]; then
-    echo ""
-    read -p "Apply these changes? (yes/no): " CONFIRM
-    if [ "$CONFIRM" != "yes" ]; then
-        log_warn "Deployment cancelled"
-        rm -f tfplan
-        exit 0
-    fi
-fi
-
-log_info "Applying changes..."
-terraform apply tfplan
-rm -f tfplan
+terraform apply -auto-approve
 
 # Get outputs
-RDS_ENDPOINT=$(terraform output -raw rds_endpoint 2>/dev/null || echo "N/A")
-REDIS_ENDPOINT=$(terraform output -raw redis_endpoint 2>/dev/null || echo "N/A")
-EC2_IP=$(terraform output -raw ec2_public_ip 2>/dev/null || echo "N/A")
-FRONTEND_URL=$(terraform output -raw frontend_url 2>/dev/null || echo "N/A")
+EC2_IP=$(terraform output -raw ec2_public_ip 2>/dev/null || echo "")
+FRONTEND_URL=$(terraform output -raw frontend_url 2>/dev/null || echo "")
 
+if [ -z "$EC2_IP" ]; then
+    log_error "Failed to get EC2 IP from Terraform"
+    exit 1
+fi
+
+log_success "Infrastructure deployed! EC2 IP: $EC2_IP"
+
+# ============================================================================
+# Phase 2: Wait for EC2 to be ready
+# ============================================================================
+echo ""
+log_info "━━━ Phase 2: Waiting for EC2 ━━━"
+
+if [ -n "$SSH_KEY" ]; then
+    log_info "Waiting for EC2 to be reachable..."
+    
+    for i in {1..30}; do
+        if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -i "$SSH_KEY" ec2-user@"$EC2_IP" "echo ready" 2>/dev/null; then
+            log_success "EC2 is reachable!"
+            break
+        fi
+        echo -n "."
+        sleep 10
+    done
+    echo ""
+fi
+
+# ============================================================================
+# Phase 3: Deploy Application
+# ============================================================================
+echo ""
+log_info "━━━ Phase 3: Deploy Application ━━━"
+
+if [ -n "$SSH_KEY" ]; then
+    log_info "Copying application to EC2..."
+    
+    # Create /app directory and copy files
+    ssh -i "$SSH_KEY" ec2-user@"$EC2_IP" "sudo mkdir -p /app && sudo chown ec2-user:ec2-user /app"
+    
+    # Copy essential files
+    rsync -avz --progress -e "ssh -i $SSH_KEY" \
+        --exclude '.terraform' \
+        --exclude 'node_modules' \
+        --exclude '.git' \
+        --exclude 'target' \
+        --exclude '.idea' \
+        "$PROJECT_ROOT/" ec2-user@"$EC2_IP":/app/
+    
+    log_success "Application copied to EC2"
+    
+    # Start services
+    log_info "Starting services..."
+    ssh -i "$SSH_KEY" ec2-user@"$EC2_IP" "cd /app && chmod +x scripts/*.sh && ./scripts/start-budget.sh"
+    
+    log_success "Services started!"
+else
+    log_warn "SSH_KEY not set - skipping EC2 deployment"
+    log_info "To complete deployment, run manually:"
+    echo "  scp -i <key.pem> -r . ec2-user@$EC2_IP:/app/"
+    echo "  ssh -i <key.pem> ec2-user@$EC2_IP 'cd /app && ./scripts/start-budget.sh'"
+fi
+
+# ============================================================================
+# Done!
+# ============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 log_success "Budget Deployment Complete!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "📦 Infrastructure:"
-echo "  RDS:   $RDS_ENDPOINT"
-echo "  Redis: $REDIS_ENDPOINT"
-echo "  EC2:   $EC2_IP"
+echo "🌐 Access:"
+echo "  Frontend: $FRONTEND_URL"
+echo "  API:      http://$EC2_IP:8080"
 echo ""
-echo "📚 Next Steps:"
-echo "  1. Copy code to EC2:"
-echo "     scp -r . ec2-user@$EC2_IP:/app/"
-echo ""
-echo "  2. SSH and start services:"
-echo "     ssh -i <key.pem> ec2-user@$EC2_IP"
-echo "     cd /app && ./scripts/start-budget.sh"
-echo ""
-echo "  3. Access:"
-echo "     Frontend: $FRONTEND_URL"
-echo "     API:      http://$EC2_IP:8080"
-echo ""
-echo "💡 Config is fetched from SSM at runtime - no .env file needed!"
 echo "💰 Estimated Cost: ~\$15-30/month"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

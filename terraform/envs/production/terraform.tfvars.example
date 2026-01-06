@@ -1,0 +1,40 @@
+# Production Environment - Example Variables
+# Copy to terraform.tfvars and customize
+
+# Project
+project_name = "saas-factory"
+environment  = "production"
+aws_region   = "us-east-1"
+
+# VPC
+vpc_cidr           = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+single_nat_gateway = true  # Set false for HA (~$30/mo per extra NAT)
+
+# RDS
+use_aurora                = false
+rds_instance_class        = "db.t3.small"
+rds_allocated_storage     = 20
+rds_max_allocated_storage = 100
+rds_multi_az              = false  # Set true for HA (~$50/mo extra)
+database_name             = "saas_db"
+database_username         = "postgres"
+
+# ElastiCache
+redis_node_type = "cache.t3.small"
+redis_num_nodes = 1  # Set 2+ for cluster mode
+
+# SSL Certificate (REQUIRED)
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx"
+
+# Frontend (REQUIRED)
+frontend_repository_url = "https://github.com/your-org/your-repo"
+github_access_token     = "ghp_xxxxxxxxxxxx"  # Use TF_VAR_github_access_token
+frontend_branch         = "main"
+frontend_app_root       = "frontend"
+# frontend_custom_domain = "app.yourdomain.com"
+
+# Bastion (for DB access)
+create_bastion            = true
+bastion_allowed_ssh_cidrs = ["1.2.3.4/32"]  # Your IP
+# bastion_ssh_public_key = "ssh-rsa AAAA..."

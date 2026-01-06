@@ -3013,7 +3013,15 @@ Every request carries tenant context through headers:
 
 ## ☁️ AWS Deployment Guide
 
-### Deployment Architecture
+### Deployment Environments
+
+| Environment | Infrastructure | Cost | Use Case |
+|-------------|---------------|------|----------|
+| **Local** | Docker Compose | $0 | Development |
+| **Budget** | EC2 + RDS + ElastiCache | ~$15-30/mo | Testing/Demo |
+| **Production** | ECS Fargate + ALB | ~$150/mo | Production |
+
+### Production Architecture
 ```mermaid
 graph TB
     subgraph "AWS Cloud"
@@ -3028,8 +3036,13 @@ graph TB
         
         subgraph "Data Layer"
             RDS[(RDS PostgreSQL)]
+            Redis[(ElastiCache Redis)]
             Secrets[Secrets Manager]
             SSM[SSM Parameters]
+        end
+        
+        subgraph "Frontend"
+            Amplify[AWS Amplify]
         end
         
         subgraph "Auth"
@@ -3038,6 +3051,8 @@ graph TB
         end
     end
     
+    Users --> Amplify
+    Users --> ALB
     ALB --> Gateway
     Gateway --> Auth
     Gateway --> Platform
@@ -3045,58 +3060,61 @@ graph TB
     Auth --> Cognito
     Platform --> RDS
     Backend --> RDS
+    Auth --> Redis
     Platform --> Secrets
 ```
 
-### Infrastructure Setup (Terraform)
+### Terraform Modules
 
-**Step 1: Configure remote state** (recommended for production)
+| Module | Purpose | Key Features |
+|--------|---------|--------------|
+| `vpc` | Networking | Multi-AZ, NAT Gateway, Flow Logs |
+| `rds` | PostgreSQL | Secrets Manager, SSM, Multi-AZ option |
+| `elasticache` | Redis | Replication, automatic failover |
+| `ecr` | Container Registry | Lifecycle policies |
+| `ecs-cluster` | ECS Cluster | Container Insights, Fargate |
+| `ecs-service` | ECS Services | Auto-scaling, ALB integration |
+| `alb` | Load Balancer | HTTPS, target groups |
+| `amplify` | Frontend | Angular, auto-deploy |
+| `bastion` | DB Access | Secure SSH tunnel |
+
+### Quick Start
+
+**Budget Deployment (EC2 + Docker Compose):**
 ```bash
-cd terraform
-# Edit backend.tf to use S3 backend
-terraform init -migrate-state
+# Configure
+cd terraform/envs/budget
+cp terraform.tfvars.example terraform.tfvars
+# Edit: frontend_repository_url, github_access_token
+
+# Deploy (infrastructure + application)
+SSH_KEY=~/.ssh/key.pem ./scripts/deploy-budget.sh
 ```
 
-**Step 2: Create infrastructure**
+**Production Deployment (ECS Fargate):**
 ```bash
-terraform apply -var="environment=prod"
+# Configure
+cd terraform/envs/production
+cp terraform.tfvars.example terraform.tfvars
+# Edit: acm_certificate_arn, frontend_repository_url, github_access_token
+
+# Deploy (infrastructure + build + push + deploy)
+./scripts/deploy-production.sh
 ```
-
-This creates:
-- Cognito User Pool with Lambda triggers
-- SSM Parameters for service configuration
-- (Optional) VPC, RDS, ECS clusters via modules
-
-### ECS Fargate Deployment
-
-**Service configuration:**
-```yaml
-# Example task definition
-family: gateway-service
-cpu: 256
-memory: 512
-containers:
-  - name: gateway
-    image: ${ECR_REPO}/gateway-service:latest
-    portMappings:
-      - containerPort: 8080
-    environment:
-      - name: SPRING_PROFILES_ACTIVE
-        value: prod
-```
-
-**Recommended instance sizing:**
-| Service | vCPU | Memory | Min Instances |
-|---------|------|--------|---------------|
-| Gateway | 0.25 | 512MB | 2 |
-| Auth | 0.25 | 512MB | 2 |
-| Platform | 0.25 | 512MB | 1 |
-| Backend | 0.25 | 512MB | 2 |
 
 ### Cost Estimation (Monthly)
 
 > [!NOTE]
 > Estimates based on us-east-1 pricing. Actual costs may vary.
+
+| Component | Budget | Production |
+|-----------|--------|------------|
+| EC2/ECS | $15-20 | $60-80 |
+| RDS | $0-15 | $25-40 |
+| ElastiCache | $10-15 | $20-30 |
+| ALB | N/A | $20-25 |
+| NAT Gateway | N/A | $30+ |
+| **Total** | **~$15-30** | **~$150+** |
 
 | Resource | Free Tier | After Free Tier |
 |----------|-----------|-----------------|

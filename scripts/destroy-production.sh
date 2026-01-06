@@ -1,28 +1,30 @@
 #!/bin/bash
 # ============================================================================
-# Destroy Budget Environment
+# Destroy Production Environment
 # ============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TERRAFORM_DIR="$SCRIPT_DIR/../terraform/envs/budget"
+TERRAFORM_DIR="$SCRIPT_DIR/../terraform/envs/production"
 
-AWS_PROFILE="${AWS_PROFILE:-personal}"
+AWS_PROFILE="${AWS_PROFILE:-production}"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "⚠️  Destroy Budget Environment"
+echo "⚠️  DESTROY Production Environment"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "This will PERMANENTLY DELETE all production resources!"
 echo ""
 
 cd "$TERRAFORM_DIR"
 
 terraform plan -destroy
 echo ""
-read -p "Type 'destroy' to confirm: " CONFIRM
+read -p "Type 'destroy-production' to confirm: " CONFIRM
 
-if [ "$CONFIRM" != "destroy" ]; then
+if [ "$CONFIRM" != "destroy-production" ]; then
     echo "Cancelled"
     exit 0
 fi
@@ -30,4 +32,4 @@ fi
 terraform destroy -auto-approve
 
 echo ""
-echo "✅ Budget environment destroyed. AWS charges stopped."
+echo "✅ Production environment destroyed. AWS charges stopped."

@@ -1,0 +1,268 @@
+# =============================================================================
+# Docker Compose Base Configuration
+# =============================================================================
+# Common services for all environments (local, budget, production)
+# This file should NOT be run directly!
+# 
+# Usage:
+#   Local:  docker-compose up -d  (uses docker-compose.yml which extends this)
+#   Budget: docker-compose -f docker-compose.budget.yml up -d
+# =============================================================================
+
+services:
+  # ============================================================================
+  # OpenFGA - Fine-Grained Authorization
+  # ============================================================================
+  openfga-migrate:
+    image: openfga/openfga:latest
+    container_name: openfga-migrate
+    networks:
+      - awsinfra-net
+    restart: "no"
+    # command and depends_on set by extending file
+
+  openfga:
+    image: openfga/openfga:latest
+    container_name: openfga
+    command: run
+    ports:
+      - "8090:8080"   # HTTP API
+      - "8091:8081"   # gRPC
+      - "3000:3000"   # Playground UI
+    networks:
+      - awsinfra-net
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=:8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ============================================================================
+  # OpenTelemetry Collector
+  # ============================================================================
+  otel-collector:
+    build:
+      context: ./docker/otel-collector
+      dockerfile: Dockerfile
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    env_file:
+      - .env
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    environment:
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_PROFILE: ""
+    networks:
+      - awsinfra-net
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "13133:13133"
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
+  # ============================================================================
+  # Eureka Service Discovery
+  # ============================================================================
+  eureka-server:
+    build:
+      context: ./eureka-server
+      dockerfile: Dockerfile
+    image: awsinfra-eureka-server:1.0.0
+    container_name: eureka-server
+    environment:
+      SPRING_APPLICATION_NAME: eureka-server
+      SERVER_PORT: 8761
+      EUREKA_INSTANCE_HOSTNAME: eureka-server
+      EUREKA_CLIENT_REGISTER_WITH_EUREKA: "false"
+      EUREKA_CLIENT_FETCH_REGISTRY: "false"
+    networks:
+      - awsinfra-net
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8761/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+
+  # ============================================================================
+  # Gateway Service
+  # ============================================================================
+  gateway-service:
+    build:
+      context: ./gateway-service
+      dockerfile: Dockerfile
+    image: awsinfra-gateway-service:1.0.0
+    container_name: gateway-service
+    env_file:
+      - .env
+    environment:
+      SPRING_APPLICATION_NAME: gateway-service
+      SERVER_PORT: 8080
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: gateway-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,gateway
+      AWS_REGION: us-east-1
+      AWS_PROFILE: ""
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      # REDIS_HOST and REDIS_PORT set by extending file
+    networks:
+      - awsinfra-net
+    ports:
+      - "8080:8080"
+      - "5005:5005"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+
+  # ============================================================================
+  # Backend Service
+  # ============================================================================
+  backend-service:
+    build:
+      context: ./backend-service
+      dockerfile: Dockerfile
+    image: awsinfra-backend-service:1.0.0
+    container_name: backend-service
+    environment:
+      SPRING_APPLICATION_NAME: backend-service
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: backend-service
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
+      server.port: 8082
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      OPENFGA_ENABLED: "true"
+      OPENFGA_API_URL: http://openfga:8080
+      # DB and REDIS config set by extending file
+    networks:
+      - awsinfra-net
+    ports:
+      - "8082:8082"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+
+  # ============================================================================
+  # Auth Service
+  # ============================================================================
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    image: awsinfra-auth-service:1.0.0
+    container_name: auth-service
+    env_file:
+      - .env
+    environment:
+      SPRING_APPLICATION_NAME: auth-service
+      SPRING_PROFILES_ACTIVE: ${AUTH_PROFILE:-}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      server.port: 8081
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: auth-service
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
+      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-noreply@example.com}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      OPENFGA_ENABLED: "true"
+      OPENFGA_API_URL: http://openfga:8080
+      # DB and REDIS config set by extending file
+    volumes:
+      - ~/.aws:/root/.aws:ro
+    networks:
+      - awsinfra-net
+    ports:
+      - "8081:8081"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/auth/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+
+  # ============================================================================
+  # Platform Service
+  # ============================================================================
+  platform-service:
+    build:
+      context: ./platform-service
+      dockerfile: Dockerfile
+    image: awsinfra-platform-service:1.0.0
+    container_name: platform-service
+    env_file:
+      - .env
+    environment:
+      SPRING_APPLICATION_NAME: platform-service
+      SERVER_PORT: 8083
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: platform-service
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      BILLING_ENABLED: ${BILLING_ENABLED:-false}
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_STARTER: ${STRIPE_PRICE_STARTER:-}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      STRIPE_PRICE_ENTERPRISE: ${STRIPE_PRICE_ENTERPRISE:-}
+      STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost:4200/app/settings/billing?success=true}
+      STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost:4200/app/settings/billing?canceled=true}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      # DB and REDIS config set by extending file
+    networks:
+      - awsinfra-net
+    ports:
+      - "8083:8083"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8083/platform/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+
+networks:
+  awsinfra-net:
+    driver: bridge

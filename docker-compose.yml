@@ -1,4 +1,19 @@
+# =============================================================================
+# Docker Compose Local Development
+# =============================================================================
+# Extends base configuration with local Postgres and Redis containers
+# 
+# Usage:
+#   docker-compose up -d
+# =============================================================================
+
+include:
+  - docker-compose.base.yml
+
 services:
+  # ============================================================================
+  # PostgreSQL (Local Container)
+  # ============================================================================
   postgres:
     image: postgres:16-alpine
     container_name: postgres
@@ -18,8 +33,11 @@ services:
       retries: 5
     restart: unless-stopped
     ports:
-      - "5432:5432" # remove in production
+      - "5432:5432"
 
+  # ============================================================================
+  # Redis (Local Container)
+  # ============================================================================
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -38,133 +56,32 @@ services:
     restart: unless-stopped
 
   # ============================================================================
-  # OpenFGA - Fine-Grained Authorization (OPTIONAL)
+  # OpenFGA - Connect to Local Postgres
   # ============================================================================
-  # Uncomment to enable OpenFGA for resource-level permissions (DAM, file sharing)
-  # Also set openfga.enabled=true in your application.yml
-  #
-  # Migration service runs once on startup to apply database schema
   openfga-migrate:
-    image: openfga/openfga:latest
-    container_name: openfga-migrate
     command: migrate --datastore-engine postgres --datastore-uri "postgres://postgres:postgres@postgres:5432/openfga?sslmode=disable"
-    networks:
-      - awsinfra-net
     depends_on:
       postgres:
         condition: service_healthy
-    restart: "no"
 
   openfga:
-    image: openfga/openfga:latest
-    container_name: openfga
-    command: run
-    ports:
-      - "8090:8080"   # HTTP API
-      - "8091:8081"   # gRPC
-      - "3000:3000"   # Playground UI (localhost:3000)
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
       - OPENFGA_DATASTORE_URI=postgres://postgres:postgres@postgres:5432/openfga
       - OPENFGA_PLAYGROUND_ENABLED=true
-    networks:
-      - awsinfra-net
     depends_on:
       postgres:
         condition: service_healthy
       openfga-migrate:
         condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=:8081"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-    restart: unless-stopped
 
-  # OpenTelemetry Collector for AWS X-Ray distributed tracing
-  otel-collector:
-    build:
-      context: ./docker/otel-collector
-      dockerfile: Dockerfile
-    container_name: otel-collector
-    command: ["--config=/etc/otel-collector-config.yaml"]
-    env_file:
-      - .env
-    volumes:
-      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
-    environment:
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_PROFILE: ""  # Override profile from .env - OTEL Collector uses credentials directly
-    networks:
-      - awsinfra-net
-    ports:
-      - "4317:4317" # OTLP gRPC
-      - "4318:4318" # OTLP HTTP
-      - "13133:13133" # Health check
-    healthcheck:
-      # Disabled: AWS OTEL Collector minimal image lacks wget/curl
-      disable: true
-    restart: unless-stopped
-
-  eureka-server:
-    build:
-      context: ./eureka-server
-      dockerfile: Dockerfile
-    image: awsinfra-eureka-server:1.0.0
-    container_name: eureka-server
-    environment:
-      SPRING_APPLICATION_NAME: eureka-server
-      SERVER_PORT: 8761
-      EUREKA_INSTANCE_HOSTNAME: eureka-server
-      EUREKA_CLIENT_REGISTER_WITH_EUREKA: "false"
-      EUREKA_CLIENT_FETCH_REGISTRY: "false"
-    networks:
-      - awsinfra-net
-    ports:
-      - "8761:8761"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q --spider http://localhost:8761/actuator/health || exit 1",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 40s
-    restart: unless-stopped
-
+  # ============================================================================
+  # Gateway - Connect to Local Redis
+  # ============================================================================
   gateway-service:
-    build:
-      context: ./gateway-service
-      dockerfile: Dockerfile
-    image: awsinfra-gateway-service:1.0.0
-    container_name: gateway-service
-    env_file:
-      - .env
     environment:
-      SPRING_APPLICATION_NAME: gateway-service
-      SERVER_PORT: 8080
-      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
-      EUREKA_INSTANCE_HOSTNAME: gateway-service
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
-      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,gateway
-      AWS_REGION: us-east-1
-      AWS_PROFILE: ""
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      # NOTE: Cognito config (USER_POOL_ID, SPA_CLIENT_ID) loaded from SSM via entrypoint.sh
-    networks:
-      - awsinfra-net
-    ports:
-      - "8080:8080"
-      - "5005:5005"
     depends_on:
       eureka-server:
         condition: service_healthy
@@ -172,181 +89,59 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_started
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q --spider http://localhost:8080/actuator/health || exit 1",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 120s
-    restart: unless-stopped
 
+  # ============================================================================
+  # Backend - Connect to Local Postgres & Redis
+  # ============================================================================
   backend-service:
-    build:
-      context: ./backend-service
-      dockerfile: Dockerfile
-    image: awsinfra-backend-service:1.0.0
-    container_name: backend-service
     environment:
-      SPRING_APPLICATION_NAME: backend-service
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/awsinfra
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
-      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
-      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
-      EUREKA_INSTANCE_HOSTNAME: backend-service
-      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
-      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
-      server.port: 8082
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
-      # OpenFGA Fine-Grained Authorization
-      OPENFGA_ENABLED: "true"
-      OPENFGA_API_URL: http://openfga:8080
-    networks:
-      - awsinfra-net
-    ports:
-      - "8082:8082"
     depends_on:
       eureka-server:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q --spider http://localhost:8082/actuator/health || exit 1",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 120s
-    restart: unless-stopped
 
+  # ============================================================================
+  # Auth - Connect to Local Postgres & Redis
+  # ============================================================================
   auth-service:
-    build:
-      context: ./auth-service
-      dockerfile: Dockerfile
-    image: awsinfra-auth-service:1.0.0
-    container_name: auth-service
-    env_file:
-      - .env
     environment:
-      SPRING_APPLICATION_NAME: auth-service
-      # Enable prod profile for real SES email sending (remove for dev mode with mock emails)
-      SPRING_PROFILES_ACTIVE: ${AUTH_PROFILE:-}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/awsinfra
-      server.port: 8081
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: awsinfra
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
-      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
       PLATFORM_DATASOURCE_URL: jdbc:postgresql://postgres:5432/awsinfra
-      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
-      EUREKA_INSTANCE_HOSTNAME: auth-service
-      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
-      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
-      # SES Configuration (only used when SPRING_PROFILES_ACTIVE=prod)
-      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-noreply@example.com}
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      # OpenFGA Fine-Grained Authorization
-      OPENFGA_ENABLED: "true"
-      OPENFGA_API_URL: http://openfga:8080
-    volumes:
-      - ~/.aws:/root/.aws:ro
-    networks:
-      - awsinfra-net
-    ports:
-      - "8081:8081"
     depends_on:
       eureka-server:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q --spider http://localhost:8081/auth/actuator/health || exit 1",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 120s
-    restart: unless-stopped
 
+  # ============================================================================
+  # Platform - Connect to Local Postgres & Redis
+  # ============================================================================
   platform-service:
-    build:
-      context: ./platform-service
-      dockerfile: Dockerfile
-    image: awsinfra-platform-service:1.0.0
-    container_name: platform-service
-    env_file:
-      - .env
     environment:
-      SPRING_APPLICATION_NAME: platform-service
-      SERVER_PORT: 8083
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/awsinfra
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
-      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
-      EUREKA_INSTANCE_HOSTNAME: platform-service
-      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
-      # Stripe Billing Configuration
-      BILLING_ENABLED: ${BILLING_ENABLED:-false}
-      STRIPE_API_KEY: ${STRIPE_API_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_PRICE_STARTER: ${STRIPE_PRICE_STARTER:-}
-      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
-      STRIPE_PRICE_ENTERPRISE: ${STRIPE_PRICE_ENTERPRISE:-}
-      STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost:4200/app/settings/billing?success=true}
-      STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost:4200/app/settings/billing?canceled=true}
-      # AWS credentials for SSM and Cognito SDK access
-      # Note: Cognito config (USER_POOL_ID, DOMAIN) loaded from SSM via entrypoint.sh
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-    networks:
-      - awsinfra-net
-    ports:
-      - "8083:8083"
     depends_on:
       eureka-server:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q --spider http://localhost:8083/platform/actuator/health || exit 1",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 120s
-    restart: unless-stopped
 
 volumes:
   postgres_data:
   redis_data:
-
-networks:
-  awsinfra-net:
-    driver: bridge

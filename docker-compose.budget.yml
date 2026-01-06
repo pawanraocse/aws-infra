@@ -1,0 +1,90 @@
+# =============================================================================
+# Docker Compose Budget Environment
+# =============================================================================
+# Extends base configuration with external RDS and ElastiCache
+# 
+# Usage:
+#   1. Set environment variables in .env.budget
+#   2. docker-compose -f docker-compose.budget.yml up -d
+# 
+# Required .env.budget variables:
+#   - DB_HOST (RDS endpoint)
+#   - DB_PORT (5432)
+#   - DB_NAME (saas_db)
+#   - DB_USERNAME (postgres)
+#   - DB_PASSWORD (from Secrets Manager)
+#   - REDIS_HOST (ElastiCache endpoint)
+#   - REDIS_PORT (6379)
+# =============================================================================
+
+include:
+  - docker-compose.base.yml
+
+services:
+  # ============================================================================
+  # OpenFGA - Connect to RDS
+  # ============================================================================
+  openfga-migrate:
+    command: migrate --datastore-engine postgres --datastore-uri "postgres://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/openfga?sslmode=require"
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgres://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/openfga?sslmode=require
+
+  openfga:
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgres://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/openfga?sslmode=require
+      - OPENFGA_PLAYGROUND_ENABLED=true
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+
+  # ============================================================================
+  # Gateway - Connect to ElastiCache
+  # ============================================================================
+  gateway-service:
+    environment:
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+
+  # ============================================================================
+  # Backend - Connect to RDS and ElastiCache
+  # ============================================================================
+  backend-service:
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+
+  # ============================================================================
+  # Auth - Connect to RDS and ElastiCache
+  # ============================================================================
+  auth-service:
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      PLATFORM_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+
+  # ============================================================================
+  # Platform - Connect to RDS and ElastiCache
+  # ============================================================================
+  platform-service:
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT:-6379}

@@ -37,6 +37,7 @@ build/
 *.tfstate
 *.tfstate.*
 *.tfvars
+!*.tfvars.example
 crash.log
 crash.*.log
 override.tf
@@ -51,7 +52,6 @@ tfplan.json
 ### Terraform Sensitive Files ###
 terraform/cognito-config.env
 terraform/*.env
-terraform/.terraform.lock.hcl
 
 ### Lambda Generated Files ###
 terraform/lambda/*.zip

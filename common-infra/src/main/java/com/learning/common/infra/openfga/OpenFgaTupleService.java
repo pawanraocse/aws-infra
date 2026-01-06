@@ -119,4 +119,23 @@ public class OpenFgaTupleService {
                 organizationId, projectId);
         fgaClient.writeTuple("organization:" + organizationId, "organization", "project", projectId);
     }
+
+    /**
+     * List all tuples (access grants) for a specific resource.
+     * Used by the Permission Management UI to show who has access.
+     * 
+     * @param resourceType Type of resource (folder, document, project)
+     * @param resourceId   Resource identifier
+     * @return List of tuples showing user IDs and their relations
+     */
+    public java.util.List<TupleInfo> listTuples(String resourceType, String resourceId) {
+        log.info("Listing tuples for {}:{}", resourceType, resourceId);
+        return fgaClient.readTuples(resourceType, resourceId);
+    }
+
+    /**
+     * Tuple information for listing access grants.
+     */
+    public record TupleInfo(String userId, String relation) {
+    }
 }

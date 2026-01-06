@@ -64,8 +64,9 @@ public class SecurityConfiguration {
                                                                 "/api/v1/auth/reset-password",
                                                                 "/api/v1/invitations/validate",
                                                                 "/api/v1/invitations/accept",
-                                                                "/api/v1/permissions/**", // Internal service-to-service
-                                                                                          // calls
+                                                                "/api/v1/resource-permissions/**", // Internal
+                                                                                                   // service-to-service
+                                                                // calls
                                                                 "/internal/**", // Internal migration and
                                                                                 // service-to-service calls
                                                                 // Gateway-authenticated endpoints (X-User-Id header
@@ -77,7 +78,8 @@ public class SecurityConfiguration {
                                                                 "/api/v1/roles/**",
                                                                 "/api/v1/invitations/**",
                                                                 "/api/v1/users/**",
-                                                                "/api/v1/groups/**", // Group mappings (Gateway validates JWT)
+                                                                "/api/v1/groups/**", // Group mappings (Gateway
+                                                                                     // validates JWT)
                                                                 "/api/v1/sso/**", // SSO config (Gateway validates JWT)
                                                                 "/api/v1/account/**") // Account deletion (Gateway
                                                                                       // validates JWT)

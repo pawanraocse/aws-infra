@@ -1,7 +1,7 @@
 # High-Level Design: SaaS Foundation & Project Template
 
-**Version:** 7.1 (API Key Auth)
-**Last Updated:** 2025-12-28
+**Version:** 7.2 (OpenFGA Fine-Grained Access)
+**Last Updated:** 2026-01-06
 **Core Mission:** A production-ready, ultra-decoupled foundation for launching multi-tenant SaaS applications in days, not months.
 
 
@@ -263,18 +263,275 @@ This section provides a complete breakdown of what each service does and what it
 │              │ (store-per-tenant)    │                                   │
 │              └───────────────────────┘                                   │
 │                                                                          │
-│   Production Hardening:                                                  │
-│   - Client caching (ConcurrentHashMap by storeId)                        │
-│   - Input validation on all params                                       │
-│   - Non-throwing write ops (log errors, don't fail caller)               │
-│   - Fail-safe deny on read errors                                        │
-│                                                                          │
-│   When openfga.enabled=false:                                            │
-│   - OpenFgaNoOpClient is injected (no-op, returns false/empty)          │
-│   - No calls to OpenFGA container                                        │
-│   - Existing RBAC via @RequirePermission still works                    │
-│                                                                          │
 └──────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🔐 OpenFGA Fine-Grained Authorization Design
+
+### What is OpenFGA?
+
+OpenFGA is an open-source, high-performance authorization engine that implements **Relationship-Based Access Control (ReBAC)**. It's based on Google Zanzibar, the system that powers authorization for Google Drive, YouTube, and other Google services.
+
+### Why ReBAC over Traditional RBAC?
+
+| Feature | Traditional RBAC | OpenFGA (ReBAC) |
+|---------|------------------|-----------------|
+| **Model** | User → Role → Permission | User → Relation → Object |
+| **Granularity** | Role-level (e.g., "editor") | Object-level (e.g., "editor of folder X") |
+| **Sharing** | Typically global | Per-object sharing ("share with Bob") |
+| **Hierarchies** | Limited | Native (folders contain documents) |
+| **Scale** | Thousands of users | Billions of tuples |
+| **Inheritance** | Manual | Automatic (parent permissions flow down) |
+
+### Authorization Model
+
+```mermaid
+graph TB
+    subgraph "Authorization Model (DSL)"
+        User([user])
+        Org[organization]
+        Project[project]
+        Folder[folder]
+        Document[document]
+        
+        User -->|member| Org
+        User -->|admin| Org
+        Org -->|parent| Project
+        User -->|owner| Project
+        User -->|editor| Project
+        User -->|viewer| Project
+        Project -->|parent| Folder
+        User -->|owner| Folder
+        User -->|editor| Folder
+        User -->|viewer| Folder
+        Folder -->|parent| Document
+        User -->|owner| Document
+        User -->|editor| Document
+        User -->|viewer| Document
+    end
+    
+    style User fill:#f9f,stroke:#333
+    style Org fill:#bbf,stroke:#333
+    style Project fill:#bfb,stroke:#333
+    style Folder fill:#fbf,stroke:#333
+    style Document fill:#ff9,stroke:#333
+```
+
+**Model Definition (DSL):**
+```dsl
+model
+  schema 1.1
+
+type user
+
+type organization
+  relations
+    define admin: [user]
+    define member: [user] or admin
+
+type project
+  relations
+    define parent: [organization]
+    define owner: [user] or admin from parent
+    define editor: [user] or owner
+    define viewer: [user] or editor
+
+type folder
+  relations
+    define parent: [project, folder]
+    define owner: [user] or owner from parent
+    define editor: [user] or owner or editor from parent
+    define viewer: [user] or editor or viewer from parent
+    define can_share: owner or editor
+
+type document
+  relations
+    define parent: [folder]
+    define owner: [user] or owner from parent
+    define editor: [user] or owner or editor from parent
+    define viewer: [user] or editor or viewer from parent
+```
+
+### Multi-Tenant Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    OpenFGA Multi-Tenant Architecture                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                      platform-service                            │  │
+│   │  Tenant Provisioning:                                            │  │
+│   │  1. Create tenant record                                         │  │
+│   │  2. Provision tenant database                                    │  │
+│   │  3. OpenFgaProvisionAction creates FGA store                     │  │
+│   │  4. Store `fga_store_id` in tenant table                         │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                │                                        │
+│                                ▼                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                      OpenFGA Server                              │  │
+│   │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐    │  │
+│   │  │ Tenant A Store │  │ Tenant B Store │  │ Tenant C Store │    │  │
+│   │  │ store_id: abc  │  │ store_id: def  │  │ store_id: ghi  │    │  │
+│   │  │                │  │                │  │                │    │  │
+│   │  │ Tuples:        │  │ Tuples:        │  │ Tuples:        │    │  │
+│   │  │ user:1#owner   │  │ user:5#admin   │  │ user:8#viewer  │    │  │
+│   │  │ folder:x       │  │ project:y      │  │ doc:z          │    │  │
+│   │  └────────────────┘  └────────────────┘  └────────────────┘    │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                ▲                                        │
+│                 ┌──────────────┼──────────────┐                        │
+│                 │              │              │                        │
+│   ┌─────────────┴───┐  ┌──────┴─────┐  ┌────┴────────────┐           │
+│   │  auth-service   │  │backend-svc │  │ other-services  │           │
+│   │  OpenFgaWriter  │  │OpenFgaReader│  │ OpenFgaReader  │           │
+│   │  (writes tuples)│  │(checks only)│  │ (checks only)  │           │
+│   └─────────────────┘  └────────────┘  └────────────────┘           │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Resilience Patterns
+
+The OpenFGA integration includes production-grade resilience:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       OpenFGA Resilience Stack                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                    OpenFgaResilienceConfig                       │  │
+│   │                                                                  │  │
+│   │  RETRY (Resilience4j)          CIRCUIT BREAKER (Resilience4j)   │  │
+│   │  ─────────────────────         ─────────────────────────────    │  │
+│   │  • Max Attempts: 3             • Failure Rate: 50%              │  │
+│   │  • Initial Delay: 100ms        • Minimum Calls: 5               │  │
+│   │  • Multiplier: 2.0             • Wait Duration: 30s             │  │
+│   │  • Max Delay: 1s               • Permitted in Half-Open: 3      │  │
+│   │                                                                  │  │
+│   │  Retryable: Connection         States:                          │  │
+│   │  timeouts, transient           CLOSED → OPEN → HALF_OPEN        │  │
+│   │  network failures              (auto-recovery)                   │  │
+│   │                                                                  │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                │                                        │
+│                                ▼                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                   OpenFgaHealthIndicator                         │  │
+│   │                                                                  │  │
+│   │  Reports to Spring Actuator /actuator/health:                   │  │
+│   │                                                                  │  │
+│   │  • UP: Circuit CLOSED, FGA reachable                            │  │
+│   │  • DEGRADED: Circuit HALF_OPEN (recovering)                     │  │
+│   │  • DOWN: Circuit OPEN or FGA unreachable                        │  │
+│   │                                                                  │  │
+│   │  Metrics exposed:                                                │  │
+│   │  • openfga.success.count                                        │  │
+│   │  • openfga.failure.count                                        │  │
+│   │  • openfga.circuit.state                                        │  │
+│   │                                                                  │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│   FAIL-SAFE BEHAVIOR:                                                   │
+│   • Read operations (check): Return FALSE on failure (deny access)     │
+│   • Write operations: Log error, don't fail caller (non-throwing)      │
+│   • When openfga.enabled=false: NoOp client returns false/empty        │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Rate Limiting
+
+Permission API endpoints are protected with per-user rate limiting:
+
+| Endpoint | Rate Limit | Configuration |
+|----------|------------|---------------|
+| `POST /api/v1/resource-permissions/share` | 10 req/sec | Per user |
+| `DELETE /api/v1/resource-permissions/revoke` | 10 req/sec | Per user |
+| `GET /api/v1/resource-permissions/list` | 10 req/sec | Per user |
+
+**Implementation:** `ApiRateLimiter` using Resilience4j RateLimiter with sliding window.
+
+### API Examples
+
+**Share Access:**
+```bash
+POST /auth/api/v1/resource-permissions/share
+Authorization: Bearer <JWT>
+
+{
+  "resourceType": "folder",
+  "resourceId": "folder-123",
+  "targetUserId": "user-456",
+  "relation": "editor"
+}
+```
+
+**Check Permission:**
+```bash
+GET /auth/api/v1/resource-permissions/check
+  ?userId=user-456
+  &resourceType=folder
+  &resourceId=folder-123
+  &relation=viewer
+
+Response: { "allowed": true }
+```
+
+**List Access:**
+```bash
+GET /auth/api/v1/resource-permissions/list
+  ?resourceType=folder
+  &resourceId=folder-123
+
+Response: [
+  { "userId": "user-123", "relation": "owner" },
+  { "userId": "user-456", "relation": "editor" }
+]
+```
+
+### Security Validations
+
+| Validation | Endpoint | Purpose |
+|------------|----------|---------|
+| **User Exists** | share | Prevent granting access to non-existent users |
+| **Owner Check** | revoke | Only owner/can_share can revoke permissions |
+| **Rate Limiting** | all | Prevent API abuse (10 req/sec/user) |
+
+### Key Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `OpenFgaClientWrapper` | common-infra | Multi-tenant client with caching |
+| `OpenFgaResilienceConfig` | common-infra | Retry + Circuit Breaker |
+| `OpenFgaHealthIndicator` | common-infra | Actuator health endpoint |
+| `ApiRateLimiter` | common-infra | Per-user rate limiting |
+| `ResourcePermissionController` | auth-service | Permission management API |
+| `OpenFgaProvisionAction` | platform-service | Store creation at signup |
+
+### Configuration
+
+```yaml
+openfga:
+  enabled: true                    # Feature flag
+  api-url: http://openfga:8080    # OpenFGA server URL
+  
+# Resilience (application.yml)
+resilience4j:
+  retry:
+    instances:
+      openfga:
+        max-attempts: 3
+        wait-duration: 100ms
+  circuitbreaker:
+    instances:
+      openfga:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
 ```
 
 ---

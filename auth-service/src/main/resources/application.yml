@@ -85,6 +85,7 @@ aws:
 openfga:
   enabled: ${OPENFGA_ENABLED:false}
   api-url: ${OPENFGA_API_URL:http://localhost:8090}
+  store-id: 01KE7EX53V5K2PZCS9TC87SGJ9
 
 
 server:

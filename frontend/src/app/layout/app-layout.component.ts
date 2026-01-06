@@ -61,6 +61,7 @@ export class AppLayoutComponent {
         items: [
           { label: 'Users', icon: 'pi pi-users', routerLink: '/app/admin/users' },
           { label: 'Roles', icon: 'pi pi-id-card', routerLink: '/app/admin/roles' },
+          { label: 'Resource Permissions', icon: 'pi pi-lock', routerLink: '/app/admin/permissions' },
           { label: 'Organization', icon: 'pi pi-building', routerLink: '/app/admin/settings/organization' },
           { separator: true },
           { label: 'SSO Settings', icon: 'pi pi-shield', routerLink: '/app/admin/settings/sso' },

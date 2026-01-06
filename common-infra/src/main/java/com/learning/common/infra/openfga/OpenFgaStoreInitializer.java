@@ -8,11 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
  * Initializes OpenFGA store and authorization model on application startup.
@@ -81,33 +77,33 @@ public class OpenFgaStoreInitializer {
     }
 
     private void applyAuthorizationModel(OpenFgaClient client) throws Exception {
-        // Try to load model from classpath
-        String modelJson = loadModelJson();
+        log.info("Applying authorization model programmatically...");
 
-        if (modelJson != null) {
-            // Parse and apply model
-            // Note: OpenFGA SDK expects JSON format, not DSL
-            // For production, convert model.fga to JSON using FGA CLI
-            log.info("Authorization model loaded from classpath");
+        // Define 'user' type
+        var userType = new dev.openfga.sdk.api.model.TypeDefinition()
+                .type("user");
 
-            // For now, log that model should be applied manually
-            log.warn("⚠️ Apply authorization model manually using FGA CLI:");
-            log.warn("   fga model write --store-id <store_id> --file openfga/model.fga");
-        } else {
-            log.warn("No authorization model found in classpath. Apply manually.");
-        }
-    }
+        // Define 'folder' type with simple relations
+        var folderType = new dev.openfga.sdk.api.model.TypeDefinition()
+                .type("folder")
+                .relations(java.util.Map.of(
+                        "viewer", new dev.openfga.sdk.api.model.Userset()._this(new Object()),
+                        "editor", new dev.openfga.sdk.api.model.Userset()._this(new Object()),
+                        "owner", new dev.openfga.sdk.api.model.Userset()._this(new Object())));
 
-    private String loadModelJson() {
-        try {
-            // Try to load from classpath: openfga/model.json
-            var resource = new ClassPathResource("openfga/model.json");
-            if (resource.exists()) {
-                return Files.readString(Path.of(resource.getURI()));
-            }
-        } catch (Exception e) {
-            log.debug("Could not load model.json from classpath: {}", e.getMessage());
-        }
-        return null;
+        // Define 'document' type
+        var documentType = new dev.openfga.sdk.api.model.TypeDefinition()
+                .type("document")
+                .relations(java.util.Map.of(
+                        "viewer", new dev.openfga.sdk.api.model.Userset()._this(new Object()),
+                        "editor", new dev.openfga.sdk.api.model.Userset()._this(new Object()),
+                        "owner", new dev.openfga.sdk.api.model.Userset()._this(new Object())));
+
+        var request = new dev.openfga.sdk.api.model.WriteAuthorizationModelRequest()
+                .schemaVersion("1.1")
+                .typeDefinitions(java.util.List.of(userType, folderType, documentType));
+
+        var response = client.writeAuthorizationModel(request).get();
+        log.info("✅ Authorization model written. ID: {}", response.getAuthorizationModelId());
     }
 }

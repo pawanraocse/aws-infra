@@ -34,7 +34,7 @@ export interface PricingTier {
 })
 export class BillingService {
     private http = inject(HttpClient);
-    private baseUrl = `${environment.apiUrl}/platform-service/platform/api/v1/billing`;
+    private baseUrl = `${environment.apiUrl}/platform-service/api/v1/billing`;
 
     // Available pricing tiers (can be fetched from backend in future)
     readonly tiers: PricingTier[] = [

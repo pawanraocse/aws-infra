@@ -50,14 +50,18 @@ public class OpenFgaClientWrapper implements OpenFgaReader, OpenFgaWriter {
 
     private final OpenFgaProperties properties;
     private final TenantRegistryService tenantRegistry;
+    private final OpenFgaResilienceConfig resilience;
 
     // Cache clients per store ID to avoid per-request creation overhead
     private final Map<String, OpenFgaClient> clientCache = new ConcurrentHashMap<>();
 
-    public OpenFgaClientWrapper(OpenFgaProperties properties, TenantRegistryService tenantRegistry) {
+    public OpenFgaClientWrapper(OpenFgaProperties properties,
+            TenantRegistryService tenantRegistry,
+            OpenFgaResilienceConfig resilience) {
         this.properties = Objects.requireNonNull(properties, "OpenFgaProperties cannot be null");
         this.tenantRegistry = Objects.requireNonNull(tenantRegistry, "TenantRegistryService cannot be null");
-        log.info("OpenFGA client wrapper initialized: url={}, multi-tenant mode enabled",
+        this.resilience = Objects.requireNonNull(resilience, "OpenFgaResilienceConfig cannot be null");
+        log.info("OpenFGA client wrapper initialized: url={}, resilience enabled",
                 properties.getApiUrl());
     }
 
@@ -68,24 +72,35 @@ public class OpenFgaClientWrapper implements OpenFgaReader, OpenFgaWriter {
      */
     private Optional<String> getCurrentStoreId() {
         String tenantId = TenantContext.getCurrentTenant();
+
+        // Fallback to global store ID if no tenant context (e.g. system tasks)
         if (tenantId == null || tenantId.isBlank()) {
-            log.debug("No tenant context, cannot determine FGA store ID");
+            if (properties.getStoreId() != null && !properties.getStoreId().isBlank()) {
+                log.debug("No tenant context, using global FGA store ID");
+                return Optional.of(properties.getStoreId());
+            }
+            log.debug("No tenant context and no global store ID, cannot determine FGA store");
             return Optional.empty();
         }
 
         try {
             TenantDbConfig config = tenantRegistry.load(tenantId);
-            if (config == null) {
-                log.warn("Tenant config not found for: {}", tenantId);
-                return Optional.empty();
-            }
-            if (config.fgaStoreId() == null || config.fgaStoreId().isBlank()) {
-                log.debug("Tenant {} has no FGA store ID configured", tenantId);
+
+            // If tenant config missing or has no store ID, fallback to global default
+            if (config == null || config.fgaStoreId() == null || config.fgaStoreId().isBlank()) {
+                if (properties.getStoreId() != null && !properties.getStoreId().isBlank()) {
+                    log.debug("Tenant {} has no FGA store ID, using global default", tenantId);
+                    return Optional.of(properties.getStoreId());
+                }
+                log.debug("Tenant {} has no FGA store ID and no global default configured", tenantId);
                 return Optional.empty();
             }
             return Optional.of(config.fgaStoreId());
         } catch (Exception e) {
-            log.warn("Failed to load tenant config for FGA store lookup: {}", e.getMessage());
+            log.warn("Failed to load tenant config: {}, falling back to global default", e.getMessage());
+            if (properties.getStoreId() != null && !properties.getStoreId().isBlank()) {
+                return Optional.of(properties.getStoreId());
+            }
             return Optional.empty();
         }
     }
@@ -163,24 +178,25 @@ public class OpenFgaClientWrapper implements OpenFgaReader, OpenFgaWriter {
             return false;
         }
 
-        try {
-            var request = new ClientCheckRequest()
-                    .user("user:" + userId)
-                    .relation(relation)
-                    ._object(objectType + ":" + objectId);
+        // Use resilience wrapper for retry and circuit breaker
+        return resilience.executeWithResilience("check", () -> {
+            try {
+                var request = new ClientCheckRequest()
+                        .user("user:" + userId)
+                        .relation(relation)
+                        ._object(objectType + ":" + objectId);
 
-            var response = clientOpt.get().check(request).get();
-            boolean allowed = Boolean.TRUE.equals(response.getAllowed());
+                var response = clientOpt.get().check(request).get();
+                boolean allowed = Boolean.TRUE.equals(response.getAllowed());
 
-            log.debug("OpenFGA check: user={}, relation={}, object={}:{} -> {}",
-                    userId, relation, objectType, objectId, allowed);
+                log.debug("OpenFGA check: user={}, relation={}, object={}:{} -> {}",
+                        userId, relation, objectType, objectId, allowed);
 
-            return allowed;
-        } catch (Exception e) {
-            log.error("OpenFGA check failed for user={}, relation={}, object={}:{}: {}",
-                    userId, relation, objectType, objectId, e.getMessage());
-            return false; // Fail-safe: deny on error
-        }
+                return allowed;
+            } catch (Exception e) {
+                throw new RuntimeException("OpenFGA check failed", e);
+            }
+        }, false); // Fail-safe: deny on error
     }
 
     /**
@@ -218,6 +234,54 @@ public class OpenFgaClientWrapper implements OpenFgaReader, OpenFgaWriter {
         }
     }
 
+    /**
+     * Read all tuples (access grants) for a specific object.
+     * Used to list who has access to a resource.
+     * 
+     * @param objectType Type of object (folder, document)
+     * @param objectId   Object identifier
+     * @return List of TupleInfo with userId and relation
+     */
+    public List<OpenFgaTupleService.TupleInfo> readTuples(String objectType, String objectId) {
+        if (objectType == null || objectType.isBlank() || objectId == null || objectId.isBlank()) {
+            log.warn("Invalid parameters for readTuples, returning empty list");
+            return List.of();
+        }
+
+        var clientOpt = getClientForCurrentTenant();
+        if (clientOpt.isEmpty()) {
+            return List.of();
+        }
+
+        try {
+            var request = new dev.openfga.sdk.api.client.model.ClientReadRequest()
+                    ._object(objectType + ":" + objectId);
+
+            var response = clientOpt.get().read(request).get();
+            var tuples = response.getTuples();
+
+            if (tuples == null || tuples.isEmpty()) {
+                return List.of();
+            }
+
+            return tuples.stream()
+                    .filter(t -> t.getKey() != null)
+                    .map(t -> {
+                        String user = t.getKey().getUser();
+                        String relation = t.getKey().getRelation();
+                        // Extract userId from "user:xyz" format
+                        String userId = user != null && user.startsWith("user:")
+                                ? user.substring(5)
+                                : user;
+                        return new OpenFgaTupleService.TupleInfo(userId, relation);
+                    })
+                    .toList();
+        } catch (Exception e) {
+            log.error("OpenFGA readTuples failed for {}:{}: {}", objectType, objectId, e.getMessage());
+            return List.of();
+        }
+    }
+
     // ========================================================================
     // OpenFgaWriter Implementation
     // ========================================================================
@@ -238,24 +302,25 @@ public class OpenFgaClientWrapper implements OpenFgaReader, OpenFgaWriter {
             return;
         }
 
-        try {
-            var tuple = new ClientTupleKey()
-                    .user("user:" + userId)
-                    .relation(relation)
-                    ._object(objectType + ":" + objectId);
+        // Use resilience wrapper for retry and circuit breaker
+        resilience.executeWithResilience("writeTuple", () -> {
+            try {
+                var tuple = new ClientTupleKey()
+                        .user("user:" + userId)
+                        .relation(relation)
+                        ._object(objectType + ":" + objectId);
 
-            var request = new ClientWriteRequest()
-                    .writes(List.of(tuple));
+                var request = new ClientWriteRequest()
+                        .writes(List.of(tuple));
 
-            clientOpt.get().write(request).get();
+                clientOpt.get().write(request).get();
 
-            log.info("OpenFGA tuple written: user={} -> {} -> {}:{}",
-                    userId, relation, objectType, objectId);
-        } catch (Exception e) {
-            // Log error but don't throw - caller handles gracefully
-            log.error("OpenFGA writeTuple failed: user={} -> {} -> {}:{}: {}",
-                    userId, relation, objectType, objectId, e.getMessage());
-        }
+                log.info("OpenFGA tuple written: user={} -> {} -> {}:{}",
+                        userId, relation, objectType, objectId);
+            } catch (Exception e) {
+                throw new RuntimeException("OpenFGA writeTuple failed", e);
+            }
+        });
     }
 
     /**
@@ -273,23 +338,25 @@ public class OpenFgaClientWrapper implements OpenFgaReader, OpenFgaWriter {
             return;
         }
 
-        try {
-            var tuple = new ClientTupleKey()
-                    .user("user:" + userId)
-                    .relation(relation)
-                    ._object(objectType + ":" + objectId);
+        // Use resilience wrapper for retry and circuit breaker
+        resilience.executeWithResilience("deleteTuple", () -> {
+            try {
+                var tuple = new ClientTupleKey()
+                        .user("user:" + userId)
+                        .relation(relation)
+                        ._object(objectType + ":" + objectId);
 
-            var request = new ClientWriteRequest()
-                    .deletes(List.of(tuple));
+                var request = new ClientWriteRequest()
+                        .deletes(List.of(tuple));
 
-            clientOpt.get().write(request).get();
+                clientOpt.get().write(request).get();
 
-            log.info("OpenFGA tuple deleted: user={} -/-> {} -> {}:{}",
-                    userId, relation, objectType, objectId);
-        } catch (Exception e) {
-            log.error("OpenFGA deleteTuple failed: user={} -/-> {} -> {}:{}: {}",
-                    userId, relation, objectType, objectId, e.getMessage());
-        }
+                log.info("OpenFGA tuple deleted: user={} -/-> {} -> {}:{}",
+                        userId, relation, objectType, objectId);
+            } catch (Exception e) {
+                throw new RuntimeException("OpenFGA deleteTuple failed", e);
+            }
+        });
     }
 
     /**

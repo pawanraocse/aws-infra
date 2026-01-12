@@ -110,8 +110,8 @@ module "elasticache" {
   vpc_id                        = module.vpc.vpc_id
   elasticache_subnet_group_name = module.vpc.elasticache_subnet_group_name
 
-  # Single node - cheapest option
-  node_type       = "cache.t3.micro"
+  # Free Tier: cache.t2.micro (750 hrs/month for 12 months)
+  node_type       = "cache.t2.micro"
   num_cache_nodes = 1
 
   # No snapshots for budget

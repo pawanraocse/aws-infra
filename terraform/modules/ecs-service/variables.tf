@@ -205,3 +205,13 @@ variable "log_retention_days" {
   type        = number
   default     = 30
 }
+
+# =============================================================================
+# Service Discovery
+# =============================================================================
+
+variable "service_discovery_namespace_id" {
+  description = "Cloud Map namespace ID for service discovery (optional)"
+  type        = string
+  default     = null
+}

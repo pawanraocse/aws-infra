@@ -17,7 +17,7 @@ PROJECT_NAME="${PROJECT_NAME:-saas-factory}"
 ENVIRONMENT="${ENVIRONMENT:-production}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 
-SERVICES=("gateway-service" "auth-service" "backend-service" "platform-service")
+SERVICES=("gateway-service" "auth-service" "backend-service" "platform-service" "eureka-server")
 
 # Colors
 RED='\033[0;31m'
@@ -60,9 +60,79 @@ log_info "━━━ Phase 1/3: Infrastructure ━━━"
 cd "$TERRAFORM_DIR"
 
 if [ ! -f "terraform.tfvars" ]; then
-    log_error "terraform.tfvars not found"
-    log_info "Run: cd terraform/envs/production && cp terraform.tfvars.example terraform.tfvars"
-    exit 1
+    log_warn "terraform.tfvars not found. Let's create it!"
+    echo ""
+    
+    # Prompt for values
+    read -p "Project name [saas-factory]: " INPUT_PROJECT
+    INPUT_PROJECT="${INPUT_PROJECT:-saas-factory}"
+    
+    read -p "AWS Region [us-east-1]: " INPUT_REGION
+    INPUT_REGION="${INPUT_REGION:-us-east-1}"
+    
+    echo ""
+    echo "ACM Certificate ARN (for HTTPS):"
+    echo "  Get from: AWS Console → ACM → Certificates"
+    read -p "  ARN: " ACM_CERT_ARN
+    
+    echo ""
+    echo "GitHub repository URL for frontend:"
+    read -p "  (e.g., https://github.com/your-org/your-repo): " FRONTEND_REPO
+    
+    echo ""
+    echo "GitHub Personal Access Token (for Amplify):"
+    echo "  Get from: GitHub → Settings → Developer → Personal Access Tokens"
+    read -sp "  Token (hidden): " GITHUB_TOKEN
+    echo ""
+    
+    echo ""
+    echo "Your public IP for bastion SSH (run 'curl ifconfig.me'):"
+    read -p "  IP Address: " MY_IP
+    
+    echo ""
+    echo "SSH public key path:"
+    read -p "  Path [~/.ssh/id_rsa.pub]: " SSH_KEY_PATH
+    SSH_KEY_PATH="${SSH_KEY_PATH:-~/.ssh/id_rsa.pub}"
+    SSH_KEY_PATH="${SSH_KEY_PATH/#\~/$HOME}"
+    
+    if [ -f "$SSH_KEY_PATH" ]; then
+        SSH_PUBLIC_KEY=$(cat "$SSH_KEY_PATH")
+    else
+        log_warn "SSH key not found at $SSH_KEY_PATH"
+        read -p "  Paste SSH public key: " SSH_PUBLIC_KEY
+    fi
+    
+    # Generate terraform.tfvars
+    cat > terraform.tfvars << EOF
+# Auto-generated on $(date)
+project_name = "$INPUT_PROJECT"
+environment  = "production"
+aws_region   = "$INPUT_REGION"
+
+# SSL Certificate
+acm_certificate_arn = "$ACM_CERT_ARN"
+
+# Frontend
+frontend_repository_url = "$FRONTEND_REPO"
+github_access_token     = "$GITHUB_TOKEN"
+frontend_branch         = "main"
+frontend_app_root       = "frontend"
+
+# Bastion
+create_bastion            = true
+bastion_allowed_ssh_cidrs = ["${MY_IP}/32"]
+bastion_ssh_public_key    = "$SSH_PUBLIC_KEY"
+
+# RDS
+rds_instance_class = "db.t3.small"
+rds_multi_az       = false
+
+# Redis
+redis_node_type = "cache.t3.small"
+EOF
+    
+    log_success "Created terraform.tfvars"
+    echo ""
 fi
 
 terraform init -upgrade

@@ -55,9 +55,9 @@ variable "use_aurora" {
 }
 
 variable "rds_instance_class" {
-  description = "RDS instance class"
+  description = "RDS instance class (db.t3.micro for testing, db.t3.small+ for production)"
   type        = string
-  default     = "db.t3.small"
+  default     = "db.t3.micro" # TESTING: Free tier. PRODUCTION: db.t3.small or db.r6g.large
 }
 
 variable "rds_allocated_storage" {
@@ -95,9 +95,9 @@ variable "database_username" {
 # =============================================================================
 
 variable "redis_node_type" {
-  description = "ElastiCache node type"
+  description = "ElastiCache node type (cache.t2.micro for testing, cache.t3.small+ for production)"
   type        = string
-  default     = "cache.t3.small"
+  default     = "cache.t2.micro" # TESTING: Free tier. PRODUCTION: cache.t3.small or cache.r6g.large
 }
 
 variable "redis_num_nodes" {

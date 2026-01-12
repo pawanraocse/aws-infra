@@ -246,6 +246,14 @@ resource "aws_ecs_service" "service" {
     }
   }
 
+  # Cloud Map service discovery (optional)
+  dynamic "service_registries" {
+    for_each = var.service_discovery_namespace_id != null ? [1] : []
+    content {
+      registry_arn = aws_service_discovery_service.main[0].arn
+    }
+  }
+
   deployment_circuit_breaker {
     enable   = true
     rollback = true
@@ -261,6 +269,31 @@ resource "aws_ecs_service" "service" {
   }
 
   tags = local.common_tags
+}
+
+# =============================================================================
+# Cloud Map Service Discovery (optional)
+# =============================================================================
+
+resource "aws_service_discovery_service" "main" {
+  count = var.service_discovery_namespace_id != null ? 1 : 0
+
+  name = var.service_name
+
+  dns_config {
+    namespace_id = var.service_discovery_namespace_id
+
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+
+    routing_policy = "MULTIVALUE"
+  }
+
+  health_check_custom_config {
+    failure_threshold = 1
+  }
 }
 
 # =============================================================================

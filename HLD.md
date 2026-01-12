@@ -683,6 +683,110 @@ graph TB
 
 ---
 
+## 📡 API Request Flow (Production)
+
+This section explains how an API request flows through the production infrastructure, from the user's browser to the backend service and back.
+
+### Request Flow Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Browser as 🌐 Browser
+    participant ALB as ⚖️ ALB
+    participant Gateway as 🛡️ Gateway
+    participant Eureka as 🔍 Eureka
+    participant Backend as 📦 Backend
+    participant DB as 🗃️ Tenant DB
+
+    Browser->>ALB: HTTPS GET /api/v1/entries<br/>Authorization: Bearer JWT
+    Note over ALB: SSL/TLS Termination<br/>Health Check ✓
+    ALB->>Gateway: HTTP GET /api/v1/entries<br/>Authorization: Bearer JWT
+    
+    Note over Gateway: 1. Extract JWT from header
+    Gateway->>Gateway: Validate JWT signature<br/>(Cognito JWKS)
+    Gateway->>Gateway: Extract claims:<br/>sub, tenant-id, roles
+    Gateway->>Gateway: Inject headers:<br/>X-Tenant-Id, X-User-Id
+    Gateway->>Gateway: Check rate limit
+    
+    Gateway->>Eureka: Where is BACKEND-SERVICE?
+    Eureka-->>Gateway: 10.0.1.50:8082
+    
+    Gateway->>Backend: GET /api/v1/entries<br/>+ X-Tenant-Id: tenant_abc
+    
+    Note over Backend: Read X-Tenant-Id header
+    Backend->>DB: Query tenant_abc database
+    DB-->>Backend: Results
+    Backend-->>Gateway: 200 OK + JSON
+    Gateway-->>ALB: 200 OK + JSON
+    ALB-->>Browser: 200 OK + JSON
+```
+
+### Component Responsibilities
+
+| Layer | Component | What It Does | Must Have? |
+|-------|-----------|--------------|------------|
+| **1. Edge** | ALB | HTTPS/SSL termination, load balancing, health checks | ✅ Yes |
+| **2. Gateway** | Gateway Service | JWT validation, tenant extraction, routing, rate limiting | ✅ Yes |
+| **3. Discovery** | Eureka | Maps service names to IP addresses | ✅ Yes |
+| **4. Services** | Auth/Backend/Platform | Business logic with tenant isolation | ✅ Yes |
+| **5. Data** | RDS + Redis | Multi-tenant data storage | ✅ Yes |
+
+### What Each Component Adds to the Request
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ BROWSER → ALB                                                               │
+│ ─────────────────────────────────────────────────────────────────────────── │
+│ GET /api/v1/entries HTTP/2                                                  │
+│ Host: api.example.com                                                       │
+│ Authorization: Bearer eyJhbGc...                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼ ALB: SSL termination, forward to Gateway
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ALB → GATEWAY                                                               │
+│ ─────────────────────────────────────────────────────────────────────────── │
+│ GET /api/v1/entries HTTP/1.1                                                │
+│ Host: gateway:8080                                                          │
+│ Authorization: Bearer eyJhbGc...                                            │
+│ X-Forwarded-For: 203.0.113.50                                              │
+│ X-Forwarded-Proto: https                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼ Gateway: JWT validation, header injection
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ GATEWAY → BACKEND                                                           │
+│ ─────────────────────────────────────────────────────────────────────────── │
+│ GET /api/v1/entries HTTP/1.1                                                │
+│ Host: backend-service:8082                                                  │
+│ X-Tenant-Id: tenant_abc123          ← Injected by Gateway                   │
+│ X-User-Id: user_xyz789              ← Injected by Gateway                   │
+│ X-Authorities: ROLE_USER,ROLE_ADMIN ← Injected by Gateway                   │
+│ X-Forwarded-For: 203.0.113.50                                              │
+│ X-Request-Id: uuid-1234-5678        ← For tracing                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Why Each Component Exists
+
+| Component | Without It... | Analogy |
+|-----------|--------------|---------|
+| **ALB** | No HTTPS, no load balancing, single point of failure | Front door security guard |
+| **Gateway** | Every service validates JWT, no centralized rate limiting | Reception desk |
+| **Eureka** | Services need hardcoded IPs, no auto-scaling | Phone directory |
+| **Backend** | No business logic | The workers |
+
+### Production vs Local/Budget
+
+| Environment | ALB | Gateway | Eureka | Services |
+|-------------|-----|---------|--------|----------|
+| **Local** | ❌ | ✅ localhost:8080 | ✅ Docker | ✅ Docker |
+| **Budget** | ❌ | ✅ EC2:8080 | ✅ Docker | ✅ Docker |
+| **Production** | ✅ AWS | ✅ ECS | ✅ ECS | ✅ ECS |
+
+---
+
 ## 🔀 Service Routing & Context Paths
 
 Understanding how requests flow through the gateway to backend services is critical for debugging and development.
@@ -3088,7 +3192,7 @@ cp terraform.tfvars.example terraform.tfvars
 # Edit: frontend_repository_url, github_access_token
 
 # Deploy (infrastructure + application)
-SSH_KEY=~/.ssh/key.pem ./scripts/deploy-budget.sh
+SSH_KEY=~/.ssh/key.pem ./scripts/budget/deploy.sh
 ```
 
 **Production Deployment (ECS Fargate):**
@@ -3099,7 +3203,7 @@ cp terraform.tfvars.example terraform.tfvars
 # Edit: acm_certificate_arn, frontend_repository_url, github_access_token
 
 # Deploy (infrastructure + build + push + deploy)
-./scripts/deploy-production.sh
+./scripts/production/deploy.sh
 ```
 
 ### Cost Estimation (Monthly)

@@ -107,7 +107,7 @@ cat ~/.ssh/aws-deploy.pub
 bastion_ssh_public_key = "ssh-rsa AAAA..."
 
 # Use private key for SSH access
-SSH_KEY=~/.ssh/aws-deploy ./scripts/deploy-budget.sh
+SSH_KEY=~/.ssh/aws-deploy ./scripts/budget/deploy.sh
 ```
 </details>
 
@@ -163,7 +163,7 @@ cp terraform.tfvars.example terraform.tfvars
 # Edit: frontend_repository_url, github_access_token, bastion_ssh_public_key
 
 # Deploy everything (infra + app + start)
-SSH_KEY=~/.ssh/your-key.pem ./scripts/deploy-budget.sh
+SSH_KEY=~/.ssh/your-key.pem ./scripts/budget/deploy.sh
 ```
 
 **That's it!** Infrastructure + application deployed in one command.
@@ -182,14 +182,14 @@ cp terraform.tfvars.example terraform.tfvars
 
 #### Step 2: Deploy Infrastructure Only
 ```bash
-./scripts/deploy-budget.sh
+./scripts/budget/deploy.sh
 ```
 
 #### Step 3: Deploy Application Manually
 ```bash
 scp -i <key.pem> -r . ec2-user@<EC2_IP>:/app/
 ssh -i <key.pem> ec2-user@<EC2_IP>
-cd /app && ./scripts/start-budget.sh
+cd /app && ./scripts/budget/start.sh
 ```
 </details>
 
@@ -213,7 +213,7 @@ cp terraform.tfvars.example terraform.tfvars
 # Edit: acm_certificate_arn, frontend_repository_url, github_access_token
 
 # Deploy everything (infra + build + push + deploy)
-./scripts/deploy-production.sh
+./scripts/production/deploy.sh
 ```
 
 **That's it!** Infrastructure + Docker images + ECS services deployed.
@@ -246,12 +246,12 @@ cp terraform.tfvars.example terraform.tfvars
 
 #### Step 2: Deploy Infrastructure
 ```bash
-./scripts/deploy-production.sh
+./scripts/production/deploy.sh
 ```
 
 #### Step 3: Push Docker Images
 ```bash
-./scripts/push-ecr.sh
+./scripts/production/push-ecr.sh
 ```
 
 #### Step 4: Trigger ECS Deployment

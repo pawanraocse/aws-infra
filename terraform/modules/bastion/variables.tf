@@ -47,7 +47,7 @@ variable "ssh_public_key" {
 variable "root_volume_size" {
   description = "Root volume size in GB"
   type        = number
-  default     = 8
+  default     = 30
 }
 
 variable "create_eip" {

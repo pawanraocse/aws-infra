@@ -63,7 +63,7 @@ output "has_sso_providers" {
 
 output "saml_acs_url" {
   description = "SAML Assertion Consumer Service (ACS) URL - configure this in your IdP"
-  value       = "https://${var.project_name}-${var.environment}.auth.${data.aws_region.current.name}.amazoncognito.com/saml2/idpresponse"
+  value       = "https://${var.project_name}-${var.environment}.auth.${data.aws_region.current.id}.amazoncognito.com/saml2/idpresponse"
 }
 
 output "saml_entity_id" {

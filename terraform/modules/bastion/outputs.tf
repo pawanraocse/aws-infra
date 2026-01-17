@@ -10,6 +10,11 @@ output "public_ip" {
   value       = var.create_eip ? aws_eip.bastion[0].public_ip : aws_instance.bastion.public_ip
 }
 
+output "public_dns" {
+  description = "Bastion public DNS"
+  value       = var.create_eip ? aws_eip.bastion[0].public_dns : aws_instance.bastion.public_dns
+}
+
 output "private_ip" {
   description = "Bastion private IP"
   value       = aws_instance.bastion.private_ip

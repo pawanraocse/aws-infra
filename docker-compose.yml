@@ -1,14 +1,12 @@
 # =============================================================================
 # Docker Compose Local Development
 # =============================================================================
-# Extends base configuration with local Postgres and Redis containers
+# Uses extends pattern for compatibility with Docker Compose v2.30+
+# Extends base service definitions and adds local Postgres/Redis containers
 # 
 # Usage:
 #   docker-compose up -d
 # =============================================================================
-
-include:
-  - docker-compose.base.yml
 
 services:
   # ============================================================================
@@ -23,6 +21,7 @@ services:
       POSTGRES_PASSWORD: postgres
     networks:
       - awsinfra-net
+      - app-network
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init-openfga.sh:/docker-entrypoint-initdb.d/init-openfga.sh
@@ -44,6 +43,7 @@ services:
     command: redis-server --appendonly yes
     networks:
       - awsinfra-net
+      - app-network
     volumes:
       - redis_data:/data
     ports:
@@ -56,15 +56,21 @@ services:
     restart: unless-stopped
 
   # ============================================================================
-  # OpenFGA - Connect to Local Postgres
+  # OpenFGA - Fine-Grained Authorization
   # ============================================================================
   openfga-migrate:
+    extends:
+      file: docker-compose.base.yml
+      service: openfga-migrate
     command: migrate --datastore-engine postgres --datastore-uri "postgres://postgres:postgres@postgres:5432/openfga?sslmode=disable"
     depends_on:
       postgres:
         condition: service_healthy
 
   openfga:
+    extends:
+      file: docker-compose.base.yml
+      service: openfga
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
       - OPENFGA_DATASTORE_URI=postgres://postgres:postgres@postgres:5432/openfga
@@ -76,10 +82,40 @@ services:
         condition: service_completed_successfully
 
   # ============================================================================
-  # Gateway - Connect to Local Redis
+  # OpenTelemetry Collector
+  # ============================================================================
+  otel-collector:
+    extends:
+      file: docker-compose.base.yml
+      service: otel-collector
+
+  # ============================================================================
+  # Eureka Service Discovery
+  # ============================================================================
+  eureka-server:
+    extends:
+      file: docker-compose.base.yml
+      service: eureka-server
+
+  # ============================================================================
+  # Gateway Service - Connect to Local Redis
   # ============================================================================
   gateway-service:
+    extends:
+      file: docker-compose.base.yml
+      service: gateway-service
     environment:
+      SPRING_APPLICATION_NAME: gateway-service
+      SERVER_PORT: 8080
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: gateway-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,gateway
+      AWS_REGION: us-east-1
+      AWS_PROFILE: ""
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       REDIS_HOST: redis
       REDIS_PORT: 6379
     depends_on:
@@ -94,10 +130,24 @@ services:
   # Backend - Connect to Local Postgres & Redis
   # ============================================================================
   backend-service:
+    extends:
+      file: docker-compose.base.yml
+      service: backend-service
     environment:
+      SPRING_APPLICATION_NAME: backend-service
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/awsinfra
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: backend-service
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
+      server.port: 8082
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      OPENFGA_ENABLED: "true"
+      OPENFGA_API_URL: http://openfga:8080
       REDIS_HOST: redis
       REDIS_PORT: 6379
     depends_on:
@@ -110,7 +160,13 @@ services:
   # Auth - Connect to Local Postgres & Redis
   # ============================================================================
   auth-service:
+    extends:
+      file: docker-compose.base.yml
+      service: auth-service
     environment:
+      SPRING_APPLICATION_NAME: auth-service
+      SPRING_PROFILES_ACTIVE: ${AUTH_PROFILE:-}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/awsinfra
       DB_HOST: postgres
       DB_PORT: 5432
@@ -118,6 +174,17 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
       PLATFORM_DATASOURCE_URL: jdbc:postgresql://postgres:5432/awsinfra
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: auth-service
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
+      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
+      server.port: 8081
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-noreply@example.com}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      OPENFGA_ENABLED: "true"
+      OPENFGA_API_URL: http://openfga:8080
       REDIS_HOST: redis
       REDIS_PORT: 6379
     depends_on:
@@ -130,10 +197,31 @@ services:
   # Platform - Connect to Local Postgres & Redis
   # ============================================================================
   platform-service:
+    extends:
+      file: docker-compose.base.yml
+      service: platform-service
     environment:
+      SPRING_APPLICATION_NAME: platform-service
+      SERVER_PORT: 8083
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/awsinfra
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: platform-service
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      BILLING_ENABLED: ${BILLING_ENABLED:-false}
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_STARTER: ${STRIPE_PRICE_STARTER:-}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      STRIPE_PRICE_ENTERPRISE: ${STRIPE_PRICE_ENTERPRISE:-}
+      STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost:4200/app/settings/billing?success=true}
+      STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost:4200/app/settings/billing?canceled=true}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       REDIS_HOST: redis
       REDIS_PORT: 6379
     depends_on:
@@ -142,6 +230,13 @@ services:
       postgres:
         condition: service_healthy
 
+networks:
+  awsinfra-net:
+    driver: bridge
+  app-network:
+    driver: bridge
+
 volumes:
   postgres_data:
   redis_data:
+

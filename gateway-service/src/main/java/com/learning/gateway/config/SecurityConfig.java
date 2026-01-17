@@ -113,21 +113,24 @@ public class SecurityConfig {
         @Bean
         public ServerAuthenticationEntryPoint authenticationEntryPoint() {
                 return (exchange, ex) -> {
-                        log.warn("Unauthorized access: uri={}, requestId={}",
+                        log.error("Unauthorized access: uri={}, requestId={}. Error: {}",
                                         exchange.getRequest().getURI(),
-                                        exchange.getRequest().getHeaders().getFirst("X-Request-Id"));
+                                        exchange.getRequest().getHeaders().getFirst("X-Request-Id"),
+                                        ex.getMessage(), ex);
                         return writeJsonResponse(exchange, HttpStatus.UNAUTHORIZED, "UNAUTHORIZED",
-                                        "Authentication required");
+                                        "Authentication required: " + ex.getMessage());
                 };
         }
 
         @Bean
         public ServerAccessDeniedHandler accessDeniedHandler() {
                 return (exchange, ex) -> {
-                        log.warn("Access denied: uri={}, requestId={}",
+                        log.error("Access denied: uri={}, requestId={}. Error: {}",
                                         exchange.getRequest().getURI(),
-                                        exchange.getRequest().getHeaders().getFirst("X-Request-Id"));
-                        return writeJsonResponse(exchange, HttpStatus.FORBIDDEN, "FORBIDDEN", "Access denied");
+                                        exchange.getRequest().getHeaders().getFirst("X-Request-Id"),
+                                        ex.getMessage(), ex);
+                        return writeJsonResponse(exchange, HttpStatus.FORBIDDEN, "FORBIDDEN",
+                                        "Access denied: " + ex.getMessage());
                 };
         }
 

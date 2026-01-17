@@ -12,11 +12,11 @@ availability_zones = ["us-east-1a", "us-east-1b"]
 
 # EC2 (Free Tier)
 ec2_instance_type       = "t2.micro"
-allowed_ssh_cidr_blocks = ["0.0.0.0/0"]  # CHANGE THIS to your IP: ["1.2.3.4/32"]
-# ssh_public_key = "ssh-rsa AAAA..."     # Uncomment and add your public key
+allowed_ssh_cidr_blocks = ["0.0.0.0/0"]  # Allow all IPs as requested
+ssh_public_key          = ""
 
 # Amplify (Free Tier)
-frontend_repository_url = "https://github.com/your-org/your-repo"
-github_access_token     = "ghp_xxxxxxxxxxxx"  # SENSITIVE - use environment variable instead
+frontend_repository_url = "https://github.com/pawanraocse/aws-infra"
+github_access_token     = ""  # SENSITIVE - use environment variable instead
 frontend_branch         = "main"
 frontend_app_root       = "frontend"

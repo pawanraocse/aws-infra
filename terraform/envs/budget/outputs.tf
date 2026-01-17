@@ -39,6 +39,26 @@ output "redis_endpoint" {
   value       = module.elasticache.primary_endpoint
 }
 
+output "cloudfront_domain" {
+  description = "CloudFront Domain (HTTPS API)"
+  value       = module.cloudfront.domain_name
+}
+
+# =============================================================================
+# ECR Outputs
+# =============================================================================
+
+output "ecr_registry" {
+  description = "ECR Registry URL"
+  value       = split("/", module.ecr.repository_urls["gateway-service"])[0]
+}
+
+output "ecr_repositories" {
+  description = "ECR Repository URLs"
+  value       = module.ecr.repository_urls
+}
+
+
 # =============================================================================
 # EC2 Outputs
 # =============================================================================
@@ -73,6 +93,35 @@ output "frontend_url" {
 }
 
 # =============================================================================
+# Cognito Outputs
+# =============================================================================
+
+output "cognito_user_pool_id" {
+  description = "Cognito User Pool ID"
+  value       = module.cognito_user_pool.user_pool_id
+}
+
+output "cognito_client_id" {
+  description = "Cognito App Client ID (with secret)"
+  value       = module.cognito_user_pool.native_client_id
+}
+
+output "cognito_spa_client_id" {
+  description = "Cognito SPA Client ID (no secret)"
+  value       = module.cognito_user_pool.spa_client_id
+}
+
+output "cognito_hosted_ui_url" {
+  description = "Cognito Hosted UI URL"
+  value       = module.cognito_user_pool.hosted_ui_url
+}
+
+output "cognito_domain" {
+  description = "Cognito domain"
+  value       = module.cognito_user_pool.domain
+}
+
+# =============================================================================
 # Quick Start
 # =============================================================================
 
@@ -95,7 +144,7 @@ output "next_steps" {
     
     🌐 Access:
       Frontend: ${module.amplify.branch_url}
-      API:      http://${module.bastion.public_ip}:8080
+      API:      https://${module.cloudfront.domain_name}
     
     💰 Cost: ~$15-30/month
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

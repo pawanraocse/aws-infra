@@ -1,19 +1,21 @@
 #!/bin/bash
 # ============================================================================
-# Full Budget Deployment - One Shot
+# Full Budget Deployment - One Shot (JAR Rsync Mode)
 # ============================================================================
 # Deploys infrastructure AND application in one command
+# Uses local Docker builds on EC2 - no ECR dependency
 # ============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$SCRIPT_DIR/.."
+PROJECT_ROOT="$SCRIPT_DIR/../.."
 TERRAFORM_DIR="$PROJECT_ROOT/terraform/envs/budget"
 
 AWS_REGION="${AWS_REGION:-us-east-1}"
 AWS_PROFILE="${AWS_PROFILE:-personal}"
 SSH_KEY="${SSH_KEY:-}"
+PROJECT_NAME="${PROJECT_NAME:-saas-factory}"
 
 # Colors
 RED='\033[0;31m'
@@ -29,98 +31,72 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🚀 Full Budget Deployment (Infrastructure + Application)"
+echo "🚀 Full Budget Deployment (JAR Rsync Mode)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Check SSH key
+# Auto-detect SSH key if not set
 if [ -z "$SSH_KEY" ]; then
-    log_warn "SSH_KEY not set. Usage: SSH_KEY=~/.ssh/mykey.pem ./deploy-budget-full.sh"
+    for key in ~/.ssh/pawankeys ~/.ssh/id_rsa ~/.ssh/id_ed25519 ~/.ssh/*.pem; do
+        if [ -f "$key" ]; then
+            SSH_KEY="$key"
+            log_info "Auto-detected SSH key: $SSH_KEY"
+            break
+        fi
+    done
+fi
+
+if [ -z "$SSH_KEY" ]; then
+    log_warn "SSH_KEY not set and no key auto-detected."
+    log_warn "Usage: SSH_KEY=~/.ssh/mykey.pem ./deploy.sh"
     log_info "Continuing without SSH key - will skip EC2 deployment steps"
 fi
 
+# Check that JAR files exist (required for Docker build)
+MISSING_JARS=""
+for svc in eureka-server gateway-service auth-service backend-service platform-service; do
+    if ! ls "$PROJECT_ROOT/$svc/target/"*.jar 1> /dev/null 2>&1; then
+        MISSING_JARS="$MISSING_JARS $svc"
+    fi
+done
+
+if [ -n "$MISSING_JARS" ]; then
+    log_warn "JAR files missing for:$MISSING_JARS"
+    log_info "Building JARs with Maven (this may take a few minutes)..."
+    cd "$PROJECT_ROOT"
+    for svc in $MISSING_JARS; do
+        log_info "Building $svc..."
+        (cd "$svc" && mvn clean package -DskipTests -q) || { log_error "Failed to build $svc"; exit 1; }
+    done
+    log_success "All JARs built!"
+fi
+
 # Check AWS credentials
-if ! aws sts get-caller-identity --profile "$AWS_PROFILE" > /dev/null 2>&1; then
+if ! aws sts get-caller-identity --profile "$AWS_PROFILE"; then
     log_error "AWS credentials not configured for profile: $AWS_PROFILE"
     exit 1
 fi
 log_success "AWS credentials verified"
 
 # ============================================================================
-# Phase 1: Deploy Infrastructure
+# Phase 1: Infrastructure
 # ============================================================================
 echo ""
 log_info "━━━ Phase 1: Infrastructure ━━━"
 
 cd "$TERRAFORM_DIR"
 
-# Check terraform.tfvars - create interactively if missing
-if [ ! -f "terraform.tfvars" ]; then
-    log_warn "terraform.tfvars not found. Let's create it!"
-    echo ""
-    
-    # Prompt for values
-    read -p "Project name [saas-factory]: " PROJECT_NAME
-    PROJECT_NAME="${PROJECT_NAME:-saas-factory}"
-    
-    read -p "AWS Region [us-east-1]: " INPUT_REGION
-    INPUT_REGION="${INPUT_REGION:-us-east-1}"
-    
-    echo ""
-    echo "GitHub repository URL for frontend:"
-    read -p "  (e.g., https://github.com/your-org/your-repo): " FRONTEND_REPO
-    
-    echo ""
-    echo "GitHub Personal Access Token (for Amplify):"
-    echo "  Get from: GitHub → Settings → Developer → Personal Access Tokens"
-    read -sp "  Token (hidden): " GITHUB_TOKEN
-    echo ""
-    
-    echo ""
-    echo "Your public IP for SSH access (run 'curl ifconfig.me'):"
-    read -p "  IP Address: " MY_IP
-    
-    echo ""
-    echo "SSH public key path:"
-    read -p "  Path [~/.ssh/id_rsa.pub]: " SSH_KEY_PATH
-    SSH_KEY_PATH="${SSH_KEY_PATH:-~/.ssh/id_rsa.pub}"
-    SSH_KEY_PATH="${SSH_KEY_PATH/#\~/$HOME}"
-    
-    if [ -f "$SSH_KEY_PATH" ]; then
-        SSH_PUBLIC_KEY=$(cat "$SSH_KEY_PATH")
-    else
-        log_warn "SSH key not found at $SSH_KEY_PATH"
-        read -p "  Paste SSH public key: " SSH_PUBLIC_KEY
-    fi
-    
-    # Generate terraform.tfvars
-    cat > terraform.tfvars << EOF
-# Auto-generated on $(date)
-project_name = "$PROJECT_NAME"
-environment  = "budget"
-aws_region   = "$INPUT_REGION"
-
-frontend_repository_url = "$FRONTEND_REPO"
-github_access_token     = "$GITHUB_TOKEN"
-frontend_branch         = "main"
-frontend_app_root       = "frontend"
-
-create_bastion            = true
-bastion_allowed_ssh_cidrs = ["${MY_IP}/32"]
-bastion_ssh_public_key    = "$SSH_PUBLIC_KEY"
-EOF
-    
-    log_success "Created terraform.tfvars"
-    echo ""
-fi
-
+# Initialize and validate
 terraform init -upgrade
 terraform validate
-terraform apply -auto-approve
+
+# Plan and apply
+terraform plan -out=tfplan
+terraform apply tfplan
 
 # Get outputs
 EC2_IP=$(terraform output -raw ec2_public_ip 2>/dev/null || echo "")
-FRONTEND_URL=$(terraform output -raw frontend_url 2>/dev/null || echo "")
+FRONTEND_URL=$(terraform output -raw frontend_url 2>/dev/null || echo "https://localhost")
 
 if [ -z "$EC2_IP" ]; then
     log_error "Failed to get EC2 IP from Terraform"
@@ -156,32 +132,87 @@ echo ""
 log_info "━━━ Phase 3: Deploy Application ━━━"
 
 if [ -n "$SSH_KEY" ]; then
-    log_info "Copying application to EC2..."
+    log_info "Preparing EC2 environment..."
     
-    # Create /app directory and copy files
-    ssh -i "$SSH_KEY" ec2-user@"$EC2_IP" "sudo mkdir -p /app && sudo chown ec2-user:ec2-user /app"
+    # Install required packages including Docker
+    ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" ec2-user@"$EC2_IP" << 'REMOTE_SETUP'
+        set -e
+        
+        # Install basic tools
+        sudo yum install -y rsync git jq
+        
+        # Install Docker CE
+        sudo yum install -y docker
+        sudo systemctl start docker
+        sudo systemctl enable docker
+        sudo usermod -aG docker ec2-user
+        
+        # Install docker-compose v2
+        sudo mkdir -p /usr/local/lib/docker/cli-plugins
+        sudo curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
+        sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+        
+        # Also install standalone docker-compose
+        sudo curl -SL "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-$(uname -m)" -o /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
+        
+        sudo mkdir -p /app && sudo chown ec2-user:ec2-user /app
+        
+        echo "Docker installed successfully"
+REMOTE_SETUP
     
-    # Copy essential files
-    rsync -avz --progress -e "ssh -i $SSH_KEY" \
+    log_success "EC2 environment ready"
+    log_info "Copying application to EC2 (including JARs for local build)..."
+    
+    # Copy essential files including target/*.jar for Docker builds
+    rsync -avz --progress -e "ssh -o StrictHostKeyChecking=no -i $SSH_KEY" \
         --exclude '.terraform' \
         --exclude 'node_modules' \
         --exclude '.git' \
-        --exclude 'target' \
         --exclude '.idea' \
+        --exclude 'frontend' \
+        --exclude '*.class' \
+        --exclude 'target/classes' \
+        --exclude 'target/test-classes' \
+        --exclude 'target/generated-sources' \
+        --exclude 'target/maven-status' \
+        --include 'target/*.jar' \
         "$PROJECT_ROOT/" ec2-user@"$EC2_IP":/app/
     
     log_success "Application copied to EC2"
     
     # Start services
-    log_info "Starting services..."
-    ssh -i "$SSH_KEY" ec2-user@"$EC2_IP" "cd /app && chmod +x scripts/*.sh && ./scripts/start-budget.sh"
+    log_info "Starting services (building Docker images on EC2)..."
+    ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" ec2-user@"$EC2_IP" "cd /app && chmod +x scripts/budget/*.sh && ./scripts/budget/start.sh"
     
     log_success "Services started!"
 else
     log_warn "SSH_KEY not set - skipping EC2 deployment"
     log_info "To complete deployment, run manually:"
     echo "  scp -i <key.pem> -r . ec2-user@$EC2_IP:/app/"
-    echo "  ssh -i <key.pem> ec2-user@$EC2_IP 'cd /app && ./scripts/start-budget.sh'"
+    echo "  ssh -i <key.pem> ec2-user@$EC2_IP 'cd /app && ./scripts/budget/start.sh'"
+fi
+
+# ============================================================================
+# Phase 4: Trigger Amplify Frontend Build
+# ============================================================================
+echo ""
+log_info "━━━ Phase 4: Trigger Frontend Build ━━━"
+
+cd "$TERRAFORM_DIR"
+AMPLIFY_APP_ID=$(terraform output -raw frontend_url 2>/dev/null | sed 's/.*main\.\([^\.]*\)\.amplifyapp.*/\1/' || echo "")
+
+if [ -n "$AMPLIFY_APP_ID" ] && [ "$AMPLIFY_APP_ID" != "" ]; then
+    log_info "Triggering Amplify build for app: $AMPLIFY_APP_ID"
+    
+    if aws amplify start-job --app-id "$AMPLIFY_APP_ID" --branch-name main --job-type RELEASE --region "$AWS_REGION" 2>/dev/null; then
+        log_success "Amplify build triggered! Frontend will be ready in ~3-5 minutes."
+    else
+        log_warn "Failed to trigger Amplify build. You may need to trigger manually:"
+        echo "  aws amplify start-job --app-id $AMPLIFY_APP_ID --branch-name main --job-type RELEASE"
+    fi
+else
+    log_warn "Could not find Amplify App ID. Check if frontend_url output exists."
 fi
 
 # ============================================================================
@@ -193,9 +224,11 @@ log_success "Budget Deployment Complete!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "🌐 Access:"
-echo "  Frontend: $FRONTEND_URL"
+echo "  Frontend: $FRONTEND_URL (building...)"
 echo "  API:      http://$EC2_IP:8080"
 echo ""
-echo "💰 Estimated Cost: ~\$15-30/month"
+echo "💡 Instance Type: t3.small (2GB RAM)"
+echo "💰 Estimated Cost: ~\$30-40/month"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+

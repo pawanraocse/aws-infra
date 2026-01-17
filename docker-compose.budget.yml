@@ -1,90 +1,221 @@
 # =============================================================================
-# Docker Compose Budget Environment
+# Budget Environment - Docker Compose (JAR Rsync Mode)
 # =============================================================================
-# Extends base configuration with external RDS and ElastiCache
-# 
-# Usage:
-#   1. Set environment variables in .env.budget
-#   2. docker-compose -f docker-compose.budget.yml up -d
-# 
-# Required .env.budget variables:
-#   - DB_HOST (RDS endpoint)
-#   - DB_PORT (5432)
-#   - DB_NAME (saas_db)
-#   - DB_USERNAME (postgres)
-#   - DB_PASSWORD (from Secrets Manager)
-#   - REDIS_HOST (ElastiCache endpoint)
-#   - REDIS_PORT (6379)
+# Uses extends from base.yml to build images locally on EC2.
+# JARs are rsynced from local Mac to EC2, then built on EC2.
+#
+# Prerequisites:
+# - JARs built: mvn clean package -DskipTests
+# - JARs + Dockerfiles rsynced to EC2
 # =============================================================================
 
-include:
-  - docker-compose.base.yml
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# =============================================================================
+# Services
+# =============================================================================
 
 services:
   # ============================================================================
   # OpenFGA - Connect to RDS
   # ============================================================================
   openfga-migrate:
-    command: migrate --datastore-engine postgres --datastore-uri "postgres://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/openfga?sslmode=require"
+    extends:
+      file: docker-compose.base.yml
+      service: openfga-migrate
+    command: migrate --datastore-engine postgres --datastore-uri "postgres://${DB_USERNAME}@${DB_HOST}:${DB_PORT}/openfga?sslmode=require" --datastore-password "${DB_PASSWORD}"
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
-      - OPENFGA_DATASTORE_URI=postgres://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/openfga?sslmode=require
+      - OPENFGA_DATASTORE_URI=postgres://${DB_USERNAME}@${DB_HOST}:${DB_PORT}/openfga?sslmode=require
+      - OPENFGA_DATASTORE_PASSWORD=${DB_PASSWORD}
 
   openfga:
+    extends:
+      file: docker-compose.base.yml
+      service: openfga
     environment:
       - OPENFGA_DATASTORE_ENGINE=postgres
-      - OPENFGA_DATASTORE_URI=postgres://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/openfga?sslmode=require
+      - OPENFGA_DATASTORE_URI=postgres://${DB_USERNAME}@${DB_HOST}:${DB_PORT}/openfga?sslmode=require
+      - OPENFGA_DATASTORE_PASSWORD=${DB_PASSWORD}
       - OPENFGA_PLAYGROUND_ENABLED=true
     depends_on:
       openfga-migrate:
         condition: service_completed_successfully
 
   # ============================================================================
+  # OpenTelemetry Collector
+  # ============================================================================
+  otel-collector:
+    extends:
+      file: docker-compose.base.yml
+      service: otel-collector
+
+  # ============================================================================
+  # Eureka Service Discovery
+  # ============================================================================
+  eureka-server:
+    extends:
+      file: docker-compose.base.yml
+      service: eureka-server
+    # Optimized JVM for faster startup on t3.small
+    entrypoint: ["java", "-Xmx128m", "-Xms64m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-jar", "/app/app.jar"]
+
+  # ============================================================================
   # Gateway - Connect to ElastiCache
   # ============================================================================
   gateway-service:
+    extends:
+      file: docker-compose.base.yml
+      service: gateway-service
+    # Bypass entrypoint that fetches from wrong SSM path
+    entrypoint: ["java", "-Xmx160m", "-Xms96m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar"]
     environment:
-      REDIS_HOST: ${REDIS_HOST}
-      REDIS_PORT: ${REDIS_PORT:-6379}
+      SPRING_APPLICATION_NAME: gateway-service
+      SERVER_PORT: 8080
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      SPRING_DATA_REDIS_HOST: ${REDIS_HOST}
+      SPRING_DATA_REDIS_PORT: ${REDIS_PORT:-6379}
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_URI: http://eureka-server:8761/eureka
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: gateway-service
+      # Debug logging for production troubleshooting
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: DEBUG
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY: DEBUG
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
+      # Cognito OAuth2
+      OAUTH2_ISSUER_URI: ${COGNITO_ISSUER_URI}
+      COGNITO_JWKS_URI: ${COGNITO_JWKS_URI}
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID}
+      COGNITO_CLIENT_ID: ${COGNITO_SPA_CLIENT_ID}
+      COGNITO_DOMAIN: ${COGNITO_DOMAIN}
     depends_on:
       eureka-server:
         condition: service_healthy
-      otel-collector:
-        condition: service_started
 
   # ============================================================================
   # Backend - Connect to RDS and ElastiCache
   # ============================================================================
   backend-service:
+    extends:
+      file: docker-compose.base.yml
+      service: backend-service
+    # Optimized JVM for t3.small
+    entrypoint: ["java", "-Xmx192m", "-Xms128m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar"]
     environment:
+      SPRING_APPLICATION_NAME: backend-service
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
       SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_URI: http://eureka-server:8761/eureka
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: backend-service
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
+      server.port: 8082
+      # Redis
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT:-6379}
+      # OpenFGA
+      OPENFGA_ENABLED: "true"
+      OPENFGA_API_URL: http://openfga:8080
+      # Cognito
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID}
+      COGNITO_ISSUER_URI: ${COGNITO_ISSUER_URI}
+    depends_on:
+      eureka-server:
+        condition: service_healthy
 
   # ============================================================================
   # Auth - Connect to RDS and ElastiCache
   # ============================================================================
   auth-service:
+    extends:
+      file: docker-compose.base.yml
+      service: auth-service
+    # Optimized JVM for t3.small
+    entrypoint: ["java", "-Xmx192m", "-Xms128m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar"]
     environment:
+      SPRING_APPLICATION_NAME: auth-service
+      SPRING_PROFILES_ACTIVE: ${AUTH_PROFILE:-}
       SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_NAME: ${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      PLATFORM_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID}
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID}
+      COGNITO_CLIENT_SECRET: ${COGNITO_CLIENT_SECRET}
+      COGNITO_DOMAIN: ${COGNITO_DOMAIN}
+      COGNITO_REDIRECT_URI: ${COGNITO_REDIRECT_URI}
+      COGNITO_LOGOUT_REDIRECT_URL: ${COGNITO_LOGOUT_REDIRECT_URL}
+      COGNITO_JWKS_URI: ${COGNITO_JWKS_URI}
+      COGNITO_ISSUER_URI: ${COGNITO_ISSUER_URI}
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_URI: http://eureka-server:8761/eureka
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: auth-service
+      # Debug logging for production troubleshooting
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: DEBUG
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
+      MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT:-6379}
+      # OpenFGA
+      OPENFGA_ENABLED: "true"
+      OPENFGA_API_URL: http://openfga:8080
+    depends_on:
+      eureka-server:
+        condition: service_healthy
 
   # ============================================================================
   # Platform - Connect to RDS and ElastiCache
   # ============================================================================
   platform-service:
+    extends:
+      file: docker-compose.base.yml
+      service: platform-service
+    # Optimized JVM for t3.small
+    entrypoint: ["java", "-Xmx160m", "-Xms96m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar"]
     environment:
+      SPRING_APPLICATION_NAME: platform-service
+      SERVER_PORT: 8083
       SPRING_DATASOURCE_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_BASIC: ${STRIPE_PRICE_BASIC:-}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      STRIPE_PRICE_ENTERPRISE: ${STRIPE_PRICE_ENTERPRISE:-}
+      STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost:4200/app/settings/billing?success=true}
+      STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost:4200/app/settings/billing?canceled=true}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT:-6379}
+      # Cognito for token validation
+      OAUTH2_ISSUER_URI: ${COGNITO_ISSUER_URI}
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID}
+      COGNITO_CLIENT_ID: ${COGNITO_SPA_CLIENT_ID}
+      COGNITO_DOMAIN: ${COGNITO_DOMAIN}
+      # Eureka Service Discovery
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      EUREKA_URI: http://eureka-server:8761/eureka
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+      EUREKA_INSTANCE_HOSTNAME: platform-service
+      # Debug logging for production troubleshooting
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: DEBUG
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+
+networks:
+  app-network:
+    driver: bridge

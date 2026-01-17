@@ -30,6 +30,23 @@ resource "aws_security_group" "bastion" {
     cidr_blocks = var.allowed_ssh_cidr_blocks
   }
 
+  # Application ports (Gateway, Eureka, services)
+  ingress {
+    description = "Gateway API"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Eureka Dashboard"
+    from_port   = 8761
+    to_port     = 8761
+    protocol    = "tcp"
+    cidr_blocks = var.allowed_ssh_cidr_blocks
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
@@ -69,6 +86,44 @@ resource "aws_iam_role" "bastion" {
 resource "aws_iam_role_policy_attachment" "ssm" {
   role       = aws_iam_role.bastion.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+# Policy for reading SSM parameters and Secrets Manager secrets
+resource "aws_iam_role_policy" "bastion_app_access" {
+  name = "${local.bastion_name}-app-access"
+  role = aws_iam_role.bastion.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+          "ssm:GetParametersByPath"
+        ]
+        Resource = "arn:aws:ssm:*:*:parameter/${var.project_name}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = "arn:aws:secretsmanager:*:*:secret:${var.project_name}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
 }
 
 resource "aws_iam_instance_profile" "bastion" {
@@ -127,10 +182,29 @@ resource "aws_instance" "bastion" {
   # User data for initial setup
   user_data = <<-EOF
     #!/bin/bash
-    yum update -y
-    yum install -y postgresql15 redis6 htop tmux
+    # Disable SSH DNS lookup to prevent connection delays
+    echo "UseDNS no" >> /etc/ssh/sshd_config
+    systemctl restart sshd
     
-    # Install psql client for database access
+    # Add 2GB Swap to prevent OOM
+    dd if=/dev/zero of=/swapfile bs=128M count=16
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
+
+    yum update -y
+    yum install -y postgresql15 redis6 htop tmux rsync git docker jq
+    
+    # Start and enable Docker
+    systemctl start docker
+    systemctl enable docker
+    usermod -aG docker ec2-user
+    
+    # Install docker-compose
+    curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+    
     echo "Bastion setup complete. Use: psql -h <RDS_ENDPOINT> -U postgres -d <DB_NAME>"
   EOF
 

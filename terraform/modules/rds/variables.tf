@@ -52,7 +52,7 @@ variable "use_aurora" {
 variable "postgres_version" {
   description = "PostgreSQL engine version for RDS"
   type        = string
-  default     = "15.4"
+  default     = "16"
 }
 
 variable "instance_class" {

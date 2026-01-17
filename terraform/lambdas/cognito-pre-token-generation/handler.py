@@ -41,14 +41,19 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
 
-# Configure logging
+# Configure logging - DEBUG level for production troubleshooting
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # Environment variables
 PLATFORM_SERVICE_URL = os.environ.get('PLATFORM_SERVICE_URL', 'http://localhost:8082')
 AUTH_SERVICE_URL = os.environ.get('AUTH_SERVICE_URL', 'http://localhost:8081')
 ENABLE_GROUP_SYNC = os.environ.get('ENABLE_GROUP_SYNC', 'true').lower() == 'true'
+
+# Log environment at module load (helps debug configuration issues)
+logger.info(f"[CONFIG] PLATFORM_SERVICE_URL={PLATFORM_SERVICE_URL}")
+logger.info(f"[CONFIG] AUTH_SERVICE_URL={AUTH_SERVICE_URL}")
+logger.info(f"[CONFIG] ENABLE_GROUP_SYNC={ENABLE_GROUP_SYNC}")
 
 # Valid trigger sources for token generation
 TOKEN_GENERATION_TRIGGERS = frozenset([
@@ -92,19 +97,22 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
         username = event.get('userName', 'unknown')
         trigger_source = event.get('triggerSource', '')
-        user_sub = event.get('request', {}).get('userAttributes', {}).get('sub', username)
-        
-        logger.info(f"PreTokenGeneration triggered for user: {username}, trigger: {trigger_source}")
-        
-        # Only process token generation events
-        if trigger_source not in TOKEN_GENERATION_TRIGGERS:
-            logger.debug(f"Skipping non-token-generation trigger: {trigger_source}")
-            return event
         
         # Extract data from event
         request_data = event.get('request', {})
         client_metadata = request_data.get('clientMetadata', {}) or {}
         user_attributes = request_data.get('userAttributes', {}) or {}
+        user_sub = user_attributes.get('sub', username)
+        
+        # Debug logging for production troubleshooting
+        logger.info(f"PreTokenGeneration triggered for user: {username}, trigger: {trigger_source}")
+        logger.debug(f"[EVENT] userAttributes keys: {list(user_attributes.keys())}")
+        logger.debug(f"[EVENT] clientMetadata: {client_metadata}")
+        
+        # Only process token generation events
+        if trigger_source not in TOKEN_GENERATION_TRIGGERS:
+            logger.debug(f"Skipping non-token-generation trigger: {trigger_source}")
+            return event
         
         # Get selected tenant from login (if any)
         selected_tenant_id = client_metadata.get('selectedTenantId')
@@ -147,6 +155,12 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not final_tenant_id:
             logger.warning(f"No tenantId found for user: {username}")
             return event
+
+        # CORRECTION: Force Tenant Type if not personal
+        # If the tenant ID is set but type is wrong (e.g. from attributes), correct it
+        if final_tenant_id and not final_tenant_id.startswith('personal-'):
+            stored_tenant_type = 'ORGANIZATION'
+            logger.info(f"Enforcing ORGANIZATION type for tenant: {final_tenant_id}")
         
         # Sync groups if enabled and groups found
         if ENABLE_GROUP_SYNC and groups and final_tenant_id:

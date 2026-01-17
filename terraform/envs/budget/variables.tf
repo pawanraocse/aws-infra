@@ -65,9 +65,9 @@ variable "database_username" {
 # =============================================================================
 
 variable "ec2_instance_type" {
-  description = "EC2 instance type (t2.micro for Free Tier)"
+  description = "EC2 instance type (t3.small for 2GB RAM)"
   type        = string
-  default     = "t2.micro"
+  default     = "t3.small"
 }
 
 variable "allowed_ssh_cidr_blocks" {
@@ -113,4 +113,46 @@ variable "enable_amplify_auto_build" {
   description = "Enable auto-build on push"
   type        = bool
   default     = true
+}
+
+# =============================================================================
+# Cognito Configuration
+# =============================================================================
+
+variable "callback_url" {
+  description = "OAuth callback URL for Cognito"
+  type        = string
+  default     = "http://localhost:4200/auth/callback"
+}
+
+variable "logout_redirect_url" {
+  description = "URL to redirect to after logout"
+  type        = string
+  default     = "http://localhost:4200"
+}
+
+variable "ses_from_email" {
+  description = "SES from email address (if enabled)"
+  type        = string
+  default     = "noreply@example.com"
+}
+
+variable "enable_google_social_login" {
+  description = "Enable Google social login"
+  type        = bool
+  default     = false
+}
+
+variable "google_client_id" {
+  description = "Google OAuth client ID (if Google login enabled)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "google_client_secret" {
+  description = "Google OAuth client secret (if Google login enabled)"
+  type        = string
+  default     = ""
+  sensitive   = true
 }

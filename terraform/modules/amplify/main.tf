@@ -46,9 +46,9 @@ resource "aws_amplify_app" "frontend" {
   # Environment variables
   environment_variables = merge(
     {
-      AMPLIFY_DIFF_DEPLOY       = "false"
-      AMPLIFY_MONOREPO_APP_ROOT = var.app_root
+      AMPLIFY_DIFF_DEPLOY = "false"
     },
+    var.app_root != null && var.app_root != "" ? { AMPLIFY_MONOREPO_APP_ROOT = var.app_root } : {},
     var.environment_variables
   )
 

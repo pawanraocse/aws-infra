@@ -19,7 +19,7 @@ logout_urls = [
 ]
 
 # Token Validity (adjust based on security requirements)
-access_token_validity  = 60 # minutes
-id_token_validity      = 60 # minutes
-refresh_token_validity = 30 # days
+access_token_validity      = 60 # minutes
+id_token_validity          = 60 # minutes
+refresh_token_validity     = 30 # days
 enable_google_social_login = true

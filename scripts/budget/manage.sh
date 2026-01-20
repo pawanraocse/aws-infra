@@ -106,8 +106,36 @@ case "$1" in
     ssh -o StrictHostKeyChecking=no -i $SSH_KEY $BASTION_USER@$IP
     ;;
 
+  shallow-destroy)
+    echo "🔄 Shallow destroy (stop EC2 + RDS, keep infrastructure)..."
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    "$SCRIPT_DIR/destroy.sh" --shallow
+    ;;
+
+  logs)
+    SERVICE="${2:-gateway-service}"
+    LINES="${3:-100}"
+    IP=$(get_ec2_ip)
+    if [ "$IP" == "None" ] || [ -z "$IP" ]; then
+      echo "❌ EC2 is not running or IP not found."
+      exit 1
+    fi
+    echo "📋 Fetching logs for $SERVICE (last $LINES lines)..."
+    ssh -o StrictHostKeyChecking=no -i $SSH_KEY $BASTION_USER@$IP \
+      "docker logs $SERVICE --tail $LINES -f"
+    ;;
+
   *)
-    echo "Usage: $0 {start|stop|restart|status|ssh}"
+    echo "Usage: $0 {start|stop|restart|status|ssh|shallow-destroy|logs [service] [lines]}"
+    echo ""
+    echo "Commands:"
+    echo "  start           Start EC2 and RDS"
+    echo "  stop            Stop EC2 and RDS"
+    echo "  restart         Reboot EC2"
+    echo "  status          Show EC2 and RDS status"
+    echo "  ssh             SSH into EC2"
+    echo "  shallow-destroy Stop EC2/RDS, keep infrastructure (~\$5/month)"
+    echo "  logs [svc] [n]  Tail logs for service (default: gateway-service, 100 lines)"
     exit 1
     ;;
 esac

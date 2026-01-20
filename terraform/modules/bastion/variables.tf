@@ -55,3 +55,11 @@ variable "create_eip" {
   type        = bool
   default     = false
 }
+
+# ========== Lambda Access Configuration ==========
+
+variable "lambda_security_group_id" {
+  description = "Lambda security group ID for internal service access (ports 8081/8083)"
+  type        = string
+  default     = null
+}

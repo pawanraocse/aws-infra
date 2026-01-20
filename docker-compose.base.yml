@@ -48,8 +48,6 @@ services:
       dockerfile: Dockerfile
     container_name: otel-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
-    env_file:
-      - .env
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
     environment:
@@ -103,8 +101,6 @@ services:
       dockerfile: Dockerfile
     image: awsinfra-gateway-service:1.0.0
     container_name: gateway-service
-    env_file:
-      - .env
     networks:
       - app-network
     ports:
@@ -150,8 +146,6 @@ services:
       dockerfile: Dockerfile
     image: awsinfra-auth-service:1.0.0
     container_name: auth-service
-    env_file:
-      - .env
     volumes:
       - ~/.aws:/root/.aws:ro
     networks:
@@ -176,8 +170,6 @@ services:
       dockerfile: Dockerfile
     image: awsinfra-platform-service:1.0.0
     container_name: platform-service
-    env_file:
-      - .env
     networks:
       - app-network
     ports:

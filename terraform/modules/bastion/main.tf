@@ -47,6 +47,31 @@ resource "aws_security_group" "bastion" {
     cidr_blocks = var.allowed_ssh_cidr_blocks
   }
 
+  # Internal services - accessible only from Lambda (when Lambda SG is provided)
+  # Auth Service (8081) - used by PreTokenGeneration Lambda
+  dynamic "ingress" {
+    for_each = var.lambda_security_group_id != null ? [1] : []
+    content {
+      description     = "Auth Service from Lambda"
+      from_port       = 8081
+      to_port         = 8081
+      protocol        = "tcp"
+      security_groups = [var.lambda_security_group_id]
+    }
+  }
+
+  # Platform Service (8083) - used by PreTokenGeneration Lambda
+  dynamic "ingress" {
+    for_each = var.lambda_security_group_id != null ? [1] : []
+    content {
+      description     = "Platform Service from Lambda"
+      from_port       = 8083
+      to_port         = 8083
+      protocol        = "tcp"
+      security_groups = [var.lambda_security_group_id]
+    }
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0

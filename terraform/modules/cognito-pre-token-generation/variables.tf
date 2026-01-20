@@ -42,3 +42,23 @@ variable "enable_group_sync" {
   type        = bool
   default     = true
 }
+
+# ========== VPC Configuration (Optional) ==========
+
+variable "enable_vpc_mode" {
+  description = "Enable VPC mode for Lambda (required for private EC2 access)"
+  type        = bool
+  default     = false
+}
+
+variable "vpc_id" {
+  description = "VPC ID for Lambda (required when enable_vpc_mode is true)"
+  type        = string
+  default     = null
+}
+
+variable "subnet_ids" {
+  description = "Subnet IDs for Lambda VPC config (use public subnets if no NAT Gateway)"
+  type        = list(string)
+  default     = []
+}

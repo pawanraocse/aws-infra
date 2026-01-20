@@ -44,6 +44,15 @@ resource "aws_lambda_function" "pre_token_generation" {
     }
   }
 
+  # VPC configuration (optional - enables private access to EC2)
+  dynamic "vpc_config" {
+    for_each = var.enable_vpc_mode ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = [aws_security_group.lambda[0].id]
+    }
+  }
+
   tags = {
     Name        = "Cognito PreTokenGeneration Handler"
     Environment = var.environment
@@ -112,4 +121,40 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
     Name        = "Lambda PreTokenGeneration Logs"
     Environment = var.environment
   }
+}
+
+# =============================================================================
+# VPC Resources (only created when vpc_id is provided)
+# =============================================================================
+
+# Security group for Lambda in VPC
+resource "aws_security_group" "lambda" {
+  count = var.enable_vpc_mode ? 1 : 0
+
+  name        = "${var.environment}-lambda-pre-token-sg"
+  description = "Security group for PreTokenGeneration Lambda (VPC mode)"
+  vpc_id      = var.vpc_id
+
+  # Allow all outbound (Lambda needs to call EC2 services)
+  egress {
+    description = "All outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${var.environment}-lambda-pre-token-sg"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
+
+# IAM policy attachment for VPC access
+resource "aws_iam_role_policy_attachment" "lambda_vpc" {
+  count = var.enable_vpc_mode ? 1 : 0
+
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }

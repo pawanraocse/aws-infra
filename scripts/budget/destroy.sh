@@ -16,26 +16,131 @@ TERRAFORM_DIR="$SCRIPT_DIR/../../terraform/envs/budget"
 AWS_PROFILE="${AWS_PROFILE:-personal}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 PROJECT_NAME="${PROJECT_NAME:-saas-factory}"
+ENVIRONMENT="${ENVIRONMENT:-budget}"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Parse arguments
 AUTO_APPROVE=false
+SHALLOW=false
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         --auto-approve|-y)
             AUTO_APPROVE=true
             shift
             ;;
+        --shallow|-s)
+            SHALLOW=true
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: $0 [--auto-approve|-y]"
+            echo "Usage: $0 [--shallow|-s] [--auto-approve|-y]"
+            echo ""
+            echo "Options:"
+            echo "  --shallow, -s      Stop EC2 and RDS only (keep infrastructure)"
+            echo "  --auto-approve, -y Skip confirmation prompts"
             exit 1
             ;;
     esac
 done
 
+# =============================================================================
+# Shallow Destroy: Stop EC2 and RDS only (keep infrastructure)
+# =============================================================================
+if [ "$SHALLOW" = true ]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🔄 Shallow Destroy: Stopping EC2 + RDS (infrastructure preserved)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    # Stop EC2
+    log_info "Finding EC2 instance..."
+    EC2_ID=$(aws ec2 describe-instances \
+        --filters "Name=tag:Name,Values=${PROJECT_NAME}-${ENVIRONMENT}-bastion" \
+                  "Name=instance-state-name,Values=running,stopped" \
+        --query "Reservations[0].Instances[0].InstanceId" \
+        --output text \
+        --region "$AWS_REGION" \
+        --profile "$AWS_PROFILE" 2>/dev/null || echo "None")
+    
+    if [ "$EC2_ID" != "None" ] && [ -n "$EC2_ID" ]; then
+        EC2_STATE=$(aws ec2 describe-instances --instance-ids "$EC2_ID" \
+            --query "Reservations[0].Instances[0].State.Name" \
+            --output text \
+            --region "$AWS_REGION" \
+            --profile "$AWS_PROFILE")
+        
+        if [ "$EC2_STATE" = "running" ]; then
+            log_info "Stopping EC2: $EC2_ID"
+            aws ec2 stop-instances --instance-ids "$EC2_ID" \
+                --region "$AWS_REGION" \
+                --profile "$AWS_PROFILE" >/dev/null
+            log_success "EC2 stopping: $EC2_ID"
+        else
+            log_info "EC2 already $EC2_STATE: $EC2_ID"
+        fi
+    else
+        log_warn "EC2 instance not found"
+    fi
+    
+    # Stop RDS
+    log_info "Finding RDS instance..."
+    RDS_ID=$(aws rds describe-db-instances \
+        --query "DBInstances[?contains(DBInstanceIdentifier, '${PROJECT_NAME}-${ENVIRONMENT}')].DBInstanceIdentifier | [0]" \
+        --output text \
+        --region "$AWS_REGION" \
+        --profile "$AWS_PROFILE" 2>/dev/null || echo "")
+    
+    if [ -n "$RDS_ID" ] && [ "$RDS_ID" != "None" ]; then
+        RDS_STATE=$(aws rds describe-db-instances --db-instance-identifier "$RDS_ID" \
+            --query "DBInstances[0].DBInstanceStatus" \
+            --output text \
+            --region "$AWS_REGION" \
+            --profile "$AWS_PROFILE")
+        
+        if [ "$RDS_STATE" = "available" ]; then
+            log_info "Stopping RDS: $RDS_ID"
+            aws rds stop-db-instance --db-instance-identifier "$RDS_ID" \
+                --region "$AWS_REGION" \
+                --profile "$AWS_PROFILE" >/dev/null
+            log_success "RDS stopping: $RDS_ID"
+        else
+            log_info "RDS already $RDS_STATE: $RDS_ID"
+        fi
+    else
+        log_warn "RDS instance not found"
+    fi
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_success "Shallow destroy complete!"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "💰 Stopped resources will not incur compute charges."
+    echo "   Note: Elastic IP (~\$3.60/month) still charged when EC2 is stopped."
+    echo ""
+    echo "🚀 To restart:      ./scripts/budget/manage.sh start"
+    echo "🗑️  Full destroy:    ./scripts/budget/destroy.sh"
+    echo ""
+    exit 0
+fi
+
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "⚠️  Destroy Budget Environment"
+echo "⚠️  Destroy Budget Environment (Full)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 

@@ -141,6 +141,7 @@
 *(Consolidated Scale, Advanced Features, and Deferred Items)*
 
 #### 9.1 Scale & Performance (Q3-Q4 2026)
+- **gRPC Migration (Internal):** Hybrid architecture (REST Gateway, gRPC Mesh). Pilot: Backend→Auth Permission Check.  (The RemotePermissionEvaluator is a "hot path" (called on almost every request). Optimizing this single interaction with gRPC will yield perceptible performance improvements for the entire platform.)
 - **Async Provisioning:** SQS-based tenant creation
 - **Async Deletion:** SNS/SQS cleanup
 - **Sharding:** Multiple RDS instances

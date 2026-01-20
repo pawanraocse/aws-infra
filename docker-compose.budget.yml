@@ -71,6 +71,7 @@ services:
     extends:
       file: docker-compose.base.yml
       service: gateway-service
+    restart: unless-stopped
     # Bypass entrypoint that fetches from wrong SSM path
     entrypoint: ["java", "-Xmx160m", "-Xms96m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar"]
     environment:
@@ -80,12 +81,12 @@ services:
       SPRING_DATA_REDIS_HOST: ${REDIS_HOST}
       SPRING_DATA_REDIS_PORT: ${REDIS_PORT:-6379}
       EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      EUREKA_URI: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
       EUREKA_INSTANCE_HOSTNAME: gateway-service
-      # Debug logging for production troubleshooting
-      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: DEBUG
-      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY: DEBUG
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      # Production logging (change to DEBUG for troubleshooting)
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: INFO
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY: INFO
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
       MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
       # Cognito OAuth2
@@ -105,6 +106,7 @@ services:
     extends:
       file: docker-compose.base.yml
       service: backend-service
+    restart: unless-stopped
     # Optimized JVM for t3.small
     entrypoint: ["java", "-Xmx192m", "-Xms128m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar"]
     environment:
@@ -114,9 +116,9 @@ services:
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      EUREKA_URI: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
       EUREKA_INSTANCE_HOSTNAME: backend-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
       MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
       server.port: 8082
@@ -140,6 +142,7 @@ services:
     extends:
       file: docker-compose.base.yml
       service: auth-service
+    restart: unless-stopped
     # Optimized JVM for t3.small
     entrypoint: ["java", "-Xmx192m", "-Xms128m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar"]
     environment:
@@ -157,11 +160,12 @@ services:
       COGNITO_JWKS_URI: ${COGNITO_JWKS_URI}
       COGNITO_ISSUER_URI: ${COGNITO_ISSUER_URI}
       EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      EUREKA_URI: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
       EUREKA_INSTANCE_HOSTNAME: auth-service
-      # Debug logging for production troubleshooting
-      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: DEBUG
+      server.port: 8081
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      # Production logging (change to DEBUG for troubleshooting)
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: INFO
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics
       MANAGEMENT_ENDPOINTS_WEB_BASE_PATH: /actuator
       REDIS_HOST: ${REDIS_HOST}
@@ -180,6 +184,7 @@ services:
     extends:
       file: docker-compose.base.yml
       service: platform-service
+    restart: unless-stopped
     # Optimized JVM for t3.small
     entrypoint: ["java", "-Xmx160m", "-Xms96m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar"]
     environment:
@@ -207,11 +212,11 @@ services:
       COGNITO_DOMAIN: ${COGNITO_DOMAIN}
       # Eureka Service Discovery
       EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      EUREKA_URI: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
       EUREKA_INSTANCE_HOSTNAME: platform-service
-      # Debug logging for production troubleshooting
-      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: DEBUG
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      # Production logging (change to DEBUG for troubleshooting)
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: INFO
     depends_on:
       eureka-server:
         condition: service_healthy

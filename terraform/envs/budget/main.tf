@@ -142,6 +142,10 @@ module "bastion" {
 
   # Use Elastic IP for consistent address
   create_eip = true
+
+  # Allow Lambda to access internal services (8081, 8083)
+  # Note: Lambda SG must be created first, handled by depends_on in Lambda module
+  lambda_security_group_id = module.cognito_pre_token_generation.security_group_id
 }
 
 # =============================================================================
@@ -289,9 +293,14 @@ module "cognito_pre_token_generation" {
   user_pool_id  = module.cognito_user_pool.user_pool_id
   user_pool_arn = module.cognito_user_pool.user_pool_arn
 
-  # Fix: Point Lambda to EC2 services (not localhost)
-  platform_service_url = "http://${module.bastion.public_ip}:8083/platform"
-  auth_service_url     = "http://${module.bastion.public_ip}:8081/auth"
+  # VPC mode: Lambda runs in VPC for private EC2 access
+  enable_vpc_mode = true
+  vpc_id          = module.vpc.vpc_id
+  subnet_ids      = module.vpc.public_subnet_ids # Public subnet (no NAT needed)
+
+  # Point Lambda to EC2 services via PRIVATE IP (VPC mode)
+  platform_service_url = "http://${module.bastion.private_ip}:8083/platform"
+  auth_service_url     = "http://${module.bastion.private_ip}:8081/auth"
 }
 
 # =============================================================================

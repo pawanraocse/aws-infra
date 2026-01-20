@@ -1,16 +1,33 @@
-# Authentication, JWT & Authorization Flow
 
-**Version:** 1.1  
-**Created:** 2026-01-16  
-**Last Updated:** 2026-01-16 (Local verification passed)
+# Authentication & JWT Flow
+
+**Version:** 7.6 (Merged & Fully Restored)
+**Last Updated:** 2026-01-17
+
+This document details the end-to-end authentication flow, from Signup to Login to API Requests.
 
 ---
 
 ## 🎯 End-to-End Flow Summary
 
 ```
-SIGNUP → COGNITO → VERIFY EMAIL → LOGIN → JWT → GATEWAY → TENANT ROUTING → AUTHORIZATION → DATABASE
+SIGNUP → COGNITO → EMAIL VERIFY → LOGIN → JWT → GATEWAY → TENANT ROUTING → AUTHORIZATION → DATABASE
 ```
+
+### Process Flow (Visual)
+```mermaid
+flowchart TD
+    User((User)) -->|1. Signup| Cognito
+    Cognito -->|2. Verify Email| User
+    User -->|3. Login| Cognito
+    Cognito -->|4. Issue JWT| User
+    User -->|5. Request + ID Token| Gateway
+    Gateway -->|6. Route Request| Backend
+    Backend -->|7. Check Auth| AuthDB[(Auth DB)]
+    Backend -->|8. Query Data| TenantDB[(t_tenant_id)]
+```
+
+The system uses **AWS Cognito** for identity management but orchestrates everything through the **Auth Service** to ensure multi-tenant setup (Database creation) happens synchronously.
 
 ---
 
@@ -62,7 +79,7 @@ SIGNUP → COGNITO → VERIFY EMAIL → LOGIN → JWT → GATEWAY → TENANT ROU
 │  ───────────────────                                                             │
 │                                                                                  │
 │  Frontend                                                                        │
-│  ────────                                                                        │
+64 │  ────────                                                                        │
 │  auth.interceptor.ts                                                             │
 │  - Extracts idToken (NOT accessToken)                                           │
 │  - Sets: Authorization: Bearer <idToken>                                        │
@@ -104,49 +121,89 @@ SIGNUP → COGNITO → VERIFY EMAIL → LOGIN → JWT → GATEWAY → TENANT ROU
 │  │  │      • X-Groups (for role mapping)                       │  │            │
 │  │  └──────────────────────────────────────────────────────────┘  │            │
 │  │                           │                                     │            │
-│  └───────────────────────────┼─────────────────────────────────────┘            │
-│                              │                                                   │
-│                              ▼                                                   │
-│  PHASE 5: DOWNSTREAM SERVICE                                                     │
-│  ──────────────────────────                                                      │
-│                                                                                  │
-│  ┌─────────────────────────────────────────────────────────────────────────┐    │
-│  │ Auth/Platform/Backend Service                                            │    │
-│  │                                                                          │    │
-│  │  ┌─────────────────────────────────────────────────────────────────┐   │    │
-│  │  │ 1. TenantContextFilter                                          │   │    │
-│  │  │    - Reads X-Tenant-Id header                                   │   │    │
-│  │  │    - Sets TenantContext.setCurrentTenant(tenantId)              │   │    │
-│  │  │    - Clears context after request                               │   │    │
-│  │  └─────────────────────────────────────────────────────────────────┘   │    │
-│  │                           │                                             │    │
-│  │                           ▼                                             │    │
-│  │  ┌─────────────────────────────────────────────────────────────────┐   │    │
-│  │  │ 2. RemotePermissionEvaluator                                    │   │    │
-│  │  │    - @PreAuthorize("hasPermission('resource', 'action')")       │   │    │
-│  │  │    - Calls RoleLookupService.getUserRole(userId, tenantId)      │   │    │
-│  │  │    - Role hierarchy: admin > editor > viewer > guest            │   │    │
-│  │  │    - Fallback: calls auth-service /permissions/check            │   │    │
-│  │  └─────────────────────────────────────────────────────────────────┘   │    │
-│  │                           │                                             │    │
-│  │                           ▼                                             │    │
-│  │  ┌─────────────────────────────────────────────────────────────────┐   │    │
-│  │  │ 3. TenantDataSourceRouter                                       │   │    │
-│  │  │    - Reads TenantContext.getCurrentTenant()                     │   │    │
-│  │  │    - Routes to tenant-specific database: t_<tenantId>           │   │    │
-│  │  │    - Creates/caches HikariDataSource per tenant                 │   │    │
-│  │  │    - "system" tenant → default platform database                │   │    │
-│  │  └─────────────────────────────────────────────────────────────────┘   │    │
-│  │                           │                                             │    │
-│  │                           ▼                                             │    │
-│  │  ┌─────────────────────────────────────────────────────────────────┐   │    │
-│  │  │ 4. Business Logic (Controller → Service → Repository)           │   │    │
-│  │  │    - All queries automatically scoped to tenant's database      │   │    │
-│  │  └─────────────────────────────────────────────────────────────────┘   │    │
-│  │                                                                          │    │
-│  └─────────────────────────────────────────────────────────────────────────┘    │
-│                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
+│  │                           ▼                                     │            │
+│  │  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │  │ Auth/Platform/Backend Service                                            │    │
+│  │  │                                                                          │    │
+│  │  │  ┌─────────────────────────────────────────────────────────────────┐   │    │
+│  │  │  │ 1. TenantContextFilter                                          │   │    │
+│  │  │    - Reads X-Tenant-Id header                                    │   │    │
+│  │  │    - Sets TenantContext.setCurrentTenant(tenantId)               │   │    │
+│  │  │    - Clears context after request                                │   │    │
+│  │  │  └─────────────────────────────────────────────────────────────────┘   │    │
+│  │  │                           │                                             │    │
+│  │  │                           ▼                                             │    │
+│  │  │  ┌─────────────────────────────────────────────────────────────────┐   │    │
+│  │  │  │ 2. RemotePermissionEvaluator                                    │   │    │
+│  │  │    - @PreAuthorize("hasPermission('resource', 'action')")        │   │    │
+│  │  │    - Calls RoleLookupService.getUserRole(userId, tenantId)       │   │    │
+│  │  │    - Role hierarchy: admin > editor > viewer > guest             │   │    │
+│  │  │    - Fallback: calls auth-service /permissions/check             │   │    │
+│  │  │  └─────────────────────────────────────────────────────────────────┘   │    │
+│  │  │                           │                                             │    │
+│  │  │                           ▼                                             │    │
+│  │  │  ┌─────────────────────────────────────────────────────────────────┐   │    │
+│  │  │  │ 3. TenantDataSourceRouter                                       │   │    │
+│  │  │    - Reads TenantContext.getCurrentTenant()                      │   │    │
+│  │  │    - Routes to tenant-specific database: t_<tenantId>            │   │    │
+│  │  │    - Creates/caches HikariDataSource per tenant                  │   │    │
+│  │  │    - "system" tenant → default platform database                 │   │    │
+│  │  │  └─────────────────────────────────────────────────────────────────┘   │    │
+│  │  │                           │                                             │    │
+│  │  │                           ▼                                             │    │
+│  │  │  ┌─────────────────────────────────────────────────────────────────┐   │    │
+│  │  │  │ 4. Business Logic (Controller → Service → Repository)           │   │    │
+│  │  │    - All queries automatically scoped to tenant's database       │   │    │
+│  │  │  └─────────────────────────────────────────────────────────────────┘   │    │
+│  │  │                                                                          │    │
+│  │  └─────────────────────────────────────────────────────────────────────────┘    │
+│  │                                                                                  │
+│  └─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📝 Sequence View (Mermaid)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as Frontend
+    participant Cognito
+    participant Gateway as 🛡️ Gateway Service
+    participant Backend as 📦 Backend Service
+    participant Router as 🔀 DatasourceRouter
+    participant DB as 🗄️ Tenant DB
+
+    Note over Client, Cognito: Phase 1-3: Auth & Token Issue
+    Client->>Cognito: 1. Login (SRP protocol)
+    Cognito-->>Client: 2. ID Token (custom:tenantId) + Access Token
+    
+    Note over Client, Gateway: Phase 4: API Request & Security
+    Client->>Gateway: 3. GET /api/resource (Bearer ID_TOKEN)
+    
+    rect rgb(240, 240, 240)
+        Note left of Gateway: Gateway Filters
+        Gateway->>Gateway: 4. HeaderSanitizingFilter (Strip spoofed headers)
+        Gateway->>Cognito: 5. Verify JWT Signature (JWKS)
+        Gateway->>Gateway: 6. JwtAuthConverter (Extract Roles)
+        Gateway->>Gateway: 7. JwtAuthGatewayFilter (Extract TenantId)
+        Gateway->>Gateway: 8. Inject Headers (X-Tenant-Id, X-User-Id)
+    end
+    
+    Gateway->>Backend: 9. Forward Request + Headers
+    
+    Note over Backend, DB: Phase 5: Internal Processing
+    rect rgb(240, 248, 255)
+        Note right of Backend: Service Filters
+        Backend->>Backend: 10. TenantContextFilter (Read X-Tenant-Id)
+        Backend->>Backend: 11. RemotePermissionEvaluator (Check permissions)
+        Backend->>Router: 12. DetermineCurrentLookupKey()
+        Router->>DB: 13. Route to 't_tenant_id'
+    end
+    
+    Backend->>DB: 14. Execute Query
+    DB-->>Client: 15. Return Data
 ```
 
 ---
@@ -162,7 +219,27 @@ SIGNUP → COGNITO → VERIFY EMAIL → LOGIN → JWT → GATEWAY → TENANT ROU
 
 ---
 
-## 📁 Key Files
+## 📊 Headers Injected by Gateway
+
+| Header | Source | Purpose |
+|--------|--------|---------|
+| `X-Tenant-Id` | JWT `custom:tenantId` | Database routing |
+| `X-User-Id` | JWT `sub` | User identification |
+| `X-Email` | JWT `email` | Display name |
+| `X-Authorities` | `cognito:groups` | Role-based auth |
+| `X-Groups` | `custom:samlGroups` | IdP group sync |
+
+---
+
+## 🛡️ Security Boundaries
+
+1. **Gateway is King:** All external traffic MUST pass through Gateway.
+2. **Fail-Closed:** Gateway rejects requests with invalid JWTs or missing Tenant ID.
+3. **Network Isolation:** Internal services (Auth, Backend) should strictly accept traffic only from Gateway and each other.
+
+---
+
+## 📁 Key Files Reference
 
 ### Signup & Login
 
@@ -204,32 +281,22 @@ SIGNUP → COGNITO → VERIFY EMAIL → LOGIN → JWT → GATEWAY → TENANT ROU
 
 ---
 
-## 🔐 SSM Parameters
+## 🔐 SSM Parameters Reference
 
-All services load Cognito config from SSM at startup via `entrypoint.sh`:
+All services load Cognito config from AWS SSM at startup.
 
-| Path | Value Example |
-|------|---------------|
+| Path Pattern | Example Value |
+|--------------|---------------|
 | `/cloud-infra/dev/cognito/user_pool_id` | `us-east-1_JTWyGznRm` |
 | `/cloud-infra/dev/cognito/issuer_uri` | `https://cognito-idp...` |
 | `/cloud-infra/dev/cognito/jwks_uri` | `.../.well-known/jwks.json` |
-| `/cloud-infra/dev/cognito/spa_client_id` | `5ipcdulrm15t1laniekdk3bmm0` |
+| `/cloud-infra/dev/cognito/spa_client_id` | `5ipcdulrm...` |
 
 ---
 
-## 📊 Headers Injected by Gateway
+## ✅ Local Verification (Snapshot)
 
-| Header | Source | Purpose |
-|--------|--------|---------|
-| `X-Tenant-Id` | JWT `custom:tenantId` | Database routing |
-| `X-User-Id` | JWT `sub` | User identification |
-| `X-Email` | JWT `email` | Display name |
-| `X-Authorities` | `cognito:groups` | Role-based auth |
-| `X-Groups` | `custom:samlGroups` | IdP group sync |
-
----
-
-## ✅ Local Verification (2026-01-16)
+These tests were last passed on 2026-01-16.
 
 | Test | Result |
 |------|--------|
@@ -242,6 +309,14 @@ All services load Cognito config from SSM at startup via `entrypoint.sh`:
 
 ## 🔧 Troubleshooting
 
+**"401 Unauthorized"**
+- Check if Gateway can reach Cognito JWKS endpoint.
+- Verify token is not expired.
+
+**"Missing Tenant Context"**
+- Check if user has `custom:tenantId` in Cognito.
+- Check if `HeaderSanitizingGlobalFilter` is active in Gateway.
+
 ```bash
 # Check Gateway Cognito config
 docker exec gateway-service printenv | grep COGNITO
@@ -253,4 +328,3 @@ docker logs gateway-service 2>&1 | grep -i "jwt\|auth\|401"
 # 1. Browser DevTools → Network → API request → Headers → Authorization
 # 2. Paste at https://jwt.io
 ```
-

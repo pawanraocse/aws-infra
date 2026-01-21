@@ -52,23 +52,46 @@ if [ -z "$SSH_KEY" ]; then
     log_info "Continuing without SSH key - will skip EC2 deployment steps"
 fi
 
-# Check that JAR files exist (required for Docker build)
-MISSING_JARS=""
-for svc in eureka-server gateway-service auth-service backend-service platform-service; do
-    if ! ls "$PROJECT_ROOT/$svc/target/"*.jar 1> /dev/null 2>&1; then
-        MISSING_JARS="$MISSING_JARS $svc"
+# Check for --rebuild flag
+FORCE_REBUILD=false
+for arg in "$@"; do
+    if [ "$arg" == "--rebuild" ]; then
+        FORCE_REBUILD=true
+        log_info "Force rebuild enabled (--rebuild flag)"
     fi
 done
 
-if [ -n "$MISSING_JARS" ]; then
-    log_warn "JAR files missing for:$MISSING_JARS"
-    log_info "Building JARs with Maven (this may take a few minutes)..."
+# Always rebuild common-infra first to ensure library changes are picked up
+log_info "Building common-infra (shared library)..."
+cd "$PROJECT_ROOT"
+(cd common-infra && mvn clean install -DskipTests -q) || { log_error "Failed to build common-infra"; exit 1; }
+log_success "common-infra built and installed to local Maven repository"
+
+# Check that JAR files exist (required for Docker build)
+SERVICES_TO_BUILD=""
+for svc in eureka-server gateway-service auth-service backend-service platform-service; do
+    if [ "$FORCE_REBUILD" == "true" ]; then
+        SERVICES_TO_BUILD="$SERVICES_TO_BUILD $svc"
+    elif ! ls "$PROJECT_ROOT/$svc/target/"*.jar 1> /dev/null 2>&1; then
+        SERVICES_TO_BUILD="$SERVICES_TO_BUILD $svc"
+    fi
+done
+
+if [ -n "$SERVICES_TO_BUILD" ]; then
+    if [ "$FORCE_REBUILD" == "true" ]; then
+        log_info "Rebuilding all services (--rebuild flag)..."
+    else
+        log_warn "JAR files missing for:$SERVICES_TO_BUILD"
+        log_info "Building JARs with Maven (this may take a few minutes)..."
+    fi
     cd "$PROJECT_ROOT"
-    for svc in $MISSING_JARS; do
+    for svc in $SERVICES_TO_BUILD; do
         log_info "Building $svc..."
         (cd "$svc" && mvn clean package -DskipTests -q) || { log_error "Failed to build $svc"; exit 1; }
     done
     log_success "All JARs built!"
+else
+    log_info "All JAR files exist. Use --rebuild to force rebuild."
 fi
 
 # Check AWS credentials

@@ -281,7 +281,7 @@ def _detect_idp_type(user_attributes: Dict[str, str]) -> str:
     if any(attr.startswith('saml:') for attr in user_attributes.keys()):
         return 'SAML'
     
-    return 'OIDC'
+    return 'COGNITO'  # Native Cognito users (not SSO)
 
 
 def _is_social_login(user_attributes: Dict[str, str]) -> bool:

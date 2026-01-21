@@ -146,6 +146,9 @@ module "bastion" {
   # Allow Lambda to access internal services (8081, 8083)
   # Note: Lambda SG must be created first, handled by depends_on in Lambda module
   lambda_security_group_id = module.cognito_pre_token_generation.security_group_id
+
+  # Cognito permissions for auth-service (signup flow, SSO management)
+  cognito_user_pool_arn = module.cognito_user_pool.user_pool_arn
 }
 
 # =============================================================================

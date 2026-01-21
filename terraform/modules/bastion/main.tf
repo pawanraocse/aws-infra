@@ -120,36 +120,58 @@ resource "aws_iam_role_policy" "bastion_app_access" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "ssm:GetParameter",
-          "ssm:GetParameters",
-          "ssm:GetParametersByPath"
-        ]
-        Resource = "arn:aws:ssm:*:*:parameter/${var.project_name}/*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue"
-        ]
-        Resource = "arn:aws:secretsmanager:*:*:secret:${var.project_name}/*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "ecr:GetAuthorizationToken",
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage"
-        ]
-        Resource = "*"
-      }
-    ]
+    Statement = concat(
+      [
+        {
+          Effect = "Allow"
+          Action = [
+            "ssm:GetParameter",
+            "ssm:GetParameters",
+            "ssm:GetParametersByPath"
+          ]
+          Resource = "arn:aws:ssm:*:*:parameter/${var.project_name}/*"
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "secretsmanager:GetSecretValue"
+          ]
+          Resource = "arn:aws:secretsmanager:*:*:secret:${var.project_name}/*"
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "ecr:GetAuthorizationToken",
+            "ecr:BatchCheckLayerAvailability",
+            "ecr:GetDownloadUrlForLayer",
+            "ecr:BatchGetImage"
+          ]
+          Resource = "*"
+        }
+      ],
+      # Cognito Admin operations (for auth-service) - only if user pool ARN provided
+      var.cognito_user_pool_arn != null ? [
+        {
+          Effect = "Allow"
+          Action = [
+            # Core: User existence check for signup
+            "cognito-idp:AdminGetUser",
+            # SSO: Identity Provider management
+            "cognito-idp:DescribeIdentityProvider",
+            "cognito-idp:CreateIdentityProvider",
+            "cognito-idp:UpdateIdentityProvider",
+            "cognito-idp:DeleteIdentityProvider",
+            # SSO: User Pool Client management
+            "cognito-idp:DescribeUserPoolClient",
+            "cognito-idp:UpdateUserPoolClient"
+          ]
+          Resource = var.cognito_user_pool_arn
+        }
+      ] : []
+    )
   })
 }
+
 
 resource "aws_iam_instance_profile" "bastion" {
   name = "${local.bastion_name}-profile"

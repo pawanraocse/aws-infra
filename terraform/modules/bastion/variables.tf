@@ -63,3 +63,12 @@ variable "lambda_security_group_id" {
   type        = string
   default     = null
 }
+
+# ========== Cognito Configuration ==========
+
+variable "cognito_user_pool_arn" {
+  description = "Cognito User Pool ARN for auth-service to manage users and identity providers"
+  type        = string
+  default     = null
+}
+

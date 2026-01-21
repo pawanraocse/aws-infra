@@ -1,23 +1,24 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
-import { AuthService } from '../../core/auth.service';
-import { EntryService, Entry } from '../../core/services/entry.service';
-import { CardModule } from 'primeng/card';
-import { TableModule } from 'primeng/table';
-import { ButtonModule } from 'primeng/button';
-import { DialogModule } from 'primeng/dialog';
-import { InputTextModule } from 'primeng/inputtext';
-import { MessageModule } from 'primeng/message';
-import { TagModule } from 'primeng/tag';
+import {Component, inject, OnInit, signal} from '@angular/core';
+import {CommonModule} from '@angular/common';
+import {FormBuilder, FormsModule, ReactiveFormsModule, Validators} from '@angular/forms';
+import {Router} from '@angular/router';
+import {AuthService} from '../../core/auth.service';
+import {Entry, EntryService} from '../../core/services/entry.service';
+import {CardModule} from 'primeng/card';
+import {TableModule} from 'primeng/table';
+import {ButtonModule} from 'primeng/button';
+import {DialogModule} from 'primeng/dialog';
+import {InputTextModule} from 'primeng/inputtext';
+import {MessageModule} from 'primeng/message';
+import {AvatarModule} from 'primeng/avatar';
+import {TagModule} from 'primeng/tag';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   imports: [
     CommonModule, FormsModule, ReactiveFormsModule,
-    CardModule, TableModule, ButtonModule, DialogModule, InputTextModule, MessageModule, TagModule
+    CardModule, TableModule, ButtonModule, DialogModule, InputTextModule, MessageModule, TagModule, AvatarModule
   ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.scss']

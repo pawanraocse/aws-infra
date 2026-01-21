@@ -1,134 +1,155 @@
-<div class="grid p-4">
+<div class="grid p-4 md:p-6 fadein animation-duration-500">
   <!-- Header Section -->
-  <div class="col-12 mb-4">
-    <div class="flex justify-content-between align-items-center">
+  <div class="col-12 mb-5">
+    <div class="flex flex-column md:flex-row justify-content-between align-items-start md:align-items-center gap-4">
       <div>
-        <h1 class="text-3xl font-bold text-900 m-0">Dashboard</h1>
-        <p class="text-600 mt-2">
-          {{ authService.user()?.tenantType === 'ORGANIZATION' 
-            ? 'Manage your organization resources and view statistics.' 
-            : 'Welcome! Manage your personal data.' }}
+        <h1 class="text-3xl font-bold text-900 m-0 tracking-tight">Dashboard</h1>
+        <p class="text-secondary mt-2 text-lg">
+          {{ authService.user()?.tenantType === 'ORGANIZATION'
+          ? 'Overview of your organization resources.'
+          : 'Welcome back! Here is your personal overview.' }}
         </p>
       </div>
       <div class="flex gap-2">
-        <p-tag [value]="authService.user()?.tenantType" severity="info" styleClass="text-base px-3 py-2"></p-tag>
+        <span
+          class="px-3 py-2 bg-white border-1 border-200 border-round-2xl text-sm font-semibold text-700 shadow-sm flex align-items-center gap-2">
+          <i class="pi pi-building text-primary"></i>
+          {{ authService.user()?.tenantType }}
+        </span>
       </div>
     </div>
   </div>
 
   <!-- User Info Card -->
   <div class="col-12 md:col-4">
-    <p-card styleClass="h-full shadow-soft border-round surface-card">
-      <div class="flex align-items-center gap-3 mb-4">
-        <div class="flex align-items-center justify-content-center bg-primary-100 border-circle"
-          style="width: 3rem; height: 3rem">
-          <i class="pi pi-user text-primary-600 text-xl"></i>
+    <div class="glass-card h-full p-4 flex flex-column gap-4">
+      <div class="flex align-items-center gap-3">
+        <div class="w-4rem h-4rem border-circle bg-primary-100 flex align-items-center justify-content-center">
+          <i class="pi pi-user text-primary-600 text-2xl"></i>
         </div>
         <div>
-          <div class="text-900 font-bold text-lg">User Profile</div>
-          <div class="text-600 text-sm">Your account details</div>
+          <div class="text-xl font-bold text-900">User Profile</div>
+          <div class="text-secondary text-sm">Account Details</div>
         </div>
       </div>
 
-      <div *ngIf="authService.user() as user" class="flex flex-column gap-3">
-        <div class="flex justify-content-between align-items-center p-2 surface-50 border-round">
+      <div *ngIf="authService.user() as user" class="flex flex-column gap-3 mt-2">
+        <div
+          class="flex justify-content-between align-items-center p-3 border-round bg-white-alpha-50 border-1 surface-border">
           <span class="font-medium text-600">Email</span>
-          <span class="text-900 font-semibold">{{ user.email }}</span>
+          <span class="text-900 font-semibold text-sm">{{ user.email }}</span>
         </div>
-        <div class="flex justify-content-between align-items-center p-2 surface-50 border-round">
+        <div
+          class="flex justify-content-between align-items-center p-3 border-round bg-white-alpha-50 border-1 surface-border">
           <span class="font-medium text-600">Tenant ID</span>
-          <span class="text-900 font-mono bg-white px-2 py-1 border-round shadow-sm text-sm">{{ user.tenantId }}</span>
+          <span class="text-900 font-mono bg-surface-100 px-2 py-1 border-round text-xs">{{ user.tenantId }}</span>
         </div>
-        <div class="flex justify-content-between align-items-center p-2 surface-50 border-round">
+        <div
+          class="flex justify-content-between align-items-center p-3 border-round bg-white-alpha-50 border-1 surface-border">
           <span class="font-medium text-600">Role</span>
-          <p-tag [value]="user.role" severity="warn"></p-tag>
+          <span class="px-2 py-1 bg-primary-50 text-primary-700 font-bold text-xs border-round uppercase">{{ user.role
+            }}</span>
         </div>
       </div>
-    </p-card>
+    </div>
   </div>
 
   <!-- Welcome Card -->
   <div class="col-12 md:col-8">
-    <p-card styleClass="h-full shadow-soft border-round bg-primary-50">
-      <div class="flex flex-column h-full justify-content-center p-2">
-        <div class="text-2xl font-bold text-primary-900 mb-2">Welcome to your SaaS Platform! 🎉</div>
-        <p class="line-height-3 text-primary-800 text-lg m-0">
-          You are successfully authenticated using AWS Cognito.
+    <div class="glass-card h-full p-5 relative overflow-hidden">
+      <!-- Decor circle in card -->
+      <div class="absolute top-0 right-0 w-15rem h-15rem border-circle bg-primary-50 opacity-50 blur-xl"
+        style="transform: translate(30%, -30%);"></div>
+
+      <div class="relative z-1 flex flex-column h-full justify-content-center">
+        <div class="text-3xl font-bold text-900 mb-3">Welcome to your Platform! 🎉</div>
+        <p class="line-height-3 text-700 text-lg mb-5" style="max-width: 600px;">
+          You are authenticated securely via AWS Cognito.
           This dashboard demonstrates <strong>multi-tenant data isolation</strong>.
-          Any entries you create below are only visible to users within your tenant.
+          Entries created here are strictly scoped to your tenant.
         </p>
-        <div class="mt-4 flex gap-3">
-          <div class="flex align-items-center gap-2 text-primary-700">
-            <i class="pi pi-shield"></i>
-            <span>Secure Access</span>
+
+        <div class="grid">
+          <div class="col-12 md:col-4">
+            <div class="p-3 border-round bg-white shadow-sm border-1 surface-border h-full">
+              <i class="pi pi-shield text-2xl text-primary mb-2"></i>
+              <div class="font-bold text-900 mb-1">Secure Access</div>
+              <div class="text-sm text-600">Enterprise-grade security</div>
+            </div>
           </div>
-          <div class="flex align-items-center gap-2 text-primary-700">
-            <i class="pi pi-database"></i>
-            <span>Isolated Data</span>
+          <div class="col-12 md:col-4">
+            <div class="p-3 border-round bg-white shadow-sm border-1 surface-border h-full">
+              <i class="pi pi-database text-2xl text-primary mb-2"></i>
+              <div class="font-bold text-900 mb-1">Data Isolation</div>
+              <div class="text-sm text-600">Strict tenant boundaries</div>
+            </div>
           </div>
-          <div class="flex align-items-center gap-2 text-primary-700">
-            <i class="pi pi-bolt"></i>
-            <span>High Performance</span>
+          <div class="col-12 md:col-4">
+            <div class="p-3 border-round bg-white shadow-sm border-1 surface-border h-full">
+              <i class="pi pi-bolt text-2xl text-primary mb-2"></i>
+              <div class="font-bold text-900 mb-1">Performance</div>
+              <div class="text-sm text-600">Optimized for scale</div>
+            </div>
           </div>
         </div>
       </div>
-    </p-card>
+    </div>
   </div>
 
   <!-- Entries Management -->
   <div class="col-12 mt-4">
-    <p-card styleClass="shadow-soft border-round">
+    <div class="glass-card p-0 overflow-hidden">
       <p-table [value]="entries()" [lazy]="true" (onLazyLoad)="loadEntries($event)" [paginator]="true" [rows]="10"
         [totalRecords]="totalRecords()" [loading]="loading()" styleClass="p-datatable-lg"
         [tableStyle]="{'min-width': '50rem'}">
 
         <ng-template pTemplate="caption">
-          <div class="flex align-items-center justify-content-between mb-2">
+          <div class="p-4 flex align-items-center justify-content-between">
             <div>
               <div class="text-xl font-bold text-900">
                 {{ authService.user()?.tenantType === 'ORGANIZATION' ? 'Organization Entries' : 'My Data' }}
               </div>
-              <div class="text-600 text-sm">
-                {{ authService.user()?.tenantType === 'ORGANIZATION' 
-                  ? 'Manage your organization\'s data entries' 
-                  : 'Manage your personal data entries' }}
+              <div class="text-secondary text-sm mt-1">
+                {{ authService.user()?.tenantType === 'ORGANIZATION'
+                ? 'Manage your organization\'s data entries'
+                : 'Manage your personal data entries' }}
               </div>
             </div>
             <p-button label="New Entry" icon="pi pi-plus" (click)="showCreateDialog()"
-              styleClass="p-button-primary"></p-button>
+              styleClass="p-button-primary shadow-2"></p-button>
           </div>
         </ng-template>
 
         <ng-template pTemplate="header">
           <tr>
-            <th class="bg-surface-50 text-600 font-semibold">Key</th>
-            <th class="bg-surface-50 text-600 font-semibold">Value</th>
-            <th class="bg-surface-50 text-600 font-semibold">Created By</th>
-            <th class="bg-surface-50 text-600 font-semibold">Created At</th>
-            <th class="bg-surface-50 text-600 font-semibold" style="width: 10rem">Actions</th>
+            <th>Key</th>
+            <th>Value</th>
+            <th>Created By</th>
+            <th>Created At</th>
+            <th style="width: 10rem">Actions</th>
           </tr>
         </ng-template>
 
         <ng-template pTemplate="body" let-entry>
-          <tr class="hover:surface-50 transition-colors transition-duration-200">
-            <td class="font-medium text-900">{{ entry.key }}</td>
-            <td class="text-700">{{ entry.value }}</td>
+          <tr class="transition-colors transition-duration-200">
+            <td class="font-semibold text-900">{{ entry.key }}</td>
+            <td class="text-700 font-mono text-sm bg-surface-50 border-round px-2 py-1 inline-block mt-2 md:mt-0">{{
+              entry.value }}</td>
             <td>
               <div class="flex align-items-center gap-2">
-                <div class="border-circle bg-gray-200 flex align-items-center justify-content-center"
-                  style="width: 24px; height: 24px">
-                  <i class="pi pi-user text-xs text-gray-600"></i>
-                </div>
-                <span class="text-600 text-sm">{{ entry.createdBy }}</span>
+                <p-avatar icon="pi pi-user" shape="circle" styleClass="bg-surface-200 text-600"></p-avatar>
+                <span class="text-700 text-sm">{{ entry.createdBy }}</span>
               </div>
             </td>
             <td class="text-600 text-sm">{{ entry.createdAt | date:'mediumDate' }}</td>
             <td>
               <div class="flex gap-2">
-                <p-button icon="pi pi-pencil" styleClass="p-button-rounded p-button-text p-button-info hover:bg-blue-50"
-                  (click)="editEntry(entry)" pTooltip="Edit"></p-button>
-                <p-button icon="pi pi-trash" styleClass="p-button-rounded p-button-text p-button-danger hover:bg-red-50"
-                  (click)="deleteEntry(entry)" pTooltip="Delete"></p-button>
+                <button pButton icon="pi pi-pencil"
+                  class="p-button-rounded p-button-text p-button-secondary hover:surface-100" (click)="editEntry(entry)"
+                  pTooltip="Edit"></button>
+                <button pButton icon="pi pi-trash"
+                  class="p-button-rounded p-button-text p-button-danger hover:bg-red-50" (click)="deleteEntry(entry)"
+                  pTooltip="Delete"></button>
               </div>
             </td>
           </tr>
@@ -136,47 +157,46 @@
 
         <ng-template pTemplate="emptymessage">
           <tr>
-            <td colspan="5" class="text-center p-5">
+            <td colspan="5" class="text-center p-6">
               <div class="flex flex-column align-items-center gap-3">
-                <div class="border-circle bg-surface-100 p-3">
-                  <i class="pi pi-folder-open text-4xl text-500"></i>
+                <div class="w-5rem h-5rem border-circle bg-surface-50 flex align-items-center justify-content-center">
+                  <i class="pi pi-folder-open text-4xl text-400"></i>
                 </div>
-                <div class="text-700 font-medium">No entries found</div>
-                <div class="text-500 text-sm">Create your first entry to get started</div>
-                <p-button label="Create Entry" icon="pi pi-plus" styleClass="p-button-text"
-                  (click)="showCreateDialog()"></p-button>
+                <div class="text-700 font-semibold text-lg">No entries found</div>
+                <div class="text-500">Create your first entry to get started</div>
+                <p-button label="Create Entry" icon="pi pi-plus" [text]="true" (click)="showCreateDialog()"></p-button>
               </div>
             </td>
           </tr>
         </ng-template>
       </p-table>
-    </p-card>
+    </div>
   </div>
 </div>
 
 <!-- Create/Edit Dialog -->
 <p-dialog [(visible)]="displayDialog" [header]="dialogHeader()" [modal]="true" [style]="{width: '450px'}"
-  styleClass="p-fluid border-round-xl" [draggable]="false" [resizable]="false">
+  styleClass="p-fluid glass-dialog" [draggable]="false" [resizable]="false" [maskStyleClass]="'backdrop-blur-sm'">
 
   <ng-template pTemplate="content">
-    <form [formGroup]="entryForm" class="flex flex-column gap-4 mt-3">
+    <form [formGroup]="entryForm" class="flex flex-column gap-4 mt-2">
       <div *ngIf="error()" class="mb-2">
         <p-message severity="error" [text]="error()!" styleClass="w-full"></p-message>
       </div>
 
       <div class="field">
-        <label for="key" class="font-medium text-900 mb-2 block">Key Name</label>
+        <label for="key" class="font-semibold text-800 mb-2 block">Key Name</label>
         <span class="p-input-icon-left w-full">
-          <i class="pi pi-tag"></i>
+          <i class="pi pi-tag text-500"></i>
           <input pInputText id="key" formControlName="key" placeholder="e.g. API_KEY" class="w-full" />
         </span>
         <small class="text-500 block mt-1">Unique identifier for this entry</small>
       </div>
 
       <div class="field">
-        <label for="value" class="font-medium text-900 mb-2 block">Value</label>
+        <label for="value" class="font-semibold text-800 mb-2 block">Value</label>
         <span class="p-input-icon-left w-full">
-          <i class="pi pi-code"></i>
+          <i class="pi pi-code text-500"></i>
           <input pInputText id="value" formControlName="value" placeholder="e.g. sk-123456789" class="w-full" />
         </span>
         <small class="text-500 block mt-1">The secret value to store</small>
@@ -186,8 +206,7 @@
 
   <ng-template pTemplate="footer">
     <div class="flex justify-content-end gap-2 pt-3 border-top-1 surface-border">
-      <p-button label="Cancel" icon="pi pi-times" (click)="displayDialog.set(false)"
-        styleClass="p-button-text p-button-secondary"></p-button>
+      <p-button label="Cancel" [text]="true" (click)="displayDialog.set(false)" styleClass="text-600"></p-button>
       <p-button label="Save Entry" icon="pi pi-check" (click)="saveEntry()" [loading]="saving()"
         [disabled]="entryForm.invalid"></p-button>
     </div>

@@ -34,7 +34,7 @@ public class ApiKey {
     @Column(name = "key_hash", nullable = false, length = 256)
     private String keyHash;
 
-    @Column(name = "key_prefix", nullable = false, length = 12)
+    @Column(name = "key_prefix", nullable = false, length = 20)
     private String keyPrefix;
 
     @Column(name = "created_by_user_id", nullable = false)

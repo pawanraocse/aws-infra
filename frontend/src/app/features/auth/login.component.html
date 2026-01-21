@@ -1,45 +1,59 @@
-<div class="login-container">
-  <div class="login-content">
-    <!-- Header -->
-    <div class="text-center mb-5">
-      <div class="text-3xl font-bold text-900 mb-2">
-        @switch (currentStep()) {
-          @case ('email') { Welcome Back }
-          @case ('select-tenant') { Choose Your Workspace }
-          @case ('password') { Enter Your Password }
-        }
-      </div>
-      <div class="text-600 font-medium">
-        @switch (currentStep()) {
-          @case ('email') { Enter your email to continue }
-          @case ('select-tenant') { Select which workspace you want to access }
-          @case ('password') { Sign in to {{ getTenantDisplayName(selectedTenant()!) }} }
-        }
-      </div>
-    </div>
+<div class="auth-page-container">
+  <!-- Animated background elements -->
+  <div class="bg-decoration">
+    <div class="circle circle-1"></div>
+    <div class="circle circle-2"></div>
+    <div class="circle circle-3"></div>
+  </div>
 
-    <p-card styleClass="login-card">
+  <div class="animate-slide-up w-full flex justify-content-center" style="max-width: 480px; z-index: 1;">
+    <div class="glass-card">
+      
+      <!-- Header -->
+      <div class="text-center mb-5">
+        <div class="icon-container mb-4">
+          <div class="icon-ring">
+            <i class="pi pi-user text-3xl text-white"></i>
+          </div>
+        </div>
+        
+        <h1 class="text-3xl font-bold text-900 mb-2 m-0" style="letter-spacing: -0.5px;">
+          @switch (currentStep()) {
+            @case ('email') { Welcome Back }
+            @case ('select-tenant') { Select Workspace }
+            @case ('password') { Enter Password }
+          }
+        </h1>
+        <p class="text-secondary font-medium m-0 line-height-3">
+          @switch (currentStep()) {
+            @case ('email') { Sign in to access your dashboard }
+            @case ('select-tenant') { Choose where you want to work today }
+            @case ('password') { Signing in to <strong class="text-primary">{{ getTenantDisplayName(selectedTenant()!) }}</strong> }
+          }
+        </p>
+      </div>
+
       <!-- Messages -->
       @if (error()) {
-        <p-message severity="error" [text]="error()!" styleClass="w-full mb-4"></p-message>
+        <p-message severity="error" [text]="error()!" styleClass="w-full mb-4 animate-fade-in"></p-message>
       }
       @if (success()) {
-        <p-message severity="success" [text]="success()!" styleClass="w-full mb-4"></p-message>
+        <p-message severity="success" [text]="success()!" styleClass="w-full mb-4 animate-fade-in"></p-message>
       }
 
       <!-- Step 1: Email Entry -->
       @if (currentStep() === 'email') {
-        <form [formGroup]="emailForm" (ngSubmit)="onEmailSubmit()" class="flex flex-column gap-4">
+        <form [formGroup]="emailForm" (ngSubmit)="onEmailSubmit()" class="flex flex-column gap-4 animate-fade-in">
           <div class="flex flex-column gap-2">
-            <label for="email" class="font-medium text-900">Email Address</label>
+            <label for="email" class="font-semibold text-700">Email Address</label>
             <span class="p-input-icon-left w-full">
-              <i class="pi pi-envelope"></i>
+              <i class="pi pi-envelope text-primary"></i>
               <input 
                 pInputText 
                 id="email" 
                 formControlName="email" 
                 class="w-full" 
-                placeholder="you@example.com"
+                placeholder="name@company.com"
                 autocomplete="email" />
             </span>
           </div>
@@ -51,64 +65,63 @@
             iconPos="right"
             [loading]="loading()" 
             [disabled]="emailForm.invalid"
-            styleClass="w-full p-button-lg">
+            styleClass="w-full p-button-lg shadow-2">
           </p-button>
 
-          <!-- SSO Divider -->
-          <div class="flex align-items-center gap-3 my-4">
+          <!-- Divider -->
+          <div class="flex align-items-center gap-3 my-2 opacity-60">
             <div class="flex-1 border-top-1 surface-border"></div>
-            <span class="text-500 font-medium">or</span>
+            <span class="text-sm font-semibold">OR</span>
             <div class="flex-1 border-top-1 surface-border"></div>
           </div>
 
-          <!-- Google Sign-in Button (Personal Gmail) -->
-          <p-button 
-            label="Sign in with Google" 
-            icon="pi pi-google"
-            severity="secondary"
-            [outlined]="true"
-            styleClass="w-full google-btn mb-2"
-            (onClick)="loginWithGoogle()">
-          </p-button>
-
-          <!-- SSO Login Button (Organization) -->
-          <p-button 
-            label="Sign in with SSO" 
-            icon="pi pi-key"
-            severity="secondary"
-            styleClass="w-full"
-            (onClick)="showSsoTenantInput()">
-          </p-button>
+          <div class="flex flex-column gap-3">
+            <!-- Google Sign-in -->
+            <button 
+              pButton 
+              label="Sign in with Google" 
+              icon="pi pi-google"
+              class="p-button-outlined w-full justify-content-center"
+              (click)="loginWithGoogle()">
+            </button>
+  
+            <!-- SSO Login -->
+            <button 
+              pButton 
+              label="Sign in with SSO" 
+              icon="pi pi-key"
+              class="p-button-outlined w-full justify-content-center"
+              (click)="showSsoTenantInput()">
+            </button>
+          </div>
         </form>
 
-        <!-- SSO Tenant Input Modal -->
+        <!-- SSO Tenant Input -->
         @if (showSsoInput()) {
-          <div class="sso-input-section mt-4">
-            <div class="p-fluid">
-              <label for="ssoTenant" class="font-medium text-900 mb-2 block">Organization Name</label>
-              <span class="p-input-icon-left w-full">
-                <i class="pi pi-building"></i>
-                <input 
-                  pInputText 
-                  id="ssoTenant" 
-                  [(ngModel)]="ssoTenantName"
-                  class="w-full" 
-                  placeholder="Enter your organization name"
-                  (keyup.enter)="ssoTenantName && loginWithSsoTenant()" />
-              </span>
-              <small class="text-500 mt-1 block">Enter your company name or organization identifier</small>
+          <div class="sso-input-section mt-4 p-4 border-round surface-50 animate-fade-in border-1 surface-border">
+            <label for="ssoTenant" class="font-semibold text-900 mb-2 block">Organization Name</label>
+            <div class="p-inputgroup mb-2">
+              <span class="p-inputgroup-addon bg-white"><i class="pi pi-building text-primary"></i></span>
+              <input 
+                pInputText 
+                id="ssoTenant" 
+                [(ngModel)]="ssoTenantName"
+                class="w-full" 
+                placeholder="acme-corp"
+                (keyup.enter)="ssoTenantName && loginWithSsoTenant()" />
             </div>
+            
             <div class="flex gap-2 mt-3">
               <p-button 
                 label="Cancel" 
-                severity="secondary"
                 [text]="true"
-                styleClass="flex-1"
+                styleClass="flex-1 text-secondary"
                 (onClick)="cancelSsoInput()">
               </p-button>
               <p-button 
-                label="Continue to SSO" 
-                icon="pi pi-sign-in"
+                label="Continue" 
+                icon="pi pi-arrow-right"
+                iconPos="right"
                 styleClass="flex-1"
                 [loading]="ssoLoading()"
                 [disabled]="!ssoTenantName"
@@ -121,129 +134,115 @@
 
       <!-- Step 2: Tenant Selection -->
       @if (currentStep() === 'select-tenant') {
-        <div class="tenant-selector">
-          <div class="tenant-list">
+        <div class="tenant-selector animate-fade-in">
+          <div class="tenant-list flex flex-column gap-3 mb-4">
             @for (tenant of lookupResult()?.tenants; track tenant.tenantId) {
               <div 
-                class="tenant-card" 
-                [class.selected]="selectedTenant()?.tenantId === tenant.tenantId"
-                [class.default]="tenant.isDefault"
+                class="tenant-card p-3 border-round cursor-pointer transition-all transition-duration-200 border-1 surface-border hover:surface-50 hover:shadow-2 flex align-items-center gap-3 bg-white"
+                [class.border-primary]="selectedTenant()?.tenantId === tenant.tenantId"
                 (click)="selectTenant(tenant)">
                 
-                <div class="tenant-icon">
-                  <i [class]="'pi ' + getTenantIcon(tenant)"></i>
+                <div class="tenant-icon flex align-items-center justify-content-center border-round-md bg-primary-50 text-primary w-3rem h-3rem">
+                  <i [class]="'text-xl pi ' + getTenantIcon(tenant)"></i>
                 </div>
                 
-                <div class="tenant-info">
-                  <div class="tenant-name">{{ getTenantDisplayName(tenant) }}</div>
-                  <div class="tenant-role">{{ getTenantSubtitle(tenant) }}</div>
+                <div class="flex-1">
+                  <div class="font-semibold text-900">{{ getTenantDisplayName(tenant) }}</div>
+                  <div class="text-sm text-secondary">{{ getTenantSubtitle(tenant) }}</div>
                 </div>
 
                 @if (tenant.isDefault) {
-                  <span class="tenant-badge default">Default</span>
+                  <span class="px-2 py-1 text-xs font-bold bg-green-100 text-green-700 border-round">Default</span>
                 }
                 @if (tenant.ssoEnabled) {
-                  <span class="tenant-badge sso">SSO</span>
+                  <span class="px-2 py-1 text-xs font-bold bg-blue-100 text-blue-700 border-round">SSO</span>
                 }
                 
-                <i class="pi pi-chevron-right tenant-arrow"></i>
+                <i class="pi pi-chevron-right text-gray-400"></i>
               </div>
             }
           </div>
 
-          <div class="mt-4">
-            <p-button 
-              label="Back" 
-              icon="pi pi-arrow-left"
-              styleClass="p-button-text p-button-secondary w-full"
-              (onClick)="goBackToEmail()">
-            </p-button>
-          </div>
+          <p-button 
+            label="Use a different email" 
+            icon="pi pi-arrow-left"
+            [text]="true"
+            styleClass="w-full text-secondary"
+            (onClick)="goBackToEmail()">
+          </p-button>
         </div>
       }
 
       <!-- Step 3: Password Entry -->
       @if (currentStep() === 'password') {
-        <form [formGroup]="passwordForm" (ngSubmit)="onPasswordSubmit()" class="flex flex-column gap-4">
+        <form [formGroup]="passwordForm" (ngSubmit)="onPasswordSubmit()" class="flex flex-column gap-4 animate-fade-in">
           <!-- Selected Tenant Display -->
           @if (selectedTenant()) {
-            <div class="selected-tenant-display">
-              <div class="tenant-icon small">
-                <i [class]="'pi ' + getTenantIcon(selectedTenant()!)"></i>
+            <div class="p-3 border-round bg-primary-50 border-1 border-primary-100 flex align-items-center gap-3">
+              <div class="w-3rem h-3rem border-circle bg-white flex align-items-center justify-content-center text-primary shadow-1">
+                <i [class]="'text-xl pi ' + getTenantIcon(selectedTenant()!)"></i>
               </div>
-              <div class="tenant-info">
-                <div class="tenant-name">{{ getTenantDisplayName(selectedTenant()!) }}</div>
-                <div class="tenant-email">{{ emailForm.value.email }}</div>
+              <div class="overflow-hidden">
+                <div class="font-bold text-900 white-space-nowrap overflow-hidden text-overflow-ellipsis">{{ getTenantDisplayName(selectedTenant()!) }}</div>
+                <div class="text-sm text-secondary">{{ emailForm.value.email }}</div>
               </div>
             </div>
           }
 
           <div class="flex flex-column gap-2">
-            <label for="password" class="font-medium text-900">Password</label>
+            <div class="flex justify-content-between align-items-center">
+              <label for="password" class="font-semibold text-700">Password</label>
+              <a routerLink="/auth/forgot-password" class="text-sm font-semibold opacity-80 hover:opacity-100 transition-colors">
+                Forgot password?
+              </a>
+            </div>
+            
             <p-password 
               id="password" 
               formControlName="password" 
               [feedback]="false" 
               [toggleMask]="true"
               styleClass="w-full" 
-              inputStyleClass="w-full" 
+              inputStyleClass="w-full p-inputtext-lg" 
               placeholder="••••••••">
             </p-password>
-            <div class="flex justify-content-end">
-              <a routerLink="/auth/forgot-password" class="text-sm font-medium cursor-pointer text-primary-600 hover:text-primary-800">
-                Forgot password?
-              </a>
-            </div>
           </div>
 
-          <p-button 
-            type="submit" 
-            label="Sign In" 
-            [loading]="loading()" 
-            [disabled]="passwordForm.invalid"
-            styleClass="w-full p-button-lg">
-          </p-button>
+          <div class="flex flex-column gap-3 mt-2">
+            <p-button 
+              type="submit" 
+              label="Sign In" 
+              [loading]="loading()" 
+              [disabled]="passwordForm.invalid"
+              styleClass="w-full p-button-lg shadow-2">
+            </p-button>
 
-          <p-button 
-            label="Back" 
-            icon="pi pi-arrow-left"
-            styleClass="p-button-text p-button-secondary w-full"
-            (onClick)="goBackToTenantSelection()">
-          </p-button>
+            <p-button 
+              label="Back" 
+              icon="pi pi-arrow-left"
+              [text]="true"
+              styleClass="w-full text-secondary"
+              (onClick)="goBackToTenantSelection()">
+            </p-button>
+          </div>
         </form>
       }
 
-      <!-- Sign Up Options (only on email step) -->
+      <!-- Sign Up Footer -->
       @if (currentStep() === 'email') {
-        <div class="signup-section mt-5">
-          <div class="text-center text-600 mb-3">
-            Don't have an account?
-          </div>
-
-          <div class="grid">
-            <div class="col-6">
-              <p-button 
-                label="Personal" 
-                icon="pi pi-user" 
-                styleClass="w-full p-button-outlined p-button-secondary"
-                routerLink="/auth/signup/personal">
-              </p-button>
-            </div>
-            <div class="col-6">
-              <p-button 
-                label="Organization" 
-                icon="pi pi-building"
-                styleClass="w-full p-button-outlined p-button-secondary"
-                routerLink="/auth/signup/organization">
-              </p-button>
-            </div>
+        <div class="text-center mt-5 pt-4 border-top-1 border-gray-100">
+          <p class="text-secondary text-sm mb-3">Don't have an account yet?</p>
+          <div class="flex gap-3 justify-content-center">
+             <a routerLink="/auth/signup/personal" class="text-sm font-semibold no-underline hover:text-primary-700 transition-colors">
+               Create Personal
+             </a>
+             <span class="text-gray-300">|</span>
+             <a routerLink="/auth/signup/organization" class="text-sm font-semibold no-underline hover:text-primary-700 transition-colors">
+               Create Organization
+             </a>
           </div>
         </div>
       }
-    </p-card>
-
-    <div class="text-center mt-4 text-500 text-sm">
-      &copy; 2025 Cloud Infra Template. All rights reserved.
     </div>
   </div>
 </div>

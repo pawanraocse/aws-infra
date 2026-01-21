@@ -313,7 +313,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     -- Key identification
     name VARCHAR(100) NOT NULL,              -- User-friendly name (e.g., "CI/CD Integration")
     key_hash VARCHAR(256) NOT NULL,          -- SHA-256 hash of the key (never store raw key)
-    key_prefix VARCHAR(12) NOT NULL,         -- First 8 chars for identification (e.g., "sk_live_a1b2")
+    key_prefix VARCHAR(20) NOT NULL,         -- First 8 chars for identification (e.g., "sk_live_a1b2")
     
     -- Permission inheritance
     created_by_user_id VARCHAR(255) NOT NULL, -- Cognito user ID - permissions inherited from this user

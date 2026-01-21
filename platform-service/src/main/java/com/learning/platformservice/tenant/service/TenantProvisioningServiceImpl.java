@@ -19,7 +19,6 @@ import com.learning.platformservice.tenant.repo.TenantRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
@@ -44,7 +43,6 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
     private final TenantProvisioner tenantProvisioner;
     private final MembershipService membershipService;
 
-    @Autowired
     public TenantProvisioningServiceImpl(TenantRepository tenantRepository,
             MeterRegistry meterRegistry,
             List<TenantProvisionAction> actions,
@@ -74,11 +72,25 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
 
         if (existingOpt.isPresent()) {
             Tenant existing = existingOpt.get();
-            if (!TenantStatus.DELETED.name().equals(existing.getStatus())) {
+            String status = existing.getStatus();
+
+            // Self-Healing: If migration failed previously, retry it immediately
+            if (TenantStatus.MIGRATION_ERROR.name().equals(status)) {
+                log.warn("Self-healing triggered for tenant {}: Retrying migration (previous status: MIGRATION_ERROR)",
+                        tenantId);
+                return retryMigration(tenantId);
+            }
+
+            // Self-Healing: Allow re-provisioning for PROVISION_ERROR or DELETED tenants
+            boolean isRestartable = TenantStatus.DELETED.name().equals(status) ||
+                    TenantStatus.PROVISION_ERROR.name().equals(status);
+
+            if (!isRestartable) {
                 throw new TenantAlreadyExistsException(tenantId);
             }
-            // Reactivate existing tenant
-            log.info("Reactivating deleted tenant: {}", tenantId);
+
+            // Reactivate/Retry provisioning for deleted or failed tenants
+            log.info("Reactivating/Retrying tenant: {} (previous status: {})", tenantId, status);
             tenant = existing;
             // Keep original createdAt, but reset other fields logic continues below
         } else {

@@ -29,7 +29,7 @@ export interface CreateApiKeyResponse {
 })
 export class ApiKeyService {
     private http = inject(HttpClient);
-    private baseUrl = `${environment.apiUrl}/platform-service/platform/api/v1/api-keys`;
+    private baseUrl = `${environment.apiUrl}/platform-service/api/v1/api-keys`;
 
     /**
      * List all API keys for the current tenant.

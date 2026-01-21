@@ -1,0 +1,187 @@
+/*
+ * 🎨 Premium Design System - Theme Variables & Mixins
+ * Source of Truth for the "Modern SaaS" aesthetic.
+ */
+
+:root {
+    /* ========== Colors: Premium Gradient Palette ========== */
+    /* Primary Identity: Indigo -> Deep Purple */
+    --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --primary-gradient-hover: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+
+    /* Background Gradient (Full Page) */
+    --bg-gradient-auth: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+
+    /* Accents */
+    --color-indigo: #667eea;
+    --color-purple: #764ba2;
+    --color-pink: #f093fb;
+
+    /* Status Colors */
+    --color-success: #10b981;
+    --color-success-bg: #ecfdf5;
+    --color-error: #ef4444;
+    --color-error-bg: #fef2f2;
+    --blue-100: #dbeafe;
+    --blue-700: #1d4ed8;
+    --purple-100: #f3e8ff;
+    --purple-700: #7e22ce;
+
+    /* =========================================
+     Palette Restoration (Compatible with PrimeNG)
+     ========================================= */
+
+    /* Primary Palette (Indigo) */
+    --primary-50: #eff6ff;
+    --primary-100: #e0e7ff;
+    --primary-200: #c7d2fe;
+    --primary-300: #a5b4fc;
+    --primary-400: #818cf8;
+    --primary-500: #667eea;
+    /* Base Brand Color */
+    --primary-600: #4f46e5;
+    --primary-700: #4338ca;
+    --primary-800: #3730a3;
+    --primary-900: #312e81;
+
+    /* Surface Palette (Slate) */
+    --surface-0: #ffffff;
+    --surface-50: #f8fafc;
+    --surface-100: #f1f5f9;
+    --surface-200: #e2e8f0;
+    --surface-300: #cbd5e1;
+    --surface-400: #94a3b8;
+    --surface-500: #64748b;
+    --surface-600: #475569;
+    --surface-700: #334155;
+    --surface-800: #1e293b;
+    --surface-900: #0f172a;
+
+    /* Typography Colors */
+    --text-main: #1a1a2e;
+    /* Dark Navy */
+    --text-secondary: #6b7280;
+    /* Cool Gray */
+    --text-light: rgba(255, 255, 255, 0.9);
+
+    /* Dimensions */
+    --border-radius-xl: 24px;
+    /* Cards */
+    --border-radius-lg: 16px;
+    /* Inputs */
+    --border-radius-md: 12px;
+    /* Buttons */
+}
+
+/* ========== Mixins (SCSS) ========== */
+
+// 1. Glassmorphism Card Effect
+@mixin glass-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: var(--border-radius-xl);
+    box-shadow:
+        0 25px 50px -12px rgba(0, 0, 0, 0.25),
+        0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+// 2. Modern Input Field
+@mixin premium-input {
+    width: 100%;
+    padding: 1rem 1.25rem;
+    font-size: 1rem;
+    color: var(--text-main);
+    background: #fff;
+    border: 2px solid #e5e7eb;
+    border-radius: var(--border-radius-lg);
+    transition: all 0.2s ease;
+    outline: none;
+
+    &:focus {
+        border-color: var(--color-indigo);
+        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+    }
+
+    &::placeholder {
+        color: #9ca3af;
+    }
+}
+
+// 3. Primary Gradient Button
+@mixin premium-button {
+    width: 100%;
+    padding: 1rem 2rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: var(--border-radius-md);
+    background: var(--primary-gradient);
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+
+    &:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px -5px rgba(102, 126, 234, 0.5);
+        background: var(--primary-gradient-hover);
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+}
+
+/* ========== Global Animations ========== */
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translateY(0) rotate(0deg);
+    }
+
+    50% {
+        transform: translateY(-30px) rotate(10deg);
+    }
+}
+
+// Utility Classes for animations
+.animate-fade-in {
+    animation: fadeIn 0.4s ease-out forwards;
+}
+
+.animate-slide-up {
+    animation: slideUp 0.6s ease-out forwards;
+}

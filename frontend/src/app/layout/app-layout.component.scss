@@ -1,42 +1,127 @@
 @use '../app.scss' as *;
 
-.layout-container {
+.layout-wrapper {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #f8f9fa;
+  background: var(--surface-50);
+  position: relative;
+  overflow-x: hidden;
 }
 
-.layout-header {
-  background: #22223b;
-  color: #fff;
-  padding: 1rem 2rem;
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  display: flex;
-  align-items: center;
-  box-shadow: 0 2px 4px rgba(34,34,59,0.04);
+/* =========================================
+   Glass Topbar
+   ========================================= */
+.layout-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  padding: 0.75rem 1.5rem;
+
+  /* Glass Effect */
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+
+  /* PrimeNG Menubar Overrides */
+  ::ng-deep .p-menubar {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+
+    .p-menuitem-link {
+      background: transparent !important;
+
+      &:hover {
+        background: rgba(var(--primary-500-rgb), 0.08) !important;
+        border-radius: 8px;
+        color: var(--primary-600) !important;
+
+        .p-menuitem-icon,
+        .p-menuitem-text {
+          color: var(--primary-600) !important;
+        }
+      }
+
+      .p-menuitem-text {
+        font-weight: 500;
+        color: var(--surface-700);
+      }
+
+      .p-menuitem-icon {
+        color: var(--surface-500);
+      }
+    }
+
+    // Active State (if needed, PrimeNG handles routerLinkActive automatically usually)
+    .p-menuitem-link:active {
+      background: rgba(var(--primary-500-rgb), 0.12) !important;
+    }
+  }
 }
 
-.logo {
-  font-family: 'Inter Tight', sans-serif;
+/* =========================================
+   Main Content Area
+   ========================================= */
+.layout-content {
+  flex: 1;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+  /* Above background blobs */
 }
 
-.layout-main {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1rem;
+/* =========================================
+   Subtle Background Animation (Dashboard Version)
+   Less intrusive than Login page
+   ========================================= */
+.layout-wrapper::before,
+.layout-wrapper::after {
+  content: '';
+  position: fixed;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+  z-index: 0;
+  pointer-events: none;
+  animation: float-slow 25s infinite alternate;
 }
 
-.layout-footer {
-  background: #22223b;
-  color: #fff;
-  text-align: center;
-  padding: 0.75rem 2rem;
-  font-size: 1rem;
-  letter-spacing: 0.03em;
+.layout-wrapper::before {
+  background: radial-gradient(circle, var(--blue-100), transparent 70%);
+  top: -100px;
+  left: -100px;
+}
+
+.layout-wrapper::after {
+  background: radial-gradient(circle, var(--purple-100), transparent 70%);
+  bottom: -100px;
+  right: -100px;
+  animation-delay: -10s;
+}
+
+@keyframes float-slow {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  100% {
+    transform: translate(30px, 50px) scale(1.1);
+  }
+}
+
+/* Profile Section Styles */
+.user-profile-btn {
+  transition: all 0.2s;
+
+  &:hover {
+    background: var(--surface-100);
+  }
 }

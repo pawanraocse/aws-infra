@@ -1,0 +1,96 @@
+<div class="auth-page-container">
+    <!-- Animated background elements -->
+    <div class="bg-decoration">
+        <div class="circle circle-1"></div>
+        <div class="circle circle-2"></div>
+        <div class="circle circle-3"></div>
+    </div>
+
+    <div class="animate-slide-up w-full flex justify-content-center" style="max-width: 480px; z-index: 1;">
+        <div class="glass-card">
+
+            <!-- Header -->
+            <div class="text-center mb-5">
+                <div class="icon-container mb-4">
+                    <div class="icon-ring">
+                        <i class="pi pi-user-plus text-3xl text-white"></i>
+                    </div>
+                </div>
+
+                <h1 class="text-3xl font-bold text-900 mb-2 m-0" style="letter-spacing: -0.5px;">Create Account</h1>
+                <p class="text-secondary font-medium m-0 line-height-3">
+                    Join us as a personal user
+                </p>
+            </div>
+
+            <!-- Messages -->
+            @if (error()) {
+            <p-message severity="error" [text]="error()!" styleClass="w-full mb-4 animate-fade-in"></p-message>
+            }
+
+            <form [formGroup]="signupForm" (ngSubmit)="onSubmit()" class="flex flex-column gap-4 animate-fade-in">
+
+                <div class="flex flex-column gap-2">
+                    <label for="name" class="font-semibold text-700">Full Name</label>
+                    <span class="p-input-icon-left w-full">
+                        <i class="pi pi-user text-primary"></i>
+                        <input pInputText id="name" formControlName="name" class="w-full" placeholder="John Doe" />
+                    </span>
+                </div>
+
+                <div class="flex flex-column gap-2">
+                    <label for="email" class="font-semibold text-700">Email Address</label>
+                    <span class="p-input-icon-left w-full">
+                        <i class="pi pi-envelope text-primary"></i>
+                        <input pInputText id="email" formControlName="email" class="w-full"
+                            placeholder="name@example.com" />
+                    </span>
+                </div>
+
+                <div class="flex flex-column gap-2">
+                    <label for="password" class="font-semibold text-700">Password</label>
+                    <p-password id="password" formControlName="password" [toggleMask]="true" styleClass="w-full"
+                        inputStyleClass="w-full p-inputtext-lg" placeholder="Min 8 chars">
+                        <!-- Password Suggestions Template -->
+                        <ng-template pTemplate="header">
+                            <div class="font-semibold text-sm mb-2">Password Requirements</div>
+                        </ng-template>
+                        <ng-template pTemplate="footer">
+                            <ul class="pl-3 ml-1 mt-0 text-sm text-secondary" style="line-height: 1.6">
+                                <li>At least one lowercase</li>
+                                <li>At least one uppercase</li>
+                                <li>At least one numeric</li>
+                                <li>Minimum 8 characters</li>
+                            </ul>
+                        </ng-template>
+                    </p-password>
+                </div>
+
+                <div class="flex flex-column gap-2">
+                    <label for="confirmPassword" class="font-semibold text-700">Confirm Password</label>
+                    <p-password id="confirmPassword" formControlName="confirmPassword" [toggleMask]="true"
+                        [feedback]="false" styleClass="w-full" inputStyleClass="w-full p-inputtext-lg"
+                        placeholder="Re-enter password">
+                    </p-password>
+                    @if (signupForm.hasError('mismatch') && signupForm.get('confirmPassword')?.dirty) {
+                    <small class="text-red-500 font-medium animate-fade-in">
+                        <i class="pi pi-exclamation-circle mr-1"></i> Passwords do not match
+                    </small>
+                    }
+                </div>
+
+                <p-button type="submit" label="Create Account" [loading]="loading()" [disabled]="signupForm.invalid"
+                    styleClass="w-full p-button-lg shadow-2 mt-2">
+                </p-button>
+
+                <div class="text-center mt-4">
+                    <span class="text-secondary">Already have an account? </span>
+                    <a routerLink="/auth/login"
+                        class="font-bold text-primary hover:text-primary-700 no-underline transition-colors">Sign In</a>
+                </div>
+            </form>
+
+        </div>
+
+    </div>
+</div>

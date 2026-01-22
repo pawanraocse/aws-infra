@@ -332,9 +332,11 @@ aws ecs update-service --cluster saas-factory-production --service gateway --for
 | Document | Purpose |
 |----------|---------|
 | [HLD.md](HLD.md) | Architecture, design decisions |
+| [docs/QUICK_START.md](docs/QUICK_START.md) | Getting started guide |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | **Central config reference** |
+| [docs/DEBUGGING.md](docs/DEBUGGING.md) | **Troubleshooting & logs** |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Feature status, future plans |
-| [docs/STRIPE_BILLING.md](docs/STRIPE_BILLING.md) | Billing integration |
-| [terraform/modules/*/README.md](terraform/modules/) | Module documentation |
+| [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) | AWS deployment guide |
 
 ---
 

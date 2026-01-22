@@ -13,7 +13,7 @@ TERRAFORM_DIR="$PROJECT_ROOT/terraform/envs/production"
 
 AWS_REGION="${AWS_REGION:-us-east-1}"
 AWS_PROFILE="${AWS_PROFILE:-production}"
-PROJECT_NAME="${PROJECT_NAME:-saas-factory}"
+PROJECT_NAME="${PROJECT_NAME:-cloud-infra}"
 ENVIRONMENT="${ENVIRONMENT:-production}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 
@@ -138,20 +138,23 @@ fi
 terraform init -upgrade
 terraform validate
 
+# Use common.auto.tfvars for shared settings
+COMMON_VARS="-var-file=../../common.auto.tfvars"
+
 # Check if this is first deploy (requires confirmation)
 if ! terraform state list > /dev/null 2>&1 || [ -z "$(terraform state list 2>/dev/null)" ]; then
     log_warn "⚠️  First deployment to PRODUCTION"
-    terraform plan
+    terraform plan $COMMON_VARS
     echo ""
     read -p "Apply changes? Type 'production' to confirm: " CONFIRM
     if [ "$CONFIRM" != "production" ]; then
         log_warn "Deployment cancelled"
         exit 0
     fi
-    terraform apply -auto-approve
+    terraform apply $COMMON_VARS -auto-approve
 else
     # Subsequent deploys - just apply
-    terraform apply -auto-approve
+    terraform apply $COMMON_VARS -auto-approve
 fi
 
 # Get outputs

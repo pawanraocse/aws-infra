@@ -15,7 +15,7 @@ TERRAFORM_DIR="$SCRIPT_DIR/../../terraform/envs/budget"
 
 AWS_PROFILE="${AWS_PROFILE:-personal}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
-PROJECT_NAME="${PROJECT_NAME:-saas-factory}"
+PROJECT_NAME="${PROJECT_NAME:-cloud-infra}"
 ENVIRONMENT="${ENVIRONMENT:-budget}"
 
 # Colors
@@ -211,8 +211,11 @@ echo ""
 
 cd "$TERRAFORM_DIR"
 
+# Use common.auto.tfvars for shared settings
+COMMON_VARS="-var-file=../../common.auto.tfvars"
+
 if [ "$AUTO_APPROVE" = false ]; then
-    terraform plan -destroy
+    terraform plan $COMMON_VARS -destroy
     echo ""
     read -p "Type 'destroy' to confirm: " CONFIRM
     
@@ -221,10 +224,10 @@ if [ "$AUTO_APPROVE" = false ]; then
         exit 0
     fi
     
-    terraform destroy
+    terraform destroy $COMMON_VARS
 else
     echo "ℹ️  Running with --auto-approve flag"
-    terraform destroy -auto-approve
+    terraform destroy $COMMON_VARS -auto-approve
 fi
 
 echo ""

@@ -1,10 +1,15 @@
 
 # Quick Start Guide
 
-**Version:** 7.2 (Extracted from HLD)
-**Last Updated:** 2026-01-17
+**Version:** 7.3 (Updated with Config & Debug Docs)
+**Last Updated:** 2026-01-21
 
 This guide gets you up and running with the SaaS Foundation template. It covers initial deployment, local development, and how to add your own services.
+
+> **Related Docs:**
+> - [CONFIGURATION.md](./CONFIGURATION.md) - Central config reference
+> - [DEBUGGING.md](./DEBUGGING.md) - Troubleshooting guide
+> - [ARCHITECTURE.md](./ARCHITECTURE.md) - System design
 
 ---
 
@@ -47,6 +52,20 @@ Services available at:
 2. **Personal Signup (B2C):** Create account → Verify email → Login
 3. **Organization Signup (B2B):** Create org → Invite users → Login
 4. Access dashboard with your tenant's isolated data
+
+### Troubleshooting
+If something goes wrong, check the [DEBUGGING.md](./DEBUGGING.md) guide. Quick commands:
+
+```bash
+# Check all service logs
+docker-compose logs --tail=100
+
+# Check Eureka registrations
+curl http://localhost:8761/eureka/apps
+
+# Check database
+docker exec -it aws-infra-postgres-1 psql -U postgres -d saas_db -c "SELECT * FROM tenant;"
+```
 
 ---
 

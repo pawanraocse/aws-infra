@@ -1,10 +1,15 @@
 # Production Environment - Example Variables
-# Copy to terraform.tfvars and customize
+# ===========================================
+# Copy to terraform.tfvars and customize.
+# Common settings (project_name, aws_region) are loaded from:
+#   ../../common.auto.tfvars
+#
+# Deploy command:
+#   terraform apply -var-file=../../common.auto.tfvars
+# ===========================================
 
-# Project
-project_name = "saas-factory"
-environment  = "production"
-aws_region   = "us-east-1"
+# Environment identifier
+environment = "production"
 
 # VPC
 vpc_cidr           = "10.0.0.0/16"

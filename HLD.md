@@ -21,6 +21,9 @@ The documentation has been split into focused guides for better readability.
 | 🛡️ **[Authorization](docs/AUTHORIZATION.md)** | RBAC (Roles), ACLs, and Group Mapping. |
 | 📝 **[OpenFGA](docs/OPENFGA.md)** | Fine-grained relationship-based access control (ReBAC). |
 | 💳 **[Billing](docs/BILLING.md)** | Stripe integration, subscriptions, and webhooks. |
+| ☁️ **[AWS Deployment](docs/AWS_DEPLOYMENT.md)** | Budget & Production deployment guides. |
+| 🔧 **[Configuration](docs/CONFIGURATION.md)** | Central config, SSM paths, project naming. |
+| 🔍 **[Debugging](docs/DEBUGGING.md)** | Log locations, common errors, troubleshooting. |
 
 ---
 

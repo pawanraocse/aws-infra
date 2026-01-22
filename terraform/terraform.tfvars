@@ -1,6 +1,12 @@
-# terraform.tfvars - loads variables from the global .env for consistency
+# Root Terraform Configuration
+# ====================================
+# IMPORTANT: For shared settings, see common.tfvars
+#
+# Deploy command:
+#   terraform apply -var-file=common.tfvars
+# ====================================
 
-# AWS Configuration
+# AWS Configuration (can be overridden per-environment)
 aws_region   = "us-east-1"
 project_name = "cloud-infra"
 environment  = "dev"

@@ -524,6 +524,7 @@ update_project_documentation() {
 initialize_git() {
     local dest_dir="$1"
     local new_project="$2"
+    local source_dir="$3"
     
     log_step "Initializing Git repository"
     
@@ -537,7 +538,11 @@ initialize_git() {
     git add .
     git commit -m "Initial commit: ${new_project} spawned from SaaS Factory Template"
     
-    log_info "Git repository initialized with initial commit"
+    # Add template as upstream remote for syncing updates
+    log_substep "Adding template as 'upstream' remote for future sync"
+    git remote add upstream "$source_dir"
+    
+    log_info "Git repository initialized with upstream remote"
 }
 
 print_summary() {
@@ -574,6 +579,16 @@ print_summary() {
     echo ""
     echo -e "  5. ${CYAN}Access the Application${NC}"
     echo -e "     http://localhost:4200"
+    echo ""
+    echo -e "${YELLOW}Syncing Template Updates:${NC}"
+    echo ""
+    echo -e "  When the template (AWS-Infra) gets bug fixes or new features:"
+    echo ""
+    echo -e "     cd $dest_dir"
+    echo -e "     git fetch upstream"
+    echo -e "     git merge upstream/main --allow-unrelated-histories"
+    echo -e "     # Resolve any conflicts, then:"
+    echo -e "     git push origin main"
     echo ""
     echo -e "${GREEN}═══════════════════════════════════════════════════════════════════════════${NC}"
 }
@@ -679,7 +694,7 @@ main() {
     update_project_documentation "$dest_path" "$project_name"
     
     if [[ "$skip_git" != "true" ]] && [[ "$DRY_RUN" != "true" ]]; then
-        initialize_git "$dest_path" "$project_name"
+        initialize_git "$dest_path" "$project_name" "$source_dir"
     fi
     
     if [[ "$DRY_RUN" != "true" ]]; then

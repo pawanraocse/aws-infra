@@ -15,7 +15,7 @@ TERRAFORM_DIR="$PROJECT_ROOT/terraform/envs/budget"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 AWS_PROFILE="${AWS_PROFILE:-personal}"
 SSH_KEY="${SSH_KEY:-}"
-PROJECT_NAME="${PROJECT_NAME:-saas-factory}"
+PROJECT_NAME="${PROJECT_NAME:-cloud-infra}"
 
 # Colors
 RED='\033[0;31m'
@@ -113,8 +113,9 @@ cd "$TERRAFORM_DIR"
 terraform init -upgrade
 terraform validate
 
-# Plan and apply
-terraform plan -out=tfplan
+# Plan and apply (using common.auto.tfvars for shared settings)
+COMMON_VARS="-var-file=../../common.auto.tfvars"
+terraform plan $COMMON_VARS -out=tfplan
 terraform apply tfplan
 
 # Get outputs

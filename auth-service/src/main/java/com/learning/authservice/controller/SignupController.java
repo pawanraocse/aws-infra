@@ -3,25 +3,35 @@ package com.learning.authservice.controller;
 import com.learning.authservice.authorization.service.UserRoleService;
 import com.learning.authservice.config.CognitoProperties;
 import com.learning.authservice.dto.VerifyRequestDto;
-import com.learning.authservice.signup.*;
-import com.learning.common.dto.*;
+import com.learning.authservice.signup.OrganizationSignupData;
+import com.learning.authservice.signup.PersonalSignupData;
+import com.learning.authservice.signup.SignupService;
+import com.learning.common.dto.OrganizationSignupRequest;
+import com.learning.common.dto.PersonalSignupRequest;
+import com.learning.common.dto.SignupResponse;
 import com.learning.common.infra.tenant.TenantContext;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
-import software.amazon.awssdk.services.cognitoidentityprovider.model.*;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserResponse;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.CodeMismatchException;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.CognitoIdentityProviderException;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.ConfirmSignUpRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.ExpiredCodeException;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.web.reactive.function.client.WebClient;
 
 /**
  * Controller for handling user signup flows (B2C and B2B).

@@ -27,7 +27,7 @@ echo ""
 # Configuration from environment or SSM
 AWS_REGION="${AWS_REGION:-us-east-1}"
 ENVIRONMENT="${ENVIRONMENT:-budget}"
-PROJECT_NAME="${PROJECT_NAME:-saas-factory}"
+PROJECT_NAME="${PROJECT_NAME:-cloud-infra}"
 
 # =============================================================================
 # Optimize Swap Settings

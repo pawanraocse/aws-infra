@@ -20,7 +20,10 @@ echo ""
 
 cd "$TERRAFORM_DIR"
 
-terraform plan -destroy
+# Use common.auto.tfvars for shared settings
+COMMON_VARS="-var-file=../../common.auto.tfvars"
+
+terraform plan $COMMON_VARS -destroy
 echo ""
 read -p "Type 'destroy-production' to confirm: " CONFIRM
 
@@ -29,7 +32,7 @@ if [ "$CONFIRM" != "destroy-production" ]; then
     exit 0
 fi
 
-terraform destroy -auto-approve
+terraform destroy $COMMON_VARS -auto-approve
 
 echo ""
 echo "✅ Production environment destroyed. AWS charges stopped."

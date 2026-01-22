@@ -404,20 +404,47 @@ update_docker_compose() {
     log_step "Updating Docker Compose configuration"
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_substep "[DRY-RUN] Would update docker-compose.yml"
+        log_substep "[DRY-RUN] Would update docker-compose files and container names"
         log_info "Docker Compose configuration would be updated"
         return
     fi
     
-    local compose_file="$dest_dir/docker-compose.yml"
-    if [[ -f "$compose_file" ]]; then
-        # Update container name prefixes if they use project name
-        sed -i '' "s|${SOURCE_PROJECT_NAME}|${new_project}|g" "$compose_file" 2>/dev/null || \
-        sed -i "s|${SOURCE_PROJECT_NAME}|${new_project}|g" "$compose_file"
-        log_substep "Updated docker-compose.yml"
-    fi
+    # List of container names to prefix (to avoid conflicts when running multiple projects)
+    local containers=(
+        "eureka-server"
+        "gateway-service"
+        "backend-service"
+        "auth-service"
+        "platform-service"
+        "openfga"
+        "openfga-migrate"
+        "otel-collector"
+        "postgres"
+        "redis"
+    )
     
-    log_info "Docker Compose configuration updated"
+    # Update all docker-compose files
+    for compose_file in "$dest_dir"/docker-compose*.yml; do
+        if [[ -f "$compose_file" ]]; then
+            local basename
+            basename=$(basename "$compose_file")
+            
+            # Update project name references
+            sed -i '' "s|${SOURCE_PROJECT_NAME}|${new_project}|g" "$compose_file" 2>/dev/null || \
+            sed -i "s|${SOURCE_PROJECT_NAME}|${new_project}|g" "$compose_file"
+            
+            # Prefix container names to avoid conflicts
+            for container in "${containers[@]}"; do
+                # Only prefix if not already prefixed
+                sed -i '' "s|container_name: ${container}$|container_name: ${new_project}-${container}|g" "$compose_file" 2>/dev/null || \
+                sed -i "s|container_name: ${container}$|container_name: ${new_project}-${container}|g" "$compose_file"
+            done
+            
+            log_substep "Updated $basename"
+        fi
+    done
+    
+    log_info "Docker Compose configuration updated with prefixed container names"
 }
 
 update_readme() {
@@ -448,6 +475,37 @@ update_readme() {
     fi
     
     log_info "README files updated"
+}
+
+update_project_config() {
+    local dest_dir="$1"
+    local new_project="$2"
+    
+    log_step "Updating project.config"
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_substep "[DRY-RUN] Would update project.config"
+        log_info "project.config would be updated"
+        return
+    fi
+    
+    local new_project_display
+    new_project_display=$(to_pascal_case "$new_project")
+    
+    local config_file="$dest_dir/project.config"
+    if [[ -f "$config_file" ]]; then
+        # Update PROJECT_NAME
+        sed -i '' "s|^PROJECT_NAME=.*|PROJECT_NAME=${new_project}|g" "$config_file" 2>/dev/null || \
+        sed -i "s|^PROJECT_NAME=.*|PROJECT_NAME=${new_project}|g" "$config_file"
+        
+        # Update PROJECT_DISPLAY_NAME
+        sed -i '' "s|^PROJECT_DISPLAY_NAME=.*|PROJECT_DISPLAY_NAME=\"${new_project_display}\"|g" "$config_file" 2>/dev/null || \
+        sed -i "s|^PROJECT_DISPLAY_NAME=.*|PROJECT_DISPLAY_NAME=\"${new_project_display}\"|g" "$config_file"
+        
+        log_substep "Updated project.config"
+    fi
+    
+    log_info "project.config updated"
 }
 
 update_application_yml() {
@@ -691,6 +749,7 @@ main() {
     update_docker_compose "$dest_path" "$project_name"
     update_application_yml "$dest_path" "$project_name"
     update_readme "$dest_path" "$project_name"
+    update_project_config "$dest_path" "$project_name"
     update_project_documentation "$dest_path" "$project_name"
     
     if [[ "$skip_git" != "true" ]] && [[ "$DRY_RUN" != "true" ]]; then

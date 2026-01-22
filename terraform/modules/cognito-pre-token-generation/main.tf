@@ -25,7 +25,7 @@ data "archive_file" "lambda_zip" {
 
 # Lambda function
 resource "aws_lambda_function" "pre_token_generation" {
-  function_name    = "${var.environment}-cognito-pre-token-generation"
+  function_name    = "${var.project_name}-${var.environment}-cognito-pre-token-gen"
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
@@ -63,7 +63,7 @@ resource "aws_lambda_function" "pre_token_generation" {
 
 # IAM role for Lambda execution
 resource "aws_iam_role" "lambda_exec" {
-  name = "${var.environment}-lambda-cognito-pre-token-gen-role"
+  name = "${var.project_name}-${var.environment}-lambda-pre-token-gen-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -84,7 +84,7 @@ resource "aws_iam_role" "lambda_exec" {
 
 # IAM policy for Lambda - only needs logging (no Cognito writes)
 resource "aws_iam_role_policy" "lambda_policy" {
-  name = "${var.environment}-lambda-pre-token-gen-policy"
+  name = "${var.project_name}-${var.environment}-lambda-pre-token-gen-policy"
   role = aws_iam_role.lambda_exec.id
 
   policy = jsonencode({
@@ -131,7 +131,7 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
 resource "aws_security_group" "lambda" {
   count = var.enable_vpc_mode ? 1 : 0
 
-  name        = "${var.environment}-lambda-pre-token-sg"
+  name        = "${var.project_name}-${var.environment}-lambda-pre-token-sg"
   description = "Security group for PreTokenGeneration Lambda (VPC mode)"
   vpc_id      = var.vpc_id
 

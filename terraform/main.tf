@@ -115,6 +115,7 @@ module "cognito" {
 module "lambda_post_confirmation" {
   source = "./modules/cognito-post-confirmation"
 
+  project_name   = var.project_name
   environment    = var.environment
   aws_region     = var.aws_region
   aws_account_id = data.aws_caller_identity.current.account_id
@@ -125,6 +126,7 @@ module "lambda_post_confirmation" {
 module "lambda_pre_token_generation" {
   source = "./modules/cognito-pre-token-generation"
 
+  project_name   = var.project_name
   environment    = var.environment
   aws_region     = var.aws_region
   aws_account_id = data.aws_caller_identity.current.account_id

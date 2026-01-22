@@ -25,7 +25,7 @@ data "archive_file" "lambda_zip" {
 
 # Lambda function
 resource "aws_lambda_function" "post_confirmation" {
-  function_name    = "${var.environment}-cognito-post-confirmation"
+  function_name    = "${var.project_name}-${var.environment}-cognito-post-confirmation"
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
@@ -51,7 +51,7 @@ resource "aws_lambda_function" "post_confirmation" {
 
 # IAM role for Lambda execution
 resource "aws_iam_role" "lambda_exec" {
-  name = "${var.environment}-lambda-cognito-post-confirmation-role"
+  name = "${var.project_name}-${var.environment}-lambda-cognito-post-confirm-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -72,7 +72,7 @@ resource "aws_iam_role" "lambda_exec" {
 
 # IAM policy for Lambda to update Cognito users
 resource "aws_iam_role_policy" "lambda_cognito_policy" {
-  name = "${var.environment}-lambda-cognito-policy"
+  name = "${var.project_name}-${var.environment}-lambda-cognito-policy"
   role = aws_iam_role.lambda_exec.id
 
   policy = jsonencode({

@@ -160,7 +160,9 @@ Runs Docker Compose on a single EC2 instance with managed RDS and ElastiCache.
 # Configure
 cd terraform/envs/budget
 cp terraform.tfvars.example terraform.tfvars
-# Edit: frontend_repository_url, github_access_token, bastion_ssh_public_key
+# Edit: frontend_repository_url, github_access_token, ssh_public_key
+
+# Note: project_name is set in terraform/common.auto.tfvars
 
 # Deploy everything (infra + app + start)
 SSH_KEY=~/.ssh/your-key.pem ./scripts/budget/deploy.sh
@@ -310,19 +312,16 @@ aws ecs update-service --cluster saas-factory-production --service gateway --for
 │   │   ├── alb/
 │   │   ├── amplify/
 │   │   └── bastion/
-│   └── envs/
-│       ├── budget/        # Budget deployment config
-│       └── production/    # Production deployment config
-├── scripts/
-│   ├── deploy-budget.sh       # Deploy budget env
-│   ├── destroy-budget.sh      # Destroy budget env
-│   ├── start-budget.sh        # Start services on EC2
-│   ├── deploy-production.sh   # Deploy production
-│   ├── destroy-production.sh  # Destroy production
-│   └── push-ecr.sh            # Push Docker images
 ├── docker-compose.yml         # Local development
 ├── docker-compose.base.yml    # Common service definitions
-└── docker-compose.budget.yml  # Budget env (external DB)
+├── docker-compose.budget.yml  # Budget env (external DB)
+├── project.config             # Central project configuration
+└── terraform/
+    ├── common.auto.tfvars     # Shared config (project_name, aws_region)
+    ├── modules/               # Reusable Terraform modules
+    └── envs/
+        ├── budget/            # Budget deployment config
+        └── production/        # Production deployment config
 ```
 
 ---
@@ -365,7 +364,7 @@ aws ecs update-service --cluster saas-factory-production --service gateway --for
 
 ## Tech Stack
 
-- **Backend:** Java 21, Spring Boot 3.3, Spring Cloud Gateway
+- **Backend:** Java 21, Spring Boot 3.5.9, Spring Cloud Gateway
 - **Frontend:** Angular 19, PrimeNG
 - **Database:** PostgreSQL (database-per-tenant)
 - **Cache:** Redis (ElastiCache)

@@ -183,6 +183,28 @@ services:
     restart: unless-stopped
     # environment, depends_on set by extending file
 
+  # ============================================================================
+  # Payment Service
+  # ============================================================================
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    image: awsinfra-payment-service:1.0.0
+    container_name: payment-service
+    networks:
+      - app-network
+    ports:
+      - "8088:8088"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8088/payment-service/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 240s
+    restart: unless-stopped
+    # environment, depends_on set by extending file
+
 networks:
   app-network:
     driver: bridge

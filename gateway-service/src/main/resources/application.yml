@@ -43,6 +43,11 @@ spring:
               filters:
                 - StripPrefix=1
 
+            - id: payment-service
+              uri: lb://PAYMENT-SERVICE
+              predicates:
+                - Path=/payment-service/**
+
           # Default filters applied to all discovered routes
           default-filters:
             - JwtAuthentication
@@ -55,7 +60,7 @@ spring:
                 deny-empty-key: false
           discovery:
             locator:
-              enabled: true
+              enabled: false
               lower-case-service-id: true
 
   security:

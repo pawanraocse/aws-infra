@@ -68,6 +68,20 @@ public class WebClientConfig {
     }
 
     /**
+     * Payment-Service WebClient (internal S2S)
+     */
+    @Bean
+    public WebClient paymentWebClient(
+            @Qualifier("internalWebClientBuilder") WebClient.Builder builder,
+            ServicesProperties props) {
+        return builder
+                .baseUrl(props.getPayment().getBaseUrl())
+                .filter(ExchangeLoggingFilter.logRequest())
+                .filter(ExchangeLoggingFilter.logResponse())
+                .build();
+    }
+
+    /**
      * Permission evaluator that calls auth-service for DB-backed permission checks.
      * Uses RoleLookupService for role-based access instead of X-Role header.
      */

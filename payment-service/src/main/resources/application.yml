@@ -1,0 +1,72 @@
+server:
+  port: ${SERVER_PORT:8088}
+  servlet:
+    context-path: /payment-service
+
+spring:
+  application:
+    name: payment-service
+  
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/payment_db}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 20
+  
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    table: payment_schema_history
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URI:http://localhost:8761/eureka}
+    register-with-eureka: true
+    fetch-registry: true
+
+payment:
+  provider: ${PAYMENT_PROVIDER:stripe} # stripe or razorpay
+  stripe:
+    api-key: ${STRIPE_API_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    success-url: ${STRIPE_SUCCESS_URL:http://localhost:4200/settings/billing?success=true}
+    cancel-url: ${STRIPE_CANCEL_URL:http://localhost:4200/settings/billing?canceled=true}
+    portal-return-url: ${STRIPE_PORTAL_RETURN_URL:http://localhost:4200/settings/billing}
+  razorpay:
+    key-id: ${RAZORPAY_KEY_ID:}
+    key-secret: ${RAZORPAY_KEY_SECRET:}
+    webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+  tiers:
+    starter:
+      stripe-price-id: ${STRIPE_PRICE_STARTER:price_123_starter}
+      razorpay-plan-id: ${RAZORPAY_PLAN_STARTER:plan_123_starter}
+    pro:
+      stripe-price-id: ${STRIPE_PRICE_PRO:price_123_pro}
+      razorpay-plan-id: ${RAZORPAY_PLAN_PRO:plan_123_pro}
+    enterprise:
+      stripe-price-id: ${STRIPE_PRICE_ENTERPRISE:price_123_enterprise}
+      razorpay-plan-id: ${RAZORPAY_PLAN_ENTERPRISE:plan_123_enterprise}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always

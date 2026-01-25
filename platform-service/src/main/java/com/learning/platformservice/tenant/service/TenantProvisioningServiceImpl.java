@@ -110,13 +110,9 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         tenant.setMaxUsers(request.maxUsers());
 
         // NEW: Set trial period for organization tenants
+        // Logic moved to Payment Service
         if (request.tenantType() == TenantType.ORGANIZATION) {
-            tenant.setTrialEndsAt(OffsetDateTime.now().plusDays(30));
-            tenant.setSubscriptionStatus(com.learning.platformservice.tenant.entity.SubscriptionStatus.TRIAL);
-        } else {
-            // Reset if previously set (e.g. if switching types on reuse, though unlikely)
-            tenant.setTrialEndsAt(null);
-            tenant.setSubscriptionStatus(null);
+            // No longer setting billing fields in platform
         }
 
         tenant.setUpdatedAt(OffsetDateTime.now());

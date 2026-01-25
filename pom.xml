@@ -25,6 +25,7 @@
         <module>platform-service</module>
         <module>common-infra</module>
         <module>system-tests</module>
+        <module>payment-service</module>
     </modules>
 
     <properties>

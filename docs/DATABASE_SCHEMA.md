@@ -131,8 +131,7 @@ sequenceDiagram
 | `jdbc_url` | TEXT | Connection string for tenant's dedicated database |
 | `sso_enabled` | BOOLEAN | Whether SSO is configured |
 | `idp_type` | VARCHAR(64) | `SAML`, `OIDC`, `OKTA`, `AZURE_AD`, etc. |
-| `subscription_status` | VARCHAR(32) | `TRIAL`, `ACTIVE`, `CANCELLED`, `PAST_DUE` |
-| `stripe_subscription_id` | VARCHAR(255) | Stripe subscription reference |
+
 | `fga_store_id` | VARCHAR(255) | OpenFGA store for fine-grained permissions |
 | `created_at` | TIMESTAMPTZ | Creation timestamp |
 | `updated_at` | TIMESTAMPTZ | Last update timestamp |
@@ -208,34 +207,9 @@ ORDER BY m.last_accessed_at DESC;
 
 ---
 
-## 4. stripe_customers
 
-**Purpose:** Maps tenants to Stripe customer records.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | UUID | **PK** |
-| `tenant_id` | VARCHAR(64) | **FK → tenant.id** (UNIQUE) |
-| `stripe_customer_id` | VARCHAR(255) | Stripe customer ID (UNIQUE) |
-| `email` | VARCHAR(255) | Billing email |
-
----
-
-## 5. webhook_events
-
-**Purpose:** Stripe webhook idempotency tracking.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | UUID | **PK** |
-| `stripe_event_id` | VARCHAR(255) | Stripe event ID (UNIQUE) |
-| `event_type` | VARCHAR(100) | Event type (e.g., `invoice.paid`) |
-| `processed` | BOOLEAN | Whether event was processed |
-| `error_message` | TEXT | Error if processing failed |
-
----
-
-## 6. idp_groups
+## 4. idp_groups
 
 **Purpose:** Stores groups synced from external Identity Providers (SSO).
 
@@ -598,8 +572,9 @@ WHERE ur.user_id = 'cognito-sub-uuid';
 
 | Database | Tables | Purpose |
 |----------|--------|---------|
-| Platform DB | 9 | Tenant registry, billing, memberships |
+| Platform DB | 7 | Tenant registry, memberships, API keys |
 | Tenant DB | 10 | Users, roles, permissions, business data |
+| Payment DB | 1 | Billing accounts (Dedicated Service) |
 
 ## Key Joins
 
@@ -632,8 +607,9 @@ ORDER BY m.last_accessed_at DESC NULLS LAST;
 
 | Service | Path | Tables Created |
 |---------|------|----------------|
-| Platform | `platform-service/.../V1__init_platform_service.sql` | tenant, memberships, billing, API keys |
+| Platform | `platform-service/.../V1__init_platform_service.sql` | tenant, memberships, API keys |
 | Auth | `auth-service/.../tenant/V1__authorization_schema.sql` | roles, users, permissions, SSO |
+| Payment | `payment-service/.../V1__init_payment_db.sql` | billing_account |
 | Backend | `backend-service/.../tenant-template/V1__tenant_initial_schema.sql` | entries |
 
 ---

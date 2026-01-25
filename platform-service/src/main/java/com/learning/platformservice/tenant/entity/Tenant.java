@@ -117,32 +117,12 @@ public class Tenant {
     @Column(name = "connection_pool_min")
     private Integer connectionPoolMin = 2;
 
-    @Column(name = "connection_pool_max")
-    private Integer connectionPoolMax = 10;
-
     // ========== NEW: Lifecycle Management ==========
-    @Column(name = "trial_ends_at")
-    private OffsetDateTime trialEndsAt;
-
-    @Column(name = "subscription_status")
-    @Enumerated(EnumType.STRING)
-    private SubscriptionStatus subscriptionStatus = SubscriptionStatus.TRIAL;
-
     @Column(name = "archived_at")
     private OffsetDateTime archivedAt;
 
     @Column(name = "archived_to_s3")
     private Boolean archivedToS3 = false;
-
-    // ========== NEW: Stripe Billing Fields ==========
-    @Column(name = "stripe_subscription_id")
-    private String stripeSubscriptionId;
-
-    @Column(name = "stripe_price_id")
-    private String stripePriceId;
-
-    @Column(name = "current_period_end")
-    private OffsetDateTime currentPeriodEnd;
 
     // ========== NEW: OpenFGA Fine-Grained Permissions ==========
     @Column(name = "fga_store_id")

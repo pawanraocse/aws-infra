@@ -137,9 +137,7 @@ public class OrganizationService {
                 .tenantType(tenant.getTenantType() != null ? tenant.getTenantType().name() : null)
                 .maxUsers(tenant.getMaxUsers())
                 .ownerEmail(tenant.getOwnerEmail())
-                .subscriptionStatus(
-                        tenant.getSubscriptionStatus() != null ? tenant.getSubscriptionStatus().name() : null)
-                .trialEndsAt(tenant.getTrialEndsAt() != null ? tenant.getTrialEndsAt().toString() : null)
+                .ownerEmail(tenant.getOwnerEmail())
                 .build();
     }
 }

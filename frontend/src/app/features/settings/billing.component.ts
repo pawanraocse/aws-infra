@@ -272,9 +272,13 @@ export class BillingComponent implements OnInit {
     this.upgradingTier.set(tier);
 
     this.billingService.createCheckoutSession(tier).subscribe({
-      next: (response) => {
-        // Redirect to Stripe Checkout
-        window.location.href = response.checkoutUrl;
+      next: (response: any) => {
+        if (response.provider === 'razorpay') {
+          this.handleRazorpayCheckout(response.sessionId, response.publicKey);
+        } else {
+          // Stripe Redirect
+          window.location.href = response.checkoutUrl;
+        }
       },
       error: (err) => {
         this.upgradingTier.set(null);
@@ -285,6 +289,77 @@ export class BillingComponent implements OnInit {
         });
       }
     });
+  }
+
+  handleRazorpayCheckout(subscriptionId: string, keyId: string): void {
+    const options = {
+      key: keyId,
+      subscription_id: subscriptionId,
+      name: 'AWS Infra',
+      description: 'Upgrade Subscription',
+      handler: (response: any) => {
+        // razorpay_payment_id, razorpay_subscription_id, razorpay_signature
+        // We can call backend to verify or just redirect to billing
+        console.log('Razorpay payment success', response);
+        // Verify via webhook or verification API
+        this.upgradingTier.set(null);
+        this.loadSubscriptionStatus();
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Payment successful! Subscription updating...'
+        });
+      },
+      modal: {
+        ondismiss: () => {
+          this.upgradingTier.set(null);
+        }
+      }
+    };
+
+    if (!(window as any).Razorpay) {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => {
+        this.openRazorpay(options);
+      };
+      script.onerror = (error) => {
+        console.error('Failed to load Razorpay SDK', error);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Payment Error',
+          detail: 'Failed to load payment gateway. Please try again.'
+        });
+        this.upgradingTier.set(null);
+      };
+      document.body.appendChild(script);
+    } else {
+      this.openRazorpay(options);
+    }
+  }
+
+  private openRazorpay(options: any): void {
+    try {
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', (response: any) => {
+        console.error('Razorpay payment failed', response.error);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Payment Failed',
+          detail: response.error?.description || 'Payment validation failed'
+        });
+        this.upgradingTier.set(null);
+      });
+      rzp.open();
+    } catch (err) {
+      console.error('Razorpay initialization error', err);
+      this.messageService.add({
+        severity: 'error',
+        summary: 'System Error',
+        detail: 'Could not initialize payment. Please check your popup blocker settings.'
+      });
+      this.upgradingTier.set(null);
+    }
   }
 
   openPortal(): void {

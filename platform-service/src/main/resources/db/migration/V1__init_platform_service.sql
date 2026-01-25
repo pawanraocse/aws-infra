@@ -253,44 +253,9 @@ COMMENT ON COLUMN idp_groups.external_group_id IS 'Group identifier from IdP (e.
 COMMENT ON COLUMN idp_groups.idp_type IS 'Identity provider type: SAML, OIDC, OKTA, AZURE_AD, GOOGLE, PING';
 COMMENT ON COLUMN idp_groups.last_synced_at IS 'Last time this group was seen in an SSO login';
 
--- =====================================================
--- STRIPE BILLING TABLES
--- =====================================================
--- Stripe integration for subscription management.
--- Stored in Platform DB (shared), not tenant-specific DBs.
--- =====================================================
 
--- Map tenants to Stripe customers
-CREATE TABLE IF NOT EXISTS stripe_customers (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id VARCHAR(64) NOT NULL UNIQUE REFERENCES tenant(id) ON DELETE CASCADE,
-    stripe_customer_id VARCHAR(255) NOT NULL UNIQUE,
-    email VARCHAR(255) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
 
--- Webhook event idempotency tracking
-CREATE TABLE IF NOT EXISTS webhook_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    stripe_event_id VARCHAR(255) NOT NULL UNIQUE,
-    event_type VARCHAR(100) NOT NULL,
-    processed BOOLEAN DEFAULT FALSE,
-    error_message TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
 
--- Indexes for billing tables
-CREATE INDEX idx_stripe_customers_tenant ON stripe_customers(tenant_id);
-CREATE INDEX idx_webhook_events_stripe_id ON webhook_events(stripe_event_id);
-
-COMMENT ON TABLE stripe_customers IS 'Maps tenants to Stripe customer records for billing';
-COMMENT ON TABLE webhook_events IS 'Tracks processed Stripe webhook events for idempotency';
-
--- Add Stripe subscription fields to tenant table
-ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(255);
-ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_price_id VARCHAR(255);
-ALTER TABLE tenant ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ;
 
 -- Add OpenFGA store ID for fine-grained permissions (optional add-on)
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS fga_store_id VARCHAR(255);

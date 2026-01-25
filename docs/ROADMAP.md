@@ -166,6 +166,31 @@
 #### 9.4 Frontend Modularization
 - Abstract Orgs/Members/Auth into Angular library (Deferred from Phase 0)
 
+### Phase 10: Upcoming Features (Requested Jan 2026)
+**Status:** PLANNED
+
+#### 10.1 Dedicated Payment Service
+- **Objective:** Decouple billing from platform-service.
+- **Features:**
+    - Support for multiple providers: Stripe AND Razorpay.
+    - Abstraction layer for payment intent/checkout.
+    - Webhook handling for both providers.
+
+#### 10.2 Share Link Feature
+- **Objective:** Public sharing capability for resources.
+- **Features:**
+    - "Share" button on UI (e.g., Login page or internal resources).
+    - Public access token generation.
+    - Anonymous access handling.
+
+#### 10.3 Hybrid Multi-Tenancy (Personal Users)
+- **Objective:** Improve scalability for free/personal tier users.
+- **Problem:** Database-per-tenant is not scalable for millions of single-user tenants.
+- **Solution:**
+    - **Personal Users:** Single shared database with discriminator column (Schema-per-tenant or Logical Separation).
+    - **Organizations:** Continue using Database-per-tenant for isolation.
+    - Update `TenantContext` to handle hybrid routing strategies.
+
 ---
 
 ## 🌟 Strategic Vision: Project Spawning

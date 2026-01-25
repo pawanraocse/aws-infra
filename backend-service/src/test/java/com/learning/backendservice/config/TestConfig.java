@@ -56,4 +56,14 @@ public class TestConfig {
     public CacheManager cacheManager() {
         return new ConcurrentMapCacheManager("permissions");
     }
+
+    /**
+     * Mock RedissonClient for tests.
+     * Needed by TenantContextFilter.
+     */
+    @Bean
+    @Primary
+    public org.redisson.api.RedissonClient redissonClient() {
+        return org.mockito.Mockito.mock(org.redisson.api.RedissonClient.class, org.mockito.Mockito.RETURNS_MOCKS);
+    }
 }

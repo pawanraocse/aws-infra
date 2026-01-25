@@ -46,6 +46,7 @@ public class TenantContextFilter extends OncePerRequestFilter {
     };
 
     private final Environment environment;
+    private final org.redisson.api.RedissonClient redissonClient;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -55,6 +56,17 @@ public class TenantContextFilter extends OncePerRequestFilter {
         String tenantId = request.getHeader(TENANT_HEADER);
 
         if (tenantId != null && !tenantId.isBlank()) {
+            if (!isExcludedPath(request)) {
+                // Check billing status
+                String status = getBillingStatus(tenantId);
+                if ("PAST_DUE".equalsIgnoreCase(status) || "SUSPENDED".equalsIgnoreCase(status)
+                        || "CANCELLED".equalsIgnoreCase(status)) {
+                    log.warn("Blocking request for suspended tenant: {}", tenantId);
+                    response.sendError(HttpServletResponse.SC_PAYMENT_REQUIRED, "Subscription suspended or past due");
+                    return;
+                }
+            }
+
             log.debug("TenantContextFilter: Setting tenant context: {}", tenantId);
             TenantContext.setCurrentTenant(tenantId);
         } else {
@@ -75,6 +87,17 @@ public class TenantContextFilter extends OncePerRequestFilter {
         }
     }
 
+    private String getBillingStatus(String tenantId) {
+        try {
+            Object status = redissonClient.getBucket("billing:status:" + tenantId).get();
+            return status != null ? status.toString() : "ACTIVE"; // Default to ACTIVE if not found (fail open)
+        } catch (Exception e) {
+            log.warn("Failed to check billing status for {}, defaulting to ACTIVE. Error: {}", tenantId,
+                    e.getMessage());
+            return "ACTIVE";
+        }
+    }
+
     private boolean isExcludedPath(HttpServletRequest request) {
         String uri = request.getRequestURI();
         if (uri == null) {
@@ -85,6 +108,10 @@ public class TenantContextFilter extends OncePerRequestFilter {
             if (uri.contains(path)) {
                 return true;
             }
+        }
+        // Allow payment service explicitly so they can pay!
+        if (uri.contains("/api/v1/payment")) {
+            return true;
         }
         return false;
     }

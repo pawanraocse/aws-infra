@@ -5,6 +5,7 @@ import com.learning.common.dto.TenantDbConfig;
 import com.learning.common.util.SimpleCryptoUtil;
 import com.learning.platformservice.tenant.action.migration.AuthServiceMigration;
 import com.learning.platformservice.tenant.action.migration.BackendServiceMigration;
+import com.learning.platformservice.tenant.action.migration.PaymentServiceMigration;
 import com.learning.platformservice.tenant.action.migration.ServiceMigrationStrategy;
 import com.learning.platformservice.tenant.entity.Tenant;
 import com.learning.platformservice.tenant.exception.TenantProvisioningException;
@@ -29,6 +30,7 @@ public class MigrationInvokeAction implements TenantProvisionAction {
 
     private final WebClient backendWebClient;
     private final WebClient authWebClient;
+    private final WebClient paymentWebClient; // Added via constructor injection (requires updating config)
 
     @Override
     public void execute(TenantProvisionContext context) throws TenantProvisioningException {
@@ -37,10 +39,11 @@ public class MigrationInvokeAction implements TenantProvisionAction {
         // Build tenant DB config to share with services
         TenantDbConfig dbConfig = buildDbConfig(context);
 
-        // Service migration strategies - both backend and auth
+        // Service migration strategies
         List<ServiceMigrationStrategy> strategies = List.of(
                 new BackendServiceMigration(backendWebClient),
-                new AuthServiceMigration(authWebClient));
+                new AuthServiceMigration(authWebClient),
+                new PaymentServiceMigration(paymentWebClient));
 
         String lastVersion = null;
         for (ServiceMigrationStrategy strategy : strategies) {

@@ -11,9 +11,7 @@ import org.springframework.context.annotation.ComponentScan;
 @SpringBootApplication
 @ComponentScan(basePackages = {
         "com.learning.backendservice",
-        "com.learning.common.infra.tenant",
-        "com.learning.common.infra.security",
-        "com.learning.common.infra.openfga"
+        "com.learning.common.infra"
 })
 public class BackendServiceApplication {
 

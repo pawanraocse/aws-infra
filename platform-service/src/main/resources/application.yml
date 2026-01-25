@@ -77,6 +77,8 @@ services:
     base-url: http://backend-service
   auth:
     base-url: http://auth-service
+  payment:
+    base-url: http://payment-service
 
 server:
   port: ${SERVER_PORT:8083}

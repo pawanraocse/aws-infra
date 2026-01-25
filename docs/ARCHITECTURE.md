@@ -66,12 +66,18 @@ graph TB
 - **OpenFGA Writer:** If enabled, writes ReBAC tuples.
 
 ### ⚙️ Platform Service (Port 8083)
-**Role:** Control plane for Tenant Lifecycle and Billing.
+**Role:** Control plane for Tenant Lifecycle.
 
 - **Tenant Registry:** Master list of tenants and their JDBC URLs.
 - **Provisioning:** Creates new tenant databases and runs Flyway migrations.
-- **Billing:** Manages Stripe subscriptions and webhooks.
 - **API Keys:** Manages programmatic access keys.
+
+### 💳 Payment Service (Port 8088)
+**Role:** Dedicated Billing and Subscription Management.
+
+- **Providers:** Abstraction over Stripe/Razorpay.
+- **Webhooks:** Processes provider events.
+- **Status Authority:** Updates Redis `billing:status:{tenant}` for real-time enforcement.
 
 ### 📦 Backend Service (Port 8082)
 **Role:** Domain-specific business logic (MIMIC/TEMPLATE).

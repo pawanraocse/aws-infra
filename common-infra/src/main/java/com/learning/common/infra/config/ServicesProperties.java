@@ -25,6 +25,7 @@ public class ServicesProperties {
     private ServiceRef backend = new ServiceRef("http://backend-service/api");
     private ServiceRef auth = new ServiceRef("http://auth-service/auth");
     private ServiceRef file = new ServiceRef("http://file-service/file");
+    private ServiceRef payment = new ServiceRef("http://payment-service/payment-service");
 
     @Getter
     @Setter

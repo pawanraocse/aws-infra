@@ -75,6 +75,14 @@ public abstract class BaseIntegrationTest {
                                                                 .withStatus(200)
                                                                 .withHeader("Content-Type", "application/json")
                                                                 .withBody("true")));
+
+                // Stub for Payment Service migration endpoint
+                wireMockServer.stubFor(
+                                post(urlPathMatching("/payment-service/api/v1/payment/internal/migrate"))
+                                                .willReturn(aResponse()
+                                                                .withStatus(200)
+                                                                .withHeader("Content-Type", "application/json")
+                                                                .withBody("{\"lastVersion\":\"1.0.0\"}")));
         }
 
         @DynamicPropertySource
@@ -92,6 +100,8 @@ public abstract class BaseIntegrationTest {
                 registry.add("services.backend.base-url",
                                 () -> "http://localhost:" + wireMockServer.port());
                 registry.add("services.auth.base-url",
+                                () -> "http://localhost:" + wireMockServer.port());
+                registry.add("services.payment.base-url",
                                 () -> "http://localhost:" + wireMockServer.port());
         }
 

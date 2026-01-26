@@ -29,7 +29,9 @@ export interface CreateApiKeyResponse {
 })
 export class ApiKeyService {
     private http = inject(HttpClient);
-    private baseUrl = `${environment.apiUrl}/platform-service/api/v1/api-keys`;
+    // In Cloud Infra Lite, API keys are currently disabled/migrating.
+    // Pointing to auth-service to prevent "platform-service" DNS resolution errors.
+    private baseUrl = `${environment.apiUrl}/auth-service/api/v1/api-keys`;
 
     /**
      * List all API keys for the current tenant.

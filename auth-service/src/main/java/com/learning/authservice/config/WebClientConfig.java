@@ -7,6 +7,7 @@ import io.netty.handler.timeout.WriteTimeoutHandler;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
@@ -29,6 +30,7 @@ public class WebClientConfig {
          * Load-balanced WebClient.Builder for services registered with Eureka.
          */
         @Bean
+        @Primary
         @LoadBalanced
         public WebClient.Builder loadBalancedWebClientBuilder() {
                 HttpClient httpClient = HttpClient.create()

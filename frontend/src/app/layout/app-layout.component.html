@@ -18,6 +18,18 @@
 
     <!-- Right: User Profile -->
     <div class="flex align-items-center gap-3">
+      <p-button 
+        label="Share" 
+        icon="pi pi-heart" 
+        [rounded]="true" 
+        [text]="true" 
+        severity="help" 
+        class="hidden sm:inline-block"
+        pTooltip="Share with friends"
+        tooltipPosition="bottom"
+        (onClick)="openShareDialog()">
+      </p-button>
+
       <ng-container *ngIf="authService.user() as user">
         <div class="hidden md:flex flex-column align-items-end">
           <span class="text-sm font-semibold text-900">{{ user.email }}</span>
@@ -42,4 +54,6 @@
   <div class="layout-content p-4 md:p-6 animate-fade-in delay-100">
     <router-outlet></router-outlet>
   </div>
+
+  <app-share-dialog #shareDialog></app-share-dialog>
 </div>

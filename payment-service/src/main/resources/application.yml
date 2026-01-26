@@ -21,11 +21,6 @@ spring:
         format_sql: true
         jdbc:
           batch_size: 20
-  
-  flyway:
-    enabled: true
-    baseline-on-migrate: true
-    table: payment_schema_history
 
   data:
     redis:

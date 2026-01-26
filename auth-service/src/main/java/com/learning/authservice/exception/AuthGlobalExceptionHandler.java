@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 @Slf4j
-public class GlobalExceptionHandler {
+public class AuthGlobalExceptionHandler {
 
     @ExceptionHandler(AuthLoginException.class)
     public ResponseEntity<ErrorResponse> handleAuthLogin(AuthLoginException ex, HttpServletRequest request) {

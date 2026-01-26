@@ -1,4 +1,4 @@
-CREATE TABLE billing_account (
+CREATE TABLE IF NOT EXISTS billing_account (
     account_id VARCHAR(64) PRIMARY KEY,
     email VARCHAR(255),
     provider VARCHAR(20),
@@ -11,4 +11,4 @@ CREATE TABLE billing_account (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_billing_account_customer_id ON billing_account(customer_id);
+CREATE INDEX IF NOT EXISTS idx_billing_account_customer_id ON billing_account(customer_id);

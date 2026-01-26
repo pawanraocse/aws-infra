@@ -8,9 +8,9 @@ import org.springframework.mock.web.MockHttpServletRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class GlobalExceptionHandlerTest {
+class AuthGlobalExceptionHandlerTest {
 
-    private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
+    private final AuthGlobalExceptionHandler handler = new AuthGlobalExceptionHandler();
 
     @Test
     @DisplayName("maps AuthLoginException INVALID_CREDENTIALS to 401 JSON")
@@ -36,17 +36,4 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().code()).isEqualTo("USER_EXISTS");
     }
-
-    // @Test
-    // @DisplayName("maps RuntimeException to 500 JSON INTERNAL_ERROR")
-    // void mapsRuntimeException() {
-    // MockHttpServletRequest req = new MockHttpServletRequest();
-    // req.addHeader("X-Request-Id", "req-789");
-    // RuntimeException ex = new RuntimeException("Boom");
-    // ResponseEntity<ErrorResponse> response = handler.handleRuntime(ex, req);
-    // assertThat(response.getStatusCode().value()).isEqualTo(500);
-    // assertThat(response.getBody()).isNotNull();
-    // assertThat(response.getBody().code()).isEqualTo("INTERNAL_ERROR");
-    // assertThat(response.getBody().message()).contains("Boom");
-    // }
 }

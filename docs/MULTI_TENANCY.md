@@ -23,7 +23,7 @@ We use a **Database-per-Tenant** approach. This means every tenant gets their ow
 ```mermaid
 graph TB
     subgraph "Platform Database"
-        PDB[(awsinfra)]
+        PDB[(cloud-infra)]
         TTable[tenant table]
     end
 
@@ -41,7 +41,7 @@ graph TB
 
 ## 🗄️ Data Architecture
 
-### 1. Platform Database (`awsinfra`)
+### 1. Platform Database (`cloud-infra`)
 **Owner:** Platform Service
 **Purpose:** Global Tenant Registry and System Config.
 
@@ -93,7 +93,7 @@ Each service owns its own schema, but Platform Service triggers the creation.
 
 ### Provisioning Flow
 1. **Signup:** User signs up.
-2. **Platform:** Creates record in `awsinfra.tenant`.
+2. **Platform:** Creates record in `cloud-infra.tenant`.
 3. **Platform:** Creates physical database `tenant_abc` (via RDS/Postgres).
 4. **Platform:** Triggers migrations:
    - call `auth-service/internal/migrate` → Auth runs Flyway on `tenant_abc`.

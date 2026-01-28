@@ -115,7 +115,7 @@ docker-compose logs -f auth-service
 docker-compose ps
 
 # Check database connection
-docker exec -it aws-infra-postgres-1 psql -U postgres -d saas_db -c "SELECT 1;"
+docker exec -it cloud-infra-postgres-1 psql -U postgres -d saas_db -c "SELECT 1;"
 
 # Check Eureka registrations
 curl http://localhost:8761/eureka/apps

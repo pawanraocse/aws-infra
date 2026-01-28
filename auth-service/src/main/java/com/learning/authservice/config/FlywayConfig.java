@@ -1,11 +1,11 @@
 package com.learning.authservice.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.flywaydb.core.Flyway;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import lombok.extern.slf4j.Slf4j;
 
 import javax.sql.DataSource;
 
@@ -19,14 +19,14 @@ public class FlywayConfig {
 
     /**
      * Platform Flyway configuration.
-     * Runs migrations on the shared 'awsinfra' database for platform-level tables.
+     * Runs migrations on the shared 'cloud-infra' database for platform-level tables.
      * Currently auth-service has no platform tables (tenant table is in
      * platform-service).
      */
     @Bean(name = "platformFlyway", initMethod = "migrate")
     @ConditionalOnProperty(prefix = "app.flyway.platform", name = "enabled", havingValue = "true", matchIfMissing = false)
     public Flyway platformFlyway(@Qualifier("platformDataSource") DataSource platformDataSource) {
-        log.info("Configuring Platform Flyway for awsinfra database");
+        log.info("Configuring Platform Flyway for cloud-infra database");
 
         Flyway flyway = Flyway.configure()
                 .dataSource(platformDataSource)

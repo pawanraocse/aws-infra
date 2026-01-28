@@ -175,7 +175,7 @@ public class InvitationServiceImpl implements InvitationService {
                 invitation.getEmail(), tenantId, invitation.getRoleId());
 
         // 1. Create Cognito user (or skip if exists)
-        CognitoUserRegistrar.RegistrationResult result = cognitoUserRegistrar.registerIfNotExists(
+        CognitoUserRegistrar.UserRegistration result = cognitoUserRegistrar.registerIfNotExists(
                 invitation.getEmail(),
                 password,
                 name,
@@ -183,7 +183,8 @@ public class InvitationServiceImpl implements InvitationService {
                 invitation.getRoleId());
 
         // 2. Auto-confirm the user (invitation link proves email ownership)
-        if (result == CognitoUserRegistrar.RegistrationResult.CREATED) {
+        // If user was just created (not already existing), auto-confirm
+        if (!result.alreadyExisted()) {
             autoConfirmUser(invitation.getEmail());
         }
 

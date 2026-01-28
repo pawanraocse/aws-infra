@@ -17,6 +17,23 @@ PROJECT_NAME="${PROJECT_NAME:-cloud-infra}"
 ENVIRONMENT="${ENVIRONMENT:-production}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 
+# Load environment variables from .env if present
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    log_info "Loading environment variables from .env"
+    set -a
+    source "$PROJECT_ROOT/.env"
+    set +a
+    
+    # Override defaults with .env values
+    PROJECT_NAME="${PROJECT_NAME:-$PROJECT_NAME}"
+    AWS_REGION="${AWS_REGION:-$AWS_REGION}"
+    
+    # Export for Terraform
+    export TF_VAR_project_name="$PROJECT_NAME"
+    export TF_VAR_aws_region="$AWS_REGION"
+    export TF_VAR_environment="$ENVIRONMENT"
+fi
+
 SERVICES=("gateway-service" "auth-service" "backend-service" "platform-service" "eureka-server")
 
 # Colors

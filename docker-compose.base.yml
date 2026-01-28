@@ -15,22 +15,22 @@ services:
   # ============================================================================
   openfga-migrate:
     image: openfga/openfga:latest
-    container_name: openfga-migrate
+    container_name: ${PROJECT_NAME:-cloudinfra}-openfga-migrate
     networks:
-      - app-network
+      - cloudinfra-net
     restart: "no"
     # command and depends_on set by extending file
 
   openfga:
     image: openfga/openfga:latest
-    container_name: openfga
+    container_name: ${PROJECT_NAME:-cloudinfra}-openfga
     command: run
     ports:
       - "8090:8080"   # HTTP API
       - "8091:8081"   # gRPC
       - "3000:3000"   # Playground UI
     networks:
-      - app-network
+      - cloudinfra-net
     healthcheck:
       test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=:8081"]
       interval: 10s
@@ -46,7 +46,7 @@ services:
     build:
       context: ./docker/otel-collector
       dockerfile: Dockerfile
-    container_name: otel-collector
+    container_name: ${PROJECT_NAME:-cloudinfra}-otel-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
@@ -56,7 +56,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_PROFILE: ""
     networks:
-      - app-network
+      - cloudinfra-net
     ports:
       - "4317:4317"
       - "4318:4318"
@@ -72,8 +72,8 @@ services:
     build:
       context: ./eureka-server
       dockerfile: Dockerfile
-    image: awsinfra-eureka-server:1.0.0
-    container_name: eureka-server
+    image: cloudinfra-eureka-server:1.0.0
+    container_name: ${PROJECT_NAME:-cloudinfra}-eureka-server
     environment:
       SPRING_APPLICATION_NAME: eureka-server
       SERVER_PORT: 8761
@@ -81,7 +81,7 @@ services:
       EUREKA_CLIENT_REGISTER_WITH_EUREKA: "false"
       EUREKA_CLIENT_FETCH_REGISTRY: "false"
     networks:
-      - app-network
+      - cloudinfra-net
     ports:
       - "8761:8761"
     healthcheck:
@@ -99,10 +99,10 @@ services:
     build:
       context: ./gateway-service
       dockerfile: Dockerfile
-    image: awsinfra-gateway-service:1.0.0
-    container_name: gateway-service
+    image: cloudinfra-gateway-service:1.0.0
+    container_name: ${PROJECT_NAME:-cloudinfra}-gateway-service
     networks:
-      - app-network
+      - cloudinfra-net
     ports:
       - "8080:8080"
       - "5005:5005"
@@ -122,10 +122,10 @@ services:
     build:
       context: ./backend-service
       dockerfile: Dockerfile
-    image: awsinfra-backend-service:1.0.0
-    container_name: backend-service
+    image: cloudinfra-backend-service:1.0.0
+    container_name: ${PROJECT_NAME:-cloudinfra}-backend-service
     networks:
-      - app-network
+      - cloudinfra-net
     ports:
       - "8082:8082"
     healthcheck:
@@ -144,12 +144,12 @@ services:
     build:
       context: ./auth-service
       dockerfile: Dockerfile
-    image: awsinfra-auth-service:1.0.0
-    container_name: auth-service
+    image: cloudinfra-auth-service:1.0.0
+    container_name: ${PROJECT_NAME:-cloudinfra}-auth-service
     volumes:
       - ~/.aws:/root/.aws:ro
     networks:
-      - app-network
+      - cloudinfra-net
     ports:
       - "8081:8081"
     healthcheck:
@@ -168,10 +168,10 @@ services:
     build:
       context: ./platform-service
       dockerfile: Dockerfile
-    image: awsinfra-platform-service:1.0.0
-    container_name: platform-service
+    image: cloudinfra-platform-service:1.0.0
+    container_name: ${PROJECT_NAME:-cloudinfra}-platform-service
     networks:
-      - app-network
+      - cloudinfra-net
     ports:
       - "8083:8083"
     healthcheck:
@@ -190,10 +190,10 @@ services:
     build:
       context: ./payment-service
       dockerfile: Dockerfile
-    image: awsinfra-payment-service:1.0.0
-    container_name: payment-service
+    image: cloudinfra-payment-service:1.0.0
+    container_name: ${PROJECT_NAME:-cloudinfra}-payment-service
     networks:
-      - app-network
+      - cloudinfra-net
     ports:
       - "8088:8088"
     healthcheck:
@@ -206,5 +206,5 @@ services:
     # environment, depends_on set by extending file
 
 networks:
-  app-network:
+  cloudinfra-net:
     driver: bridge

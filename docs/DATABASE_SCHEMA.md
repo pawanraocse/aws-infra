@@ -10,7 +10,7 @@
 ```mermaid
 graph TB
     subgraph "Shared Database (Platform DB)"
-        P[(awsinfra/platform)]
+        P[(cloud-infra/platform)]
     end
     
     subgraph "Tenant Databases (Dynamic)"
@@ -79,7 +79,7 @@ Auth-service calls platform-service internal APIs for:
 
 ```bash
 # Platform DB (Shared)
-SPRING_DATASOURCE_URL=jdbc:postgresql://rds-host:5432/awsinfra
+SPRING_DATASOURCE_URL=jdbc:postgresql://rds-host:5432/cloud-infra
 
 # Tenant DB (Dynamic per-request)
 # Resolved at runtime via TenantContextFilter + TenantDataSourceRouter
@@ -108,7 +108,7 @@ sequenceDiagram
 
 # SHARED DATABASE (Platform Schema)
 
-> **Database:** `awsinfra` (or `saas_db` in production)  
+> **Database:** `cloud-infra` (or `saas_db` in production)  
 > **Service:** `platform-service`  
 > **Migration:** `platform-service/src/main/resources/db/migration/V1__init_platform_service.sql`
 
@@ -620,7 +620,7 @@ ORDER BY m.last_accessed_at DESC NULLS LAST;
 # Platform Service (Fixed)
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST}:5432/awsinfra
+    url: jdbc:postgresql://${DB_HOST}:5432/cloud-infra
     
 # Auth/Backend (Dynamic via TenantDataSourceRouter)
 # Connection resolved per-request based on X-Tenant-Id header

@@ -13,6 +13,29 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TERRAFORM_DIR="$SCRIPT_DIR/../../terraform/envs/budget"
 
+PROJECT_NAME="${PROJECT_NAME:-cloud-infra}"
+
+# Load environment variables from .env if present
+if [ -f "$SCRIPT_DIR/../../.env" ]; then
+    log_info "Loading environment variables from .env"
+    set -a
+    source "$SCRIPT_DIR/../../.env"
+    set +a
+    
+    # Override defaults with .env values
+    PROJECT_NAME="${PROJECT_NAME:-$PROJECT_NAME}"
+    AWS_PROFILE="${AWS_PROFILE:-$AWS_PROFILE}"
+    AWS_REGION="${AWS_REGION:-$AWS_REGION}"
+    ENVIRONMENT="${ENVIRONMENT:-$ENVIRONMENT}"
+    
+    # Export for Terraform
+    export TF_VAR_project_name="$PROJECT_NAME"
+    export TF_VAR_aws_region="$AWS_REGION"
+    export TF_VAR_environment="$ENVIRONMENT"
+    
+    log_info "Using Project Name: $PROJECT_NAME"
+fi
+
 AWS_PROFILE="${AWS_PROFILE:-personal}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 PROJECT_NAME="${PROJECT_NAME:-cloud-infra}"

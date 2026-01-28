@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserResponse;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.CognitoIdentityProviderException;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.SignUpRequest;
@@ -32,14 +33,10 @@ public class CognitoUserRegistrar {
     private final CognitoIdentityProviderClient cognitoClient;
     private final CognitoProperties cognitoProperties;
 
-    /**
-     * Result of registration attempt.
-     */
-    public enum RegistrationResult {
-        /** New user created, may need email verification */
-        CREATED,
-        /** User already exists in Cognito, skipped creation */
-        ALREADY_EXISTS
+    public record UserRegistration(
+            String userSub,
+            boolean confirmed,
+            boolean alreadyExisted) {
     }
 
     /**
@@ -50,72 +47,60 @@ public class CognitoUserRegistrar {
      */
     public boolean userExists(String email) {
         log.debug("Checking if user exists in Cognito: email={}", email);
-
         try {
-            AdminGetUserRequest request = AdminGetUserRequest.builder()
-                    .userPoolId(cognitoProperties.getUserPoolId())
-                    .username(email)
-                    .build();
-
-            cognitoClient.adminGetUser(request);
-            log.debug("User exists in Cognito: email={}", email);
+            getCheckUserRequest(email);
             return true;
-
         } catch (UserNotFoundException e) {
-            log.debug("User does not exist in Cognito: email={}", email);
             return false;
-        } catch (CognitoIdentityProviderException e) {
-            log.error("Error checking user existence: email={} error={}",
-                    email, e.awsErrorDetails().errorMessage());
-            throw new RuntimeException("Failed to check user existence: " + e.awsErrorDetails().errorMessage());
+        } catch (Exception e) {
+            log.error("Error checking user existence: {}", e.getMessage());
+            throw new RuntimeException("Failed to check user existence", e);
         }
+    }
+
+    private AdminGetUserResponse getCheckUserRequest(String email) {
+        return cognitoClient.adminGetUser(AdminGetUserRequest.builder()
+                .userPoolId(cognitoProperties.getUserPoolId())
+                .username(email)
+                .build());
     }
 
     /**
      * Register a user in Cognito if they don't exist.
-     * If user already exists, returns ALREADY_EXISTS without error.
-     * 
-     * This enables multi-account per email feature where the same user
-     * can own multiple organizations.
-     * 
-     * @param email    user's email
-     * @param password user's password (ignored if user exists)
-     * @param name     user's display name
-     * @param tenantId tenant ID for the new workspace
-     * @param role     initial role (e.g., "admin")
-     * @return RegistrationResult indicating if user was created or already existed
+     * If user already exists, returns existing user details.
      */
-    public RegistrationResult registerIfNotExists(String email, String password, String name,
+    public UserRegistration registerIfNotExists(String email, String password, String name,
             String tenantId, String role) {
         log.info("RegisterIfNotExists: email={} tenantId={}", email, tenantId);
 
         // Check if user already exists
-        if (userExists(email)) {
+        try {
+            AdminGetUserResponse existingUser = getCheckUserRequest(email);
             log.info("User already exists, skipping Cognito registration: email={}", email);
-            return RegistrationResult.ALREADY_EXISTS;
+
+            String sub = existingUser.userAttributes().stream()
+                    .filter(attr -> "sub".equals(attr.name()))
+                    .map(AttributeType::value)
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("Existing user has no sub"));
+
+            boolean confirmed = "CONFIRMED".equals(existingUser.userStatusAsString());
+
+            return new UserRegistration(sub, confirmed, true);
+
+        } catch (UserNotFoundException e) {
+            // User doesn't exist, proceed with registration
         }
 
         // User doesn't exist, register them
-        register(email, password, name, tenantId, role);
-        return RegistrationResult.CREATED;
+        SignUpResponse response = register(email, password, name, tenantId, role);
+        return new UserRegistration(response.userSub(), response.userConfirmed(), false);
     }
 
     /**
      * Register a user in Cognito via signUp API.
-     * This enforces email verification for both personal and organization signups.
-     * 
-     * NOTE: tenantType is NOT stored in Cognito - frontend looks it up from
-     * platform DB.
-     * 
-     * @param email    user's email
-     * @param password user's password
-     * @param name     user's display name
-     * @param tenantId tenant ID to associate with user
-     * @param role     initial role (e.g., "admin")
-     * @return true if user was auto-confirmed, false if email verification is
-     *         pending
      */
-    public boolean register(String email, String password, String name, String tenantId, String role) {
+    public SignUpResponse register(String email, String password, String name, String tenantId, String role) {
         log.info("Registering user in Cognito: email={} tenantId={} role={}", email, tenantId, role);
 
         try {
@@ -136,8 +121,9 @@ public class CognitoUserRegistrar {
 
             SignUpResponse response = cognitoClient.signUp(signUpRequest);
 
-            log.info("Cognito user registered: email={} confirmed={}", email, response.userConfirmed());
-            return response.userConfirmed();
+            log.info("Cognito user registered: email={} confirmed={} sub={}",
+                    email, response.userConfirmed(), response.userSub());
+            return response;
 
         } catch (UsernameExistsException e) {
             log.error("User already exists: email={}", email);

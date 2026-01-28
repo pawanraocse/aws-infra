@@ -222,5 +222,5 @@ services:
         condition: service_healthy
 
 networks:
-  app-network:
+  cloudinfra-net:
     driver: bridge

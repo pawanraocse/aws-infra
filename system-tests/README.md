@@ -128,7 +128,7 @@ system-tests/
 | `EUREKA_URL` | `http://localhost:8761` | Eureka service URL |
 | `DB_HOST` | `localhost` | PostgreSQL host |
 | `DB_PORT` | `5432` | PostgreSQL port |
-| `DB_NAME` | `awsinfra` | Database name |
+| `DB_NAME` | `cloudinfra` | Database name |
 | `DB_USER` | `postgres` | Database user |
 | `DB_PASSWORD` | `postgres` | Database password |
 

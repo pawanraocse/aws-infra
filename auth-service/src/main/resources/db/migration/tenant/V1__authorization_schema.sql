@@ -187,6 +187,14 @@ INSERT INTO permissions (id, resource, action, description) VALUES
 ('user:manage', 'user', 'manage', 'Manage user roles and permissions'),
 -- Tenant permissions
 ('tenant:settings', 'tenant', 'settings', 'Manage tenant settings'),
+-- Tenant permissions
+('tenant:settings', 'tenant', 'settings', 'Manage tenant settings'),
+-- Role permissions
+('role:read', 'role', 'read', 'View roles'),
+('role:create', 'role', 'create', 'Create roles'),
+('role:update', 'role', 'update', 'Update roles'),
+('role:delete', 'role', 'delete', 'Delete roles'),
+('role:assign', 'role', 'assign', 'Assign roles to users'),
 -- SSO permissions (Phase 4)
 ('sso:read', 'sso', 'read', 'View SSO configuration'),
 ('sso:manage', 'sso', 'manage', 'Configure SSO identity providers'),
@@ -208,6 +216,11 @@ INSERT INTO role_permissions (role_id, permission_id) VALUES
 ('admin', 'user:invite'),
 ('admin', 'user:manage'),
 ('admin', 'tenant:settings'),
+('admin', 'role:read'),
+('admin', 'role:create'),
+('admin', 'role:update'),
+('admin', 'role:delete'),
+('admin', 'role:assign'),
 ('admin', 'sso:read'),
 ('admin', 'sso:manage'),
 ('admin', 'group:read'),

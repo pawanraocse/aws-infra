@@ -12,7 +12,10 @@ unset AWS_PROFILE
 export AWS_REGION=${AWS_REGION:-us-east-1}
 
 # SSM Parameter Path Prefix
-SSM_PREFIX="/cloud-infra/dev/cognito"
+# SSM Parameter Path Prefix
+PROJECT_NAME=${PROJECT_NAME:-cloudinfra}
+ENVIRONMENT=${ENVIRONMENT:-dev}
+SSM_PREFIX="/${PROJECT_NAME}/${ENVIRONMENT}/cognito"
 
 echo "AWS Region: $AWS_REGION"
 echo "SSM Prefix: $SSM_PREFIX"
@@ -46,10 +49,21 @@ echo ""
 echo "Fetching Cognito configuration from SSM Parameter Store..."
 echo "-----------------------------------------------------------"
 
-export COGNITO_USER_POOL_ID=$(fetch_ssm_param "user_pool_id")
-export COGNITO_SPA_CLIENT_ID=$(fetch_ssm_param "spa_client_id")
-export COGNITO_ISSUER_URI=$(fetch_ssm_param "issuer_uri")
-export COGNITO_JWKS_URI=$(fetch_ssm_param "jwks_uri")
+if [ -z "$COGNITO_USER_POOL_ID" ]; then
+  export COGNITO_USER_POOL_ID=$(fetch_ssm_param "user_pool_id")
+fi
+
+if [ -z "$COGNITO_SPA_CLIENT_ID" ]; then
+  export COGNITO_SPA_CLIENT_ID=$(fetch_ssm_param "spa_client_id")
+fi
+
+if [ -z "$COGNITO_ISSUER_URI" ]; then
+  export COGNITO_ISSUER_URI=$(fetch_ssm_param "issuer_uri")
+fi
+
+if [ -z "$COGNITO_JWKS_URI" ]; then
+  export COGNITO_JWKS_URI=$(fetch_ssm_param "jwks_uri")
+fi
 
 echo ""
 echo "✅ Configuration loaded successfully!"

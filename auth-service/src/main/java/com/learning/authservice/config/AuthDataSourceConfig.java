@@ -32,7 +32,7 @@ import javax.sql.DataSource;
 @Slf4j
 public class AuthDataSourceConfig {
 
-    @Value("${spring.datasource.url:jdbc:postgresql://localhost:5432/awsinfra}")
+    @Value("${spring.datasource.url:jdbc:postgresql://localhost:5432/cloudinfra}")
     private String defaultJdbcUrl;
 
     @Value("${spring.datasource.username:postgres}")

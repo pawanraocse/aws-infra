@@ -92,7 +92,7 @@ public final class TestConfig {
 
     public static final String DB_HOST = getEnv("DB_HOST", "localhost");
     public static final int DB_PORT = Integer.parseInt(getEnv("DB_PORT", "5432"));
-    public static final String DB_NAME = getEnv("DB_NAME", "awsinfra");
+    public static final String DB_NAME = getEnv("DB_NAME", "cloudinfra");
     public static final String DB_USER = getEnv("DB_USER", "postgres");
     public static final String DB_PASSWORD = getEnv("DB_PASSWORD", "postgres");
 

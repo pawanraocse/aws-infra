@@ -1,5 +1,6 @@
 package com.learning.authservice.signup.actions;
 
+import com.learning.authservice.config.CognitoProperties;
 import com.learning.authservice.signup.CognitoUserRegistrar;
 import com.learning.authservice.signup.pipeline.SignupAction;
 import com.learning.authservice.signup.pipeline.SignupActionException;
@@ -27,8 +28,8 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.UserNotFoun
 public class CreateCognitoUserAction implements SignupAction {
 
     private final CognitoUserRegistrar cognitoUserRegistrar;
-    private final CognitoIdentityProviderClient cognitoClient;
-    private final com.learning.authservice.config.CognitoProperties cognitoProperties;
+    private final CognitoProperties cognitoProperties;
+    private final CognitoIdentityProviderClient cognitoClient; // Kept for supports/isAlreadyDone checks
 
     @Override
     public String getName() {
@@ -48,6 +49,11 @@ public class CreateCognitoUserAction implements SignupAction {
 
     @Override
     public boolean isAlreadyDone(SignupContext ctx) {
+        // If we already have the ID in context, we are done
+        if (ctx.getCognitoUserId() != null) {
+            return true;
+        }
+
         // Check if user already exists in Cognito
         try {
             cognitoClient.adminGetUser(AdminGetUserRequest.builder()
@@ -56,7 +62,10 @@ public class CreateCognitoUserAction implements SignupAction {
                     .build());
 
             log.debug("Cognito user already exists: {}", ctx.getEmail());
-            return true;
+            // We return false here to force 'execute' to run, which will fetch the ID via
+            // registerIfNotExists
+            // This is safer than trying to fetch it here and replicate logic
+            return false;
         } catch (UserNotFoundException e) {
             return false;
         } catch (Exception e) {
@@ -68,11 +77,11 @@ public class CreateCognitoUserAction implements SignupAction {
     @Override
     public void execute(SignupContext ctx) throws SignupActionException {
         try {
-            log.info("Creating Cognito user: {}", ctx.getEmail());
+            log.info("Creating/Fetching Cognito user: {}", ctx.getEmail());
 
             String role = "admin"; // First user is always admin
 
-            CognitoUserRegistrar.RegistrationResult result = cognitoUserRegistrar.registerIfNotExists(
+            CognitoUserRegistrar.UserRegistration result = cognitoUserRegistrar.registerIfNotExists(
                     ctx.getEmail(),
                     ctx.getPassword(),
                     ctx.getName(),
@@ -83,7 +92,17 @@ public class CreateCognitoUserAction implements SignupAction {
             ctx.setMetadata("cognitoResult", result);
             ctx.setAssignedRole(role);
 
-            log.info("Cognito user created: {} (result: {})", ctx.getEmail(), result);
+            // CRITICAL: Set the Cognito User ID (sub) in the context so subsequent actions
+            // (Membership, Roles) use it
+            if (result.userSub() != null) {
+                ctx.setCognitoUserId(result.userSub());
+                log.info("Set Cognito User ID in context: {}", result.userSub());
+            } else {
+                throw new SignupActionException(getName(), "Failed to obtain Cognito User ID (sub)");
+            }
+
+            log.info("Cognito user processed: email={} sub={} confirmed={}",
+                    ctx.getEmail(), result.userSub(), result.confirmed());
 
         } catch (Exception e) {
             throw new SignupActionException(getName(),

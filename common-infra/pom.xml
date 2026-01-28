@@ -40,6 +40,12 @@
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
 
+        <!-- Eureka Client for Load Balancing -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+
         <!-- Security - marked optional, services must include it explicitly if needed -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

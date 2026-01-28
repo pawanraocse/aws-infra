@@ -4,7 +4,7 @@ spring:
       on-profile: dev
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/awsinfra
+    url: jdbc:postgresql://localhost:5432/cloud-infra
 
   jpa:
     show-sql: true

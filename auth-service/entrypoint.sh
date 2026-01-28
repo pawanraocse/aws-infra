@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
+set -x
 
 # Source global .env if present (project root)
 set -a
@@ -7,10 +8,17 @@ set -a
 set +a
 
 # AWS Region
+# Unset AWS_PROFILE to use environment credentials
+unset AWS_PROFILE
 export AWS_REGION=${AWS_REGION:-us-east-1}
 
+echo "[DEBUG] Checking AWS Identity..."
+aws sts get-caller-identity || echo "[ERROR] Identity check failed"
+
 # SSM Parameter Path Prefix
-SSM_PREFIX="/cloud-infra/dev/cognito"
+PROJECT_NAME=${PROJECT_NAME:-cloud-infra}
+ENVIRONMENT=${ENVIRONMENT:-dev}
+SSM_PREFIX="/${PROJECT_NAME}/${ENVIRONMENT}/cognito"
 
 echo "[INFO] Fetching SSM parameters from: $SSM_PREFIX (region: $AWS_REGION)"
 

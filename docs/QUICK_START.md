@@ -64,7 +64,7 @@ docker-compose logs --tail=100
 curl http://localhost:8761/eureka/apps
 
 # Check database
-docker exec -it aws-infra-postgres-1 psql -U postgres -d saas_db -c "SELECT * FROM tenant;"
+docker exec -it cloud-infra-postgres-1 psql -U postgres -d saas_db -c "SELECT * FROM tenant;"
 ```
 
 ---

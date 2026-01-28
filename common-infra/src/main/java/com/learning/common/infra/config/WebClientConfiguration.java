@@ -14,6 +14,7 @@ public class WebClientConfiguration {
 
     @Bean(name = "internalWebClientBuilder")
     @ConditionalOnMissingBean(name = "internalWebClientBuilder")
+    @org.springframework.cloud.client.loadbalancer.LoadBalanced
     public WebClient.Builder internalWebClientBuilder() {
         return WebClient.builder();
     }

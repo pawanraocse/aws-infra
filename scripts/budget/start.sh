@@ -29,6 +29,21 @@ AWS_REGION="${AWS_REGION:-us-east-1}"
 ENVIRONMENT="${ENVIRONMENT:-budget}"
 PROJECT_NAME="${PROJECT_NAME:-cloud-infra}"
 
+# Load environment variables from .env if present
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    log_info "Loading environment variables from .env"
+    set -a
+    source "$PROJECT_ROOT/.env"
+    set +a
+    
+    # Override defaults with .env values
+    PROJECT_NAME="${PROJECT_NAME:-$PROJECT_NAME}"
+    ENVIRONMENT="${ENVIRONMENT:-$ENVIRONMENT}"
+    AWS_REGION="${AWS_REGION:-$AWS_REGION}"
+    
+    log_info "Using Project Name: $PROJECT_NAME"
+fi
+
 # =============================================================================
 # Optimize Swap Settings
 # =============================================================================

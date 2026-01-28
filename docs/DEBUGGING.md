@@ -67,7 +67,7 @@ curl http://localhost:8761/actuator/health  # eureka-server
 
 ```bash
 # Connect to PostgreSQL
-docker exec -it aws-infra-postgres-1 psql -U postgres -d saas_db
+docker exec -it cloud-infra-postgres-1 psql -U postgres -d saas_db
 
 # Quick table check
 \dt
@@ -124,11 +124,11 @@ echo "YOUR_TOKEN" | cut -d'.' -f2 | base64 -d | jq
 **Debug database issues:**
 ```bash
 # Check Flyway history
-docker exec -it aws-infra-postgres-1 psql -U postgres -d saas_db -c \
+docker exec -it cloud-infra-postgres-1 psql -U postgres -d saas_db -c \
   "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_on DESC LIMIT 10;"
 
 # Check if tenant schema exists
-docker exec -it aws-infra-postgres-1 psql -U postgres -d saas_db -c \
+docker exec -it cloud-infra-postgres-1 psql -U postgres -d saas_db -c \
   "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%';"
 ```
 
@@ -143,7 +143,7 @@ docker exec -it aws-infra-postgres-1 psql -U postgres -d saas_db -c \
 **Debug provisioning:**
 ```bash
 # Check tenant status
-docker exec -it aws-infra-postgres-1 psql -U postgres -d saas_db -c \
+docker exec -it cloud-infra-postgres-1 psql -U postgres -d saas_db -c \
   "SELECT id, status, tenant_type, created_at FROM tenant ORDER BY created_at DESC LIMIT 5;"
 
 # Manually trigger migration retry (if needed)
@@ -218,7 +218,7 @@ time curl http://localhost:8080/auth/api/v1/auth/me -H "Authorization: Bearer $T
 docker stats
 
 # Check database slow queries
-docker exec -it aws-infra-postgres-1 psql -U postgres -d saas_db -c \
+docker exec -it cloud-infra-postgres-1 psql -U postgres -d saas_db -c \
   "SELECT query, calls, mean_time FROM pg_stat_statements ORDER BY mean_time DESC LIMIT 10;"
 ```
 
@@ -260,7 +260,7 @@ docker-compose up -d --build auth-service
 ### Clear Tenant (For Testing)
 
 ```bash
-docker exec -it aws-infra-postgres-1 psql -U postgres -d saas_db -c \
+docker exec -it cloud-infra-postgres-1 psql -U postgres -d saas_db -c \
   "DELETE FROM user_tenant_memberships WHERE tenant_id = 'test-tenant';
    DELETE FROM tenant WHERE id = 'test-tenant';"
 ```

@@ -7,9 +7,10 @@
 # ====================================
 
 # AWS Configuration (can be overridden per-environment)
-aws_region   = "us-east-1"
-project_name = "cloud-infra"
-environment  = "dev"
+# Project Name is loaded from .env via scripts (deploy.sh)
+# project_name = "cloud-infra"
+# Only set valid AWS region here
+aws_region = "us-east-1"
 
 # OAuth Configuration
 callback_urls = [

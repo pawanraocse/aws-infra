@@ -36,6 +36,17 @@ else
     log_warn "No .env file found, using defaults"
 fi
 
+# Export Terraform variables from .env to ensure they override defaults
+if [ -n "${PROJECT_NAME:-}" ]; then
+    export TF_VAR_project_name="$PROJECT_NAME"
+    log_info "Set TF_VAR_project_name=$TF_VAR_project_name from .env"
+fi
+
+if [ -n "${ENVIRONMENT:-}" ]; then
+    export TF_VAR_environment="$ENVIRONMENT"
+    log_info "Set TF_VAR_environment=$TF_VAR_environment from .env"
+fi
+
 # Set AWS profile (hardcoded to 'personal' for safety)
 export AWS_PROFILE=${AWS_PROFILE:-personal}
 log_info "Using AWS Profile: $AWS_PROFILE"
@@ -135,11 +146,11 @@ LOGOUT_REDIRECT_URL=$LOGOUT_REDIRECT_URL
 AWS_REGION=$AWS_REGION
 
 # SSM Parameter Paths (created by Terraform)
-SSM_USER_POOL_ID_PATH=/\${TF_VAR_project_name:-awsinfra}/\${TF_VAR_environment:-dev}/cognito/user_pool_id
-SSM_CLIENT_ID_PATH=/\${TF_VAR_project_name:-awsinfra}/\${TF_VAR_environment:-dev}/cognito/client_id
-SSM_CLIENT_SECRET_PATH=/\${TF_VAR_project_name:-awsinfra}/\${TF_VAR_environment:-dev}/cognito/client_secret
-SSM_ISSUER_URI_PATH=/\${TF_VAR_project_name:-awsinfra}/\${TF_VAR_environment:-dev}/cognito/issuer_uri
-SSM_DOMAIN_PATH=/\${TF_VAR_project_name:-awsinfra}/\${TF_VAR_environment:-dev}/cognito/domain
+SSM_USER_POOL_ID_PATH=/\${TF_VAR_project_name:-cloudinfra}/\${TF_VAR_environment:-dev}/cognito/user_pool_id
+SSM_CLIENT_ID_PATH=/\${TF_VAR_project_name:-cloudinfra}/\${TF_VAR_environment:-dev}/cognito/client_id
+SSM_CLIENT_SECRET_PATH=/\${TF_VAR_project_name:-cloudinfra}/\${TF_VAR_environment:-dev}/cognito/client_secret
+SSM_ISSUER_URI_PATH=/\${TF_VAR_project_name:-cloudinfra}/\${TF_VAR_environment:-dev}/cognito/issuer_uri
+SSM_DOMAIN_PATH=/\${TF_VAR_project_name:-cloudinfra}/\${TF_VAR_environment:-dev}/cognito/domain
 EOF
 
 log_info "Configuration saved to $OUTPUT_FILE"

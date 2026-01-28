@@ -34,9 +34,10 @@ variable "enable_group_sync" {
 }
 
 variable "project_name" {
-  description = "Project name used in resource naming"
+  description = "Project name used in resource naming (set via TF_VAR_project_name from .env)"
   type        = string
-  default     = "cloud-infra"
+  # No default - must be provided by scripts
+  # default     = "cloud-infra"
 
   validation {
     condition     = can(regex("^[a-z0-9-]{3,20}$", var.project_name)) && !can(regex("^aws", var.project_name))

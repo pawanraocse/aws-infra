@@ -159,9 +159,22 @@ variable "project_display_name" {
 # ==========================================================================
 
 variable "enable_google_social_login" {
-  description = "Enable 'Sign in with Google' for personal Gmail accounts. Requires SSM params from setup-ssm-secrets.sh"
+  description = "Enable 'Sign in with Google' for personal Gmail accounts. Managed via Terraform resources."
   type        = bool
   default     = false
+}
+
+variable "google_client_id" {
+  description = "Google Client ID for OAuth (set via TF_VAR_google_client_id from .env)"
+  type        = string
+  default     = ""
+}
+
+variable "google_client_secret" {
+  description = "Google Client Secret for OAuth (set via TF_VAR_google_client_secret from .env)"
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 

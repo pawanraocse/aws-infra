@@ -1,11 +1,18 @@
 #!/bin/bash
 set -e
 
+PROJECT_ROOT="$(dirname "${BASH_SOURCE[0]}")/.."
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    set -a
+    source "$PROJECT_ROOT/.env"
+    set +a
+fi
+
 # Configuration
-REGION="us-east-1"  # Default, can be overridden by env var
+REGION="${AWS_REGION:-us-east-1}"
 # Project name and environment should match your terraform variables
-PROJECT_NAME="cloud-infra" 
-ENVIRONMENT="dev"
+PROJECT_NAME="${PROJECT_NAME:-cloud-infra}"
+ENVIRONMENT="${ENVIRONMENT:-dev}"
 
 echo "================================================================"
 echo "   AWS SaaS Template - System Admin Bootstrap"

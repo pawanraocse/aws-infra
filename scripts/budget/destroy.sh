@@ -16,6 +16,7 @@ TERRAFORM_DIR="$SCRIPT_DIR/../../terraform/envs/budget"
 PROJECT_NAME="${PROJECT_NAME:-cloud-infra}"
 
 # Load environment variables from .env if present
+# Load environment variables from .env if present
 if [ -f "$SCRIPT_DIR/../../.env" ]; then
     log_info "Loading environment variables from .env"
     set -a
@@ -27,18 +28,33 @@ if [ -f "$SCRIPT_DIR/../../.env" ]; then
     AWS_PROFILE="${AWS_PROFILE:-$AWS_PROFILE}"
     AWS_REGION="${AWS_REGION:-$AWS_REGION}"
     ENVIRONMENT="${ENVIRONMENT:-$ENVIRONMENT}"
-    
-    # Export for Terraform
-    export TF_VAR_project_name="$PROJECT_NAME"
-    export TF_VAR_aws_region="$AWS_REGION"
-    export TF_VAR_environment="$ENVIRONMENT"
-    
-    log_info "Using Project Name: $PROJECT_NAME"
 fi
+
+# Ensure PROJECT_NAME is set
+if [ -z "${PROJECT_NAME:-}" ]; then
+    log_warn "PROJECT_NAME not set in .env. Defaulting to 'cloud-infra' (legacy behavior)."
+    PROJECT_NAME="cloud-infra"
+    # Alternatively, uncomment to enforce strict mode:
+    # log_error "PROJECT_NAME is not set. Please check your .env file."
+    # exit 1
+fi
+
+# Export for Terraform
+export TF_VAR_project_name="$PROJECT_NAME"
+export TF_VAR_aws_region="$AWS_REGION"
+export TF_VAR_environment="${ENVIRONMENT:-dev}"
+
+if [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
+    export TF_VAR_google_client_id="$GOOGLE_CLIENT_ID"
+fi
+if [ -n "${GOOGLE_CLIENT_SECRET:-}" ]; then
+    export TF_VAR_google_client_secret="$GOOGLE_CLIENT_SECRET"
+fi
+
+log_info "Using Project Name: $PROJECT_NAME"
 
 AWS_PROFILE="${AWS_PROFILE:-personal}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
-PROJECT_NAME="${PROJECT_NAME:-cloud-infra}"
 ENVIRONMENT="${ENVIRONMENT:-budget}"
 
 # Colors

@@ -281,6 +281,83 @@ update_java_packages() {
     log_info "Java packages kept as com.learning (use IDE refactoring if needed)"
 }
 
+create_env_file() {
+    local dest_dir="$1"
+    local new_project="$2"
+    
+    log_step "Creating .env file"
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_substep "[DRY-RUN] Would create .env file with PROJECT_NAME=$new_project"
+        return
+    fi
+    
+    local env_file="$dest_dir/.env"
+    
+    cat > "$env_file" << EOF
+# Global project environment variables
+PROJECT_NAME=$new_project
+AWS_PROFILE=default
+PARAM_REGION="us-east-1"
+
+# AWS Credentials for Docker containers (Placeholders)
+AWS_ACCESS_KEY_ID=placeholder
+AWS_SECRET_ACCESS_KEY=placeholder
+AWS_REGION=us-east-1
+AWS_DEFAULT_REGION=us-east-1
+
+# ============================================================================
+# Database
+# ============================================================================
+POSTGRES_DB=${new_project//-/}
+DUMMY_POSTGRES_DB=postgres
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_PORT=5432
+
+# ============================================================================
+# Redis
+# ============================================================================
+REDIS_PORT=6379
+
+# ============================================================================
+# OpenFGA
+# ============================================================================
+OPENFGA_DB=openfga
+OPENFGA_PLAYGROUND_ENABLED=true
+
+# ============================================================================
+# Eureka
+# ============================================================================
+EUREKA_URL=http://eureka-server:8761/eureka/
+
+# ============================================================================
+# Service Ports
+# ============================================================================
+GATEWAY_PORT=8080
+AUTH_PORT=8081
+BACKEND_PORT=8082
+PLATFORM_PORT=8083
+PAYMENT_PORT=8088
+
+# ============================================================================
+# Email
+# ============================================================================
+SES_FROM_EMAIL=noreply@example.com
+
+# ============================================================================
+# Feature Flags
+# ============================================================================
+BILLING_ENABLED=false
+AUTH_PROFILE=
+
+# Docker Configuration
+COMPOSE_PROJECT_NAME=$new_project
+EOF
+
+    log_info "Created .env file at $env_file"
+}
+
 update_terraform_config() {
     local dest_dir="$1"
     local new_project="$2"
@@ -295,29 +372,9 @@ update_terraform_config() {
     
     local tf_dir="$dest_dir/terraform"
     
-    # Update terraform.tfvars
-    local tfvars_file="$tf_dir/terraform.tfvars"
-    if [[ -f "$tfvars_file" ]]; then
-        if [[ "$DRY_RUN" == "true" ]]; then
-            log_substep "[DRY-RUN] Would update project_name in $tfvars_file"
-        else
-            sed -i '' "s|project_name.*=.*\"${SOURCE_PROJECT_NAME}\"|project_name = \"${new_project}\"|g" "$tfvars_file" 2>/dev/null || \
-            sed -i "s|project_name.*=.*\"${SOURCE_PROJECT_NAME}\"|project_name = \"${new_project}\"|g" "$tfvars_file"
-            log_substep "Updated terraform.tfvars"
-        fi
-    fi
-    
-    # Update variables.tf (default value for project_name)
-    local vars_tf="$tf_dir/variables.tf"
-    if [[ -f "$vars_tf" ]]; then
-        if [[ "$DRY_RUN" == "true" ]]; then
-            log_substep "[DRY-RUN] Would update default project_name in $vars_tf"
-        else
-            sed -i '' "s|default.*=.*\"${SOURCE_PROJECT_NAME}\"|default     = \"${new_project}\"|g" "$vars_tf" 2>/dev/null || \
-            sed -i "s|default.*=.*\"${SOURCE_PROJECT_NAME}\"|default     = \"${new_project}\"|g" "$vars_tf"
-            log_substep "Updated variables.tf"
-        fi
-    fi
+    # NOTE: We no longer hardcode project_name in terraform.tfvars or variables.tf
+    # The spawned project will rely on the .env file and the updated deploy scripts
+    # just like the template project.
     
     # Update main.tf (SSM parameter paths)
     local main_tf="$tf_dir/main.tf"
@@ -742,6 +799,7 @@ main() {
     
     # Execute steps
     copy_template_files "$source_dir" "$dest_path"
+    create_env_file "$dest_path" "$project_name"
     update_pom_files "$dest_path" "$project_name"
     update_java_packages "$dest_path" "$project_name"
     update_terraform_config "$dest_path" "$project_name"

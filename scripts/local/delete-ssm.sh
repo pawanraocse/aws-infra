@@ -1,8 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
-PROJECT_NAME="${TF_VAR_project_name:-cloud-infra}"
-ENVIRONMENT="${TF_VAR_environment:-dev}"
+PROJECT_ROOT="$(dirname "${BASH_SOURCE[0]}")/../.."
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    set -a
+    source "$PROJECT_ROOT/.env"
+    set +a
+fi
+
+PROJECT_NAME="${PROJECT_NAME:-cloud-infra}"
+ENVIRONMENT="${ENVIRONMENT:-dev}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 AWS_PROFILE="${AWS_PROFILE:-default}"
 

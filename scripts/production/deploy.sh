@@ -8,7 +8,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$SCRIPT_DIR/.."
+PROJECT_ROOT="$SCRIPT_DIR/../.."
 TERRAFORM_DIR="$PROJECT_ROOT/terraform/envs/production"
 
 AWS_REGION="${AWS_REGION:-us-east-1}"
@@ -32,6 +32,13 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
     export TF_VAR_project_name="$PROJECT_NAME"
     export TF_VAR_aws_region="$AWS_REGION"
     export TF_VAR_environment="$ENVIRONMENT"
+
+    if [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
+        export TF_VAR_google_client_id="$GOOGLE_CLIENT_ID"
+    fi
+    if [ -n "${GOOGLE_CLIENT_SECRET:-}" ]; then
+        export TF_VAR_google_client_secret="$GOOGLE_CLIENT_SECRET"
+    fi
 fi
 
 SERVICES=("gateway-service" "auth-service" "backend-service" "platform-service" "eureka-server")

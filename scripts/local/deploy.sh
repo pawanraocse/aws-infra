@@ -27,24 +27,33 @@ log_error() {
 }
 
 # Load environment variables
-if [ -f ../.env ]; then
-    log_info "Loading environment variables from ../.env"
+ENV_FILE="$SCRIPT_DIR/../../.env"
+if [ -f "$ENV_FILE" ]; then
+    log_info "Loading environment variables from $ENV_FILE"
     set -a
-    source ../.env
+    source "$ENV_FILE"
     set +a
 else
-    log_warn "No .env file found, using defaults"
+    log_warn "No .env file found at $ENV_FILE, using defaults"
 fi
 
 # Export Terraform variables from .env to ensure they override defaults
 if [ -n "${PROJECT_NAME:-}" ]; then
     export TF_VAR_project_name="$PROJECT_NAME"
     log_info "Set TF_VAR_project_name=$TF_VAR_project_name from .env"
+else
+    log_error "PROJECT_NAME is not set. Please check your .env file."
+    exit 1
 fi
 
-if [ -n "${ENVIRONMENT:-}" ]; then
-    export TF_VAR_environment="$ENVIRONMENT"
-    log_info "Set TF_VAR_environment=$TF_VAR_environment from .env"
+export TF_VAR_environment="${ENVIRONMENT:-dev}"
+log_info "Set TF_VAR_environment=$TF_VAR_environment from .env (default: dev)"
+
+if [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
+    export TF_VAR_google_client_id="$GOOGLE_CLIENT_ID"
+fi
+if [ -n "${GOOGLE_CLIENT_SECRET:-}" ]; then
+    export TF_VAR_google_client_secret="$GOOGLE_CLIENT_SECRET"
 fi
 
 # Set AWS profile (hardcoded to 'personal' for safety)

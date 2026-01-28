@@ -48,6 +48,24 @@ else
     log_warn "No .env file found, using defaults"
 fi
 
+# Export Terraform variables from .env to ensure they override defaults
+if [ -n "${PROJECT_NAME:-}" ]; then
+    export TF_VAR_project_name="$PROJECT_NAME"
+    log_info "Set TF_VAR_project_name=$TF_VAR_project_name from .env"
+fi
+
+if [ -n "${ENVIRONMENT:-}" ]; then
+    export TF_VAR_environment="$ENVIRONMENT"
+    log_info "Set TF_VAR_environment=$TF_VAR_environment from .env"
+fi
+
+if [ -n "${GOOGLE_CLIENT_ID:-}" ]; then
+    export TF_VAR_google_client_id="$GOOGLE_CLIENT_ID"
+fi
+if [ -n "${GOOGLE_CLIENT_SECRET:-}" ]; then
+    export TF_VAR_google_client_secret="$GOOGLE_CLIENT_SECRET"
+fi
+
 # Set AWS profile (hardcoded to 'personal' for safety)
 export AWS_PROFILE=${AWS_PROFILE:-personal}
 log_info "Using AWS Profile: $AWS_PROFILE"

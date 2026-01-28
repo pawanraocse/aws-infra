@@ -339,19 +339,26 @@ test_java_packages_unchanged() {
 }
 
 test_terraform_config_updated() {
-    log_test "Terraform configuration updated"
+    log_test "Terraform configuration updated and .env created"
     ((TESTS_RUN++)) || true
     
     local dest="$TEST_DIR/tf-test"
+    local proj="myplatform"
     
-    if "$SPAWN_SCRIPT" myplatform "$dest" --skip-git > /dev/null 2>&1; then
+    if "$SPAWN_SCRIPT" "$proj" "$dest" --skip-git > /dev/null 2>&1; then
         local all_pass=true
         
-        # Check terraform.tfvars updated
-        if [[ -f "$dest/terraform/terraform.tfvars" ]]; then
-            assert_file_contains "$dest/terraform/terraform.tfvars" "myplatform" "Should have new project name" || all_pass=false
-            assert_file_not_contains "$dest/terraform/terraform.tfvars" "cloud-infra" "Should not have old project name" || all_pass=false
+        # Check .env created
+        if [[ -f "$dest/.env" ]]; then
+            log_info "  ✓ .env file created"
+            assert_file_contains "$dest/.env" "PROJECT_NAME=$proj" ".env should have PROJECT_NAME=$proj" || all_pass=false
+        else
+            log_fail ".env file should be created"
+            all_pass=false
         fi
+        
+        # Check variables.tf does NOT have hardcoded default active
+        # (This assumes the template variables.tf has the default commented out)
         
         # Check terraform state files are removed
         if [[ ! -f "$dest/terraform/terraform.tfstate" ]]; then

@@ -58,20 +58,35 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 
 # =============================================================================
-# SSM Parameters for Secrets
+# SSM Parameters for Secrets (Managed by Terraform)
 # =============================================================================
-# These parameters are created by scripts/identity/setup-ssm-secrets.sh
-# Run that script first before terraform apply
 
-data "aws_ssm_parameter" "google_client_id" {
-  count = var.enable_google_social_login ? 1 : 0
-  name  = "/auth-service/google_client_id"
+resource "aws_ssm_parameter" "google_client_id" {
+  count     = var.enable_google_social_login ? 1 : 0
+  name      = "/${var.project_name}/${var.environment}/auth-service/google_client_id"
+  type      = "String"
+  value     = var.google_client_id
+  overwrite = true
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
 }
 
-data "aws_ssm_parameter" "google_client_secret" {
-  count           = var.enable_google_social_login ? 1 : 0
-  name            = "/auth-service/google_client_secret"
-  with_decryption = true
+resource "aws_ssm_parameter" "google_client_secret" {
+  count     = var.enable_google_social_login ? 1 : 0
+  name      = "/${var.project_name}/${var.environment}/auth-service/google_client_secret"
+  type      = "SecureString"
+  value     = var.google_client_secret
+  overwrite = true
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    ManagedBy   = "Terraform"
+  }
 }
 
 # =============================================================================
@@ -104,8 +119,8 @@ module "cognito" {
   # Google Social Login (Personal Gmail - B2C)
   # Credentials are read from SSM Parameter Store
   enable_google_social_login = var.enable_google_social_login
-  google_client_id           = var.enable_google_social_login ? data.aws_ssm_parameter.google_client_id[0].value : ""
-  google_client_secret       = var.enable_google_social_login ? data.aws_ssm_parameter.google_client_secret[0].value : ""
+  google_client_id           = var.enable_google_social_login ? var.google_client_id : ""
+  google_client_secret       = var.enable_google_social_login ? var.google_client_secret : ""
 }
 
 # =============================================================================

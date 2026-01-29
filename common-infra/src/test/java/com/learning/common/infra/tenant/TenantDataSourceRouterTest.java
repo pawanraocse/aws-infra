@@ -4,6 +4,7 @@ import com.learning.common.dto.TenantDbConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -18,15 +19,11 @@ import static org.mockito.Mockito.*;
 /**
  * Unit tests for TenantDataSourceRouter.
  * 
- * <p>
- * These tests verify:
- * </p>
- * <ul>
- * <li>Routing to default datasource when no tenant context is set</li>
- * <li>Routing to tenant-specific datasource when tenant context is set</li>
- * <li>Datasource caching behavior</li>
- * <li>Eviction of tenant datasources</li>
- * </ul>
+ * Tests verify:
+ * - Routing to default datasource when no tenant context
+ * - Routing to DATABASE mode tenant datasource
+ * - Routing to SHARED mode personal shared datasource
+ * - Datasource caching and eviction
  */
 @ExtendWith(MockitoExtension.class)
 class TenantDataSourceRouterTest {
@@ -37,12 +34,14 @@ class TenantDataSourceRouterTest {
     @Mock
     private DataSource defaultDataSource;
 
+    @Mock
+    private DataSource personalSharedDataSource;
+
     private TenantDataSourceRouter router;
 
     @BeforeEach
     void setUp() {
         TenantContext.clear();
-        router = new TenantDataSourceRouter(tenantRegistry, defaultDataSource);
     }
 
     @AfterEach
@@ -50,149 +49,205 @@ class TenantDataSourceRouterTest {
         TenantContext.clear();
     }
 
-    @Test
-    @DisplayName("Returns default datasource when no tenant context is set")
-    void testDefaultDataSourceWhenNoTenantContext() {
-        // Arrange - no tenant context set
+    @Nested
+    @DisplayName("Default DataSource Tests")
+    class DefaultDataSourceTests {
 
-        // Act
-        DataSource result = router.determineTargetDataSource();
+        @BeforeEach
+        void setUp() {
+            router = new TenantDataSourceRouter(tenantRegistry, defaultDataSource);
+        }
 
-        // Assert
-        assertThat(result).isSameAs(defaultDataSource);
-        verifyNoInteractions(tenantRegistry);
+        @Test
+        @DisplayName("Returns default datasource when no tenant context is set")
+        void testDefaultDataSourceWhenNoTenantContext() {
+            DataSource result = router.determineTargetDataSource();
+            assertThat(result).isSameAs(defaultDataSource);
+            verifyNoInteractions(tenantRegistry);
+        }
+
+        @Test
+        @DisplayName("Throws exception when no tenant context and no default datasource")
+        void testThrowsWhenNoTenantContextAndNoDefault() {
+            TenantDataSourceRouter routerWithoutDefault = new TenantDataSourceRouter(tenantRegistry);
+            assertThatThrownBy(routerWithoutDefault::determineTargetDataSource)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("No tenant context");
+        }
+
+        @Test
+        @DisplayName("Returns default datasource for SYSTEM tenant")
+        void testSystemTenantUsesDefaultDataSource() {
+            TenantContext.setCurrentTenant(TenantDataSourceRouter.SYSTEM_TENANT_ID);
+            DataSource result = router.determineTargetDataSource();
+            assertThat(result).isSameAs(defaultDataSource);
+            verifyNoInteractions(tenantRegistry);
+        }
     }
 
-    @Test
-    @DisplayName("Throws exception when no tenant context and no default datasource")
-    void testThrowsWhenNoTenantContextAndNoDefault() {
-        // Arrange - router without default datasource
-        TenantDataSourceRouter routerWithoutDefault = new TenantDataSourceRouter(tenantRegistry);
+    @Nested
+    @DisplayName("DATABASE Mode Tests")
+    class DatabaseModeTests {
 
-        // Act & Assert
-        assertThatThrownBy(routerWithoutDefault::determineTargetDataSource)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("No tenant context");
+        @BeforeEach
+        void setUp() {
+            router = new TenantDataSourceRouter(tenantRegistry, defaultDataSource, personalSharedDataSource);
+        }
+
+        @Test
+        @DisplayName("Creates and caches tenant datasource for DATABASE mode")
+        void testCreatesTenantDataSourceForDatabaseMode() {
+            String tenantId = "test-org-tenant";
+            TenantContext.setCurrentTenant(tenantId);
+
+            TenantDbConfig config = new TenantDbConfig(
+                    "jdbc:postgresql://localhost:5432/t_test_org",
+                    "test_user",
+                    "test_password",
+                    null,
+                    "DATABASE");
+            when(tenantRegistry.load(tenantId)).thenReturn(config);
+
+            DataSource result = router.determineTargetDataSource();
+
+            assertThat(result).isNotNull();
+            assertThat(result).isNotSameAs(defaultDataSource);
+            assertThat(result).isNotSameAs(personalSharedDataSource);
+            // Called twice: once for storage mode check, once for datasource creation
+            verify(tenantRegistry, times(2)).load(tenantId);
+            assertThat(router.getActiveTenantCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("Caches datasource on subsequent requests for same tenant")
+        void testCachesDataSourceForSameTenant() {
+            String tenantId = "test-tenant-456";
+            TenantContext.setCurrentTenant(tenantId);
+
+            TenantDbConfig config = new TenantDbConfig(
+                    "jdbc:postgresql://localhost:5432/t_456",
+                    "test_user",
+                    "test_password",
+                    null,
+                    "DATABASE");
+            when(tenantRegistry.load(tenantId)).thenReturn(config);
+
+            DataSource first = router.determineTargetDataSource();
+            DataSource second = router.determineTargetDataSource();
+
+            assertThat(first).isSameAs(second);
+            // Registry called twice (once per determineTargetDataSource to check storage mode)
+            // but HikariDataSource created only once
+            assertThat(router.getActiveTenantCount()).isEqualTo(1);
+        }
     }
 
-    @Test
-    @DisplayName("Creates and caches tenant datasource on first request")
-    void testCreatesTenantDataSourceOnFirstRequest() {
-        // Arrange
-        String tenantId = "test-tenant-123";
-        TenantContext.setCurrentTenant(tenantId);
+    @Nested
+    @DisplayName("SHARED Mode Tests")
+    class SharedModeTests {
 
-        TenantDbConfig mockConfig = new TenantDbConfig(
-                "jdbc:postgresql://localhost:5432/test_db",
-                "test_user",
-                "test_password");
-        when(tenantRegistry.load(tenantId)).thenReturn(mockConfig);
+        @BeforeEach
+        void setUp() {
+            router = new TenantDataSourceRouter(tenantRegistry, defaultDataSource, personalSharedDataSource);
+        }
 
-        // Act
-        DataSource result = router.determineTargetDataSource();
+        @Test
+        @DisplayName("Routes SHARED tenant to personalSharedDataSource")
+        void testSharedTenantUsesPersonalSharedDataSource() {
+            String tenantId = "personal-user-123";
+            TenantContext.setCurrentTenant(tenantId);
 
-        // Assert
-        assertThat(result).isNotNull();
-        assertThat(result).isNotSameAs(defaultDataSource);
-        verify(tenantRegistry, times(1)).load(tenantId);
-        assertThat(router.getActiveTenantCount()).isEqualTo(1);
+            TenantDbConfig config = new TenantDbConfig(
+                    "jdbc:postgresql://localhost:5432/personal_shared",
+                    "shared_user",
+                    "shared_password",
+                    null,
+                    "SHARED");
+            when(tenantRegistry.load(tenantId)).thenReturn(config);
+
+            DataSource result = router.determineTargetDataSource();
+
+            assertThat(result).isSameAs(personalSharedDataSource);
+            // SHARED tenants don't create cached datasources
+            assertThat(router.getActiveTenantCount()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("Multiple SHARED tenants share the same datasource")
+        void testMultipleSharedTenantsShareDataSource() {
+            TenantDbConfig sharedConfig = new TenantDbConfig(
+                    "jdbc:postgresql://localhost:5432/personal_shared",
+                    "shared_user",
+                    "shared_password",
+                    null,
+                    "SHARED");
+
+            // First personal tenant
+            TenantContext.setCurrentTenant("personal-user-1");
+            when(tenantRegistry.load("personal-user-1")).thenReturn(sharedConfig);
+            DataSource ds1 = router.determineTargetDataSource();
+
+            // Second personal tenant
+            TenantContext.setCurrentTenant("personal-user-2");
+            when(tenantRegistry.load("personal-user-2")).thenReturn(sharedConfig);
+            DataSource ds2 = router.determineTargetDataSource();
+
+            // Both should use the same shared datasource
+            assertThat(ds1).isSameAs(personalSharedDataSource);
+            assertThat(ds2).isSameAs(personalSharedDataSource);
+            assertThat(ds1).isSameAs(ds2);
+
+            // No cached datasources created for SHARED tenants
+            assertThat(router.getActiveTenantCount()).isEqualTo(0);
+        }
     }
 
-    @Test
-    @DisplayName("Caches datasource on subsequent requests for same tenant")
-    void testCachesDataSourceForSameTenant() {
-        // Arrange
-        String tenantId = "test-tenant-456";
-        TenantContext.setCurrentTenant(tenantId);
+    @Nested
+    @DisplayName("Eviction Tests")
+    class EvictionTests {
 
-        TenantDbConfig mockConfig = new TenantDbConfig(
-                "jdbc:postgresql://localhost:5432/test_db_456",
-                "test_user",
-                "test_password");
-        when(tenantRegistry.load(tenantId)).thenReturn(mockConfig);
+        @BeforeEach
+        void setUp() {
+            router = new TenantDataSourceRouter(tenantRegistry, defaultDataSource, personalSharedDataSource);
+        }
 
-        // Act - call twice
-        DataSource first = router.determineTargetDataSource();
-        DataSource second = router.determineTargetDataSource();
+        @Test
+        @DisplayName("Evicts tenant datasource from cache")
+        void testEvictsTenantDataSource() {
+            String tenantId = "tenant-to-evict";
+            TenantContext.setCurrentTenant(tenantId);
 
-        // Assert - should be same instance, registry called only once
-        assertThat(first).isSameAs(second);
-        verify(tenantRegistry, times(1)).load(tenantId);
-        assertThat(router.getActiveTenantCount()).isEqualTo(1);
+            TenantDbConfig config = new TenantDbConfig(
+                    "jdbc:postgresql://localhost:5432/evict_db",
+                    "test_user",
+                    "test_password",
+                    null,
+                    "DATABASE");
+            when(tenantRegistry.load(tenantId)).thenReturn(config);
+
+            router.determineTargetDataSource();
+            assertThat(router.getActiveTenantCount()).isEqualTo(1);
+
+            router.evictTenantDataSource(tenantId);
+
+            assertThat(router.getActiveTenantCount()).isEqualTo(0);
+        }
     }
 
-    @Test
-    @DisplayName("Creates different datasources for different tenants")
-    void testDifferentDataSourcesForDifferentTenants() {
-        // Arrange
-        String tenant1 = "tenant-one";
-        String tenant2 = "tenant-two";
+    @Nested
+    @DisplayName("TenantContext Tests")
+    class TenantContextTests {
 
-        TenantDbConfig config1 = new TenantDbConfig(
-                "jdbc:postgresql://localhost:5432/db_one",
-                "user_one",
-                "pass_one");
-        TenantDbConfig config2 = new TenantDbConfig(
-                "jdbc:postgresql://localhost:5432/db_two",
-                "user_two",
-                "pass_two");
+        @Test
+        @DisplayName("TenantContext is correctly set and cleared")
+        void testTenantContextSetAndClear() {
+            assertThat(TenantContext.getCurrentTenant()).isNull();
 
-        when(tenantRegistry.load(tenant1)).thenReturn(config1);
-        when(tenantRegistry.load(tenant2)).thenReturn(config2);
+            TenantContext.setCurrentTenant("context-test");
+            assertThat(TenantContext.getCurrentTenant()).isEqualTo("context-test");
 
-        // Act
-        TenantContext.setCurrentTenant(tenant1);
-        DataSource ds1 = router.determineTargetDataSource();
-
-        TenantContext.setCurrentTenant(tenant2);
-        DataSource ds2 = router.determineTargetDataSource();
-
-        // Assert
-        assertThat(ds1).isNotSameAs(ds2);
-        assertThat(router.getActiveTenantCount()).isEqualTo(2);
-        verify(tenantRegistry).load(tenant1);
-        verify(tenantRegistry).load(tenant2);
-    }
-
-    @Test
-    @DisplayName("Evicts tenant datasource from cache")
-    void testEvictsTenantDataSource() {
-        // Arrange
-        String tenantId = "tenant-to-evict";
-        TenantContext.setCurrentTenant(tenantId);
-
-        TenantDbConfig mockConfig = new TenantDbConfig(
-                "jdbc:postgresql://localhost:5432/evict_db",
-                "test_user",
-                "test_password");
-        when(tenantRegistry.load(tenantId)).thenReturn(mockConfig);
-
-        // Create datasource
-        router.determineTargetDataSource();
-        assertThat(router.getActiveTenantCount()).isEqualTo(1);
-
-        // Act - evict
-        router.evictTenantDataSource(tenantId);
-
-        // Assert
-        assertThat(router.getActiveTenantCount()).isEqualTo(0);
-    }
-
-    @Test
-    @DisplayName("TenantContext is correctly set and cleared")
-    void testTenantContextSetAndClear() {
-        // Arrange
-        String tenantId = "context-test";
-
-        // Act & Assert - initially null
-        assertThat(TenantContext.getCurrentTenant()).isNull();
-
-        // Set tenant
-        TenantContext.setCurrentTenant(tenantId);
-        assertThat(TenantContext.getCurrentTenant()).isEqualTo(tenantId);
-
-        // Clear tenant
-        TenantContext.clear();
-        assertThat(TenantContext.getCurrentTenant()).isNull();
+            TenantContext.clear();
+            assertThat(TenantContext.getCurrentTenant()).isNull();
+        }
     }
 }

@@ -96,6 +96,13 @@
             <artifactId>spring-jdbc</artifactId>
         </dependency>
 
+        <!-- Jakarta Persistence API for TenantIdInterceptor entity listener -->
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- OpenFGA SDK for fine-grained authorization (OPTIONAL) -->
         <!-- Enable via openfga.enabled=true in application.yml -->
         <dependency>

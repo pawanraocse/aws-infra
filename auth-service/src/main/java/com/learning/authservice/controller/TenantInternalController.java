@@ -46,7 +46,7 @@ public class TenantInternalController {
                         // This ensures tables are owned by tenant user
                         Flyway flyway = Flyway.configure()
                                         .dataSource(tenantDataSource)
-                                        .locations("classpath:db/migration/tenant")
+                                        .locations("classpath:db/migration")
                                         .table("flyway_auth_history") // Auth-service specific history table
                                         .baselineOnMigrate(true)
                                         .baselineVersion("0")

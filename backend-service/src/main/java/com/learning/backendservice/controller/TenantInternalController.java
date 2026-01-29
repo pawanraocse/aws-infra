@@ -34,8 +34,8 @@ public class TenantInternalController {
                         // Configure Flyway for tenant database
                         Flyway flyway = Flyway.configure()
                                         .dataSource(tenantDataSource)
-                                        .locations("classpath:db/tenant-template")
-                                        .table(tenantId + "_schema_history") // Tenant-specific history table
+                                        .locations("classpath:db/migration")
+                                        .table("flyway_backend_history")  // Backend-service specific history table
                                         .baselineOnMigrate(true)
                                         .baselineVersion("0")
                                         .validateOnMigrate(true)

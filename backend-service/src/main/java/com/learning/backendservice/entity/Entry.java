@@ -1,5 +1,7 @@
 package com.learning.backendservice.entity;
 
+import com.learning.common.infra.tenant.TenantAwareEntity;
+import com.learning.common.infra.tenant.TenantIdInterceptor;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -22,19 +24,22 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "entries")
-@EntityListeners(AuditingEntityListener.class)
+@EntityListeners({AuditingEntityListener.class, TenantIdInterceptor.class})
 @Getter
 @Setter
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class Entry {
+public class Entry implements TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "entry_key", nullable = false, unique = true)
+    @Column(name = "tenant_id", nullable = false)
+    private String tenantId;
+
+    @Column(name = "entry_key", nullable = false)
     private String key;
 
     @Column(name = "entry_value", nullable = false)

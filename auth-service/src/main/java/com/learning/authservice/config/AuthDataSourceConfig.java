@@ -41,6 +41,15 @@ public class AuthDataSourceConfig {
     @Value("${spring.datasource.password:postgres}")
     private String defaultPassword;
 
+    @Value("${app.datasource.personal-shared.url:jdbc:postgresql://localhost:5432/personal_shared}")
+    private String personalSharedJdbcUrl;
+
+    @Value("${app.datasource.personal-shared.username:postgres}")
+    private String personalSharedUsername;
+
+    @Value("${app.datasource.personal-shared.password:postgres}")
+    private String personalSharedPassword;
+
     /**
      * Local cache for tenant DB configs.
      */
@@ -81,15 +90,34 @@ public class AuthDataSourceConfig {
     }
 
     /**
+     * Personal Shared DataSource for shared database mode.
+     */
+    @Bean(name = "personalSharedDataSource")
+    public DataSource personalSharedDataSource() {
+        log.info("Configuring personal shared data source: {}", personalSharedJdbcUrl);
+
+        HikariDataSource dataSource = new HikariDataSource();
+        dataSource.setJdbcUrl(personalSharedJdbcUrl);
+        dataSource.setUsername(personalSharedUsername);
+        dataSource.setPassword(personalSharedPassword);
+        dataSource.setMaximumPoolSize(20);
+        dataSource.setMinimumIdle(5);
+        dataSource.setPoolName("auth-personal-shared-pool");
+
+        return dataSource;
+    }
+
+    /**
      * Tenant DataSource Router - dynamically routes to tenant databases.
      */
     @Bean(name = "tenantDataSource")
     @Primary
     public DataSource tenantDataSource(
             TenantRegistryService tenantRegistryService,
-            @Qualifier("defaultDataSource") DataSource defaultDataSource) {
+            @Qualifier("defaultDataSource") DataSource defaultDataSource,
+            @Qualifier("personalSharedDataSource") DataSource personalSharedDataSource) {
         log.info("Configuring tenant data source router for auth-service");
-        return new TenantDataSourceRouter(tenantRegistryService, defaultDataSource);
+        return new TenantDataSourceRouter(tenantRegistryService, defaultDataSource, personalSharedDataSource);
     }
 
     /**

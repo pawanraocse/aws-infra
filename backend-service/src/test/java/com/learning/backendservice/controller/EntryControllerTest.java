@@ -25,6 +25,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class EntryControllerTest extends BaseControllerTest {
 
+        private static final String TEST_TENANT = "test-tenant";
+
         @Autowired
         private EntryRepository entryRepository;
 
@@ -62,7 +64,7 @@ class EntryControllerTest extends BaseControllerTest {
                 mockMvc.perform(post("/api/v1/entries")
                                 .header("X-User-Id", "test-user")
                                 .header("X-Role", "admin")
-                                .header("X-Tenant-Id", "test-tenant")
+                                .header("X-Tenant-Id", TEST_TENANT)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request)))
                                 .andDo(print())
@@ -83,7 +85,7 @@ class EntryControllerTest extends BaseControllerTest {
                 mockMvc.perform(post("/api/v1/entries")
                                 .header("X-User-Id", "test-user")
                                 .header("X-Role", "admin")
-                                .header("X-Tenant-Id", "test-tenant")
+                                .header("X-Tenant-Id", TEST_TENANT)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request)))
                                 .andDo(print())
@@ -93,14 +95,14 @@ class EntryControllerTest extends BaseControllerTest {
         @Test
         void shouldGetAllEntries() throws Exception {
                 // Given
-                entryRepository.save(Entry.builder().key("key1").value("value1").build());
-                entryRepository.save(Entry.builder().key("key2").value("value2").build());
+                entryRepository.save(Entry.builder().tenantId(TEST_TENANT).key("key1").value("value1").build());
+                entryRepository.save(Entry.builder().tenantId(TEST_TENANT).key("key2").value("value2").build());
 
                 // When/Then
                 mockMvc.perform(get("/api/v1/entries")
                                 .header("X-User-Id", "test-user")
                                 .header("X-Role", "admin")
-                                .header("X-Tenant-Id", "test-tenant"))
+                                .header("X-Tenant-Id", TEST_TENANT))
                                 .andDo(print())
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.content").isArray())
@@ -111,13 +113,13 @@ class EntryControllerTest extends BaseControllerTest {
         @Test
         void shouldGetEntryById() throws Exception {
                 // Given
-                Entry saved = entryRepository.save(Entry.builder().key("find-me").value("found").build());
+                Entry saved = entryRepository.save(Entry.builder().tenantId(TEST_TENANT).key("find-me").value("found").build());
 
                 // When/Then
                 mockMvc.perform(get("/api/v1/entries/{id}", saved.getId())
                                 .header("X-User-Id", "test-user")
                                 .header("X-Role", "admin")
-                                .header("X-Tenant-Id", "test-tenant"))
+                                .header("X-Tenant-Id", TEST_TENANT))
                                 .andDo(print())
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.id").value(saved.getId()))
@@ -130,7 +132,7 @@ class EntryControllerTest extends BaseControllerTest {
                 mockMvc.perform(get("/api/v1/entries/{id}", 99999L)
                                 .header("X-User-Id", "test-user")
                                 .header("X-Role", "admin")
-                                .header("X-Tenant-Id", "test-tenant"))
+                                .header("X-Tenant-Id", TEST_TENANT))
                                 .andDo(print())
                                 .andExpect(status().isNotFound());
         }
@@ -138,14 +140,14 @@ class EntryControllerTest extends BaseControllerTest {
         @Test
         void shouldUpdateEntry() throws Exception {
                 // Given
-                Entry existing = entryRepository.save(Entry.builder().key("old-key").value("old-value").build());
+                Entry existing = entryRepository.save(Entry.builder().tenantId(TEST_TENANT).key("old-key").value("old-value").build());
                 EntryRequestDto request = new EntryRequestDto("updated-key", "updated-value");
 
                 // When/Then
                 mockMvc.perform(put("/api/v1/entries/{id}", existing.getId())
                                 .header("X-User-Id", "test-user")
                                 .header("X-Role", "admin")
-                                .header("X-Tenant-Id", "test-tenant")
+                                .header("X-Tenant-Id", TEST_TENANT)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request)))
                                 .andDo(print())
@@ -160,13 +162,13 @@ class EntryControllerTest extends BaseControllerTest {
         @Test
         void shouldDeleteEntry() throws Exception {
                 // Given
-                Entry saved = entryRepository.save(Entry.builder().key("delete-me").value("value").build());
+                Entry saved = entryRepository.save(Entry.builder().tenantId(TEST_TENANT).key("delete-me").value("value").build());
 
                 // When/Then
                 mockMvc.perform(delete("/api/v1/entries/{id}", saved.getId())
                                 .header("X-User-Id", "test-user")
                                 .header("X-Role", "admin")
-                                .header("X-Tenant-Id", "test-tenant"))
+                                .header("X-Tenant-Id", TEST_TENANT))
                                 .andDo(print())
                                 .andExpect(status().isNoContent());
 
@@ -174,7 +176,7 @@ class EntryControllerTest extends BaseControllerTest {
                 mockMvc.perform(get("/api/v1/entries/{id}", saved.getId())
                                 .header("X-User-Id", "test-user")
                                 .header("X-Role", "admin")
-                                .header("X-Tenant-Id", "test-tenant"))
+                                .header("X-Tenant-Id", TEST_TENANT))
                                 .andExpect(status().isNotFound());
         }
 
@@ -183,7 +185,7 @@ class EntryControllerTest extends BaseControllerTest {
                 mockMvc.perform(delete("/api/v1/entries/{id}", 99999L)
                                 .header("X-User-Id", "test-user")
                                 .header("X-Role", "admin")
-                                .header("X-Tenant-Id", "test-tenant"))
+                                .header("X-Tenant-Id", TEST_TENANT))
                                 .andDo(print())
                                 .andExpect(status().isNotFound());
         }
@@ -195,7 +197,7 @@ class EntryControllerTest extends BaseControllerTest {
                 mockMvc.perform(post("/api/v1/entries")
                                 .header("X-User-Id", "test-user")
                                 .header("X-Role", "admin")
-                                .header("X-Tenant-Id", "test-tenant")
+                                .header("X-Tenant-Id", TEST_TENANT)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request1)))
                                 .andExpect(status().isCreated());
@@ -205,7 +207,7 @@ class EntryControllerTest extends BaseControllerTest {
                 mockMvc.perform(post("/api/v1/entries")
                                 .header("X-User-Id", "test-user")
                                 .header("X-Role", "admin")
-                                .header("X-Tenant-Id", "test-tenant")
+                                .header("X-Tenant-Id", TEST_TENANT)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request2)))
                                 .andDo(print())
@@ -218,6 +220,7 @@ class EntryControllerTest extends BaseControllerTest {
                 // Given - Create multiple entries
                 for (int i = 1; i <= 25; i++) {
                         entryRepository.save(Entry.builder()
+                                        .tenantId(TEST_TENANT)
                                         .key("key-" + i)
                                         .value("value-" + i)
                                         .build());
@@ -227,7 +230,7 @@ class EntryControllerTest extends BaseControllerTest {
                 mockMvc.perform(get("/api/v1/entries")
                                 .header("X-User-Id", "test-user")
                                 .header("X-Role", "admin")
-                                .header("X-Tenant-Id", "test-tenant")
+                                .header("X-Tenant-Id", TEST_TENANT)
                                 .param("page", "0")
                                 .param("size", "10"))
                                 .andDo(print())

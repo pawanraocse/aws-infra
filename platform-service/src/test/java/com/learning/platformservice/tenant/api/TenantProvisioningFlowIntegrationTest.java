@@ -47,13 +47,13 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
         private static final String CONTEXT_PATH = "/platform";
 
         @Test
-        @DisplayName("Provision tenant successfully - SCHEMA mode")
+        @DisplayName("Provision tenant successfully - DATABASE mode")
         void provisionTenant_success() throws Exception {
                 String body = """
                                 {
                                   "id": "acmeit",
                                   "name": "Acme IT",
-                                  "storageMode": "SCHEMA",
+                                  "storageMode": "DATABASE",
                                   "slaTier": "STANDARD",
                                   "tenantType": "ORGANIZATION",
                                   "ownerEmail": "admin@acmeit.com",
@@ -79,7 +79,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 {
                                   "id": "dupco",
                                   "name": "Dup Co",
-                                  "storageMode": "SCHEMA",
+                                  "storageMode": "DATABASE",
                                   "slaTier": "STANDARD",
                                   "tenantType": "ORGANIZATION",
                                   "ownerEmail": "admin@dupco.com",
@@ -178,7 +178,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 {
                                   "id": "failretry",
                                   "name": "Fail Retry",
-                                  "storageMode": "SCHEMA",
+                                  "storageMode": "DATABASE",
                                   "slaTier": "STANDARD",
                                   "tenantType": "ORGANIZATION",
                                   "ownerEmail": "admin@failretry.com",
@@ -210,7 +210,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 {
                                   "id": "transitid",
                                   "name": "Transit Tenant",
-                                  "storageMode": "SCHEMA",
+                                  "storageMode": "DATABASE",
                                   "slaTier": "STANDARD",
                                   "tenantType": "ORGANIZATION",
                                   "ownerEmail": "admin@transitid.com",
@@ -286,7 +286,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 {
                                   "id": "extrafield",
                                   "name": "Extra Field",
-                                  "storageMode": "SCHEMA",
+                                  "storageMode": "DATABASE",
                                   "slaTier": "STANDARD",
                                   "tenantType": "ORGANIZATION",
                                   "ownerEmail": "admin@extrafield.com",
@@ -375,7 +375,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 {
                                   "id": "bad!@#",
                                   "name": "Special Char",
-                                  "storageMode": "SCHEMA",
+                                  "storageMode": "DATABASE",
                                   "slaTier": "STANDARD"
                                 }
                                 """;
@@ -398,7 +398,7 @@ class TenantProvisioningFlowIntegrationTest extends BaseIntegrationTest {
                                 {
                                   "id": "%s",
                                   "name": "%s",
-                                  "storageMode": "SCHEMA",
+                                  "storageMode": "DATABASE",
                                   "slaTier": "STANDARD"
                                 }
                                 """, longId, longName);

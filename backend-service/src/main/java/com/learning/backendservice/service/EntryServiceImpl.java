@@ -4,6 +4,7 @@ import com.learning.backendservice.dto.EntryRequestDto;
 import com.learning.backendservice.dto.EntryResponseDto;
 import com.learning.backendservice.entity.Entry;
 import com.learning.backendservice.repository.EntryRepository;
+import com.learning.common.infra.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -20,22 +21,32 @@ public class EntryServiceImpl implements EntryService {
 
     private final EntryRepository entryRepository;
 
+    private String getCurrentTenantId() {
+        String tenantId = TenantContext.getCurrentTenant();
+        if (tenantId == null) {
+            throw new IllegalStateException("No tenant context available");
+        }
+        return tenantId;
+    }
+
     @Override
     @Transactional
     public EntryResponseDto createEntry(EntryRequestDto request) {
-        log.debug("Creating entry with key: {}", request.getKey());
+        String tenantId = getCurrentTenantId();
+        log.debug("Creating entry with key: {} for tenant: {}", request.getKey(), tenantId);
 
-        if (entryRepository.existsByKey(request.getKey())) {
+        if (entryRepository.existsByTenantIdAndKey(tenantId, request.getKey())) {
             throw new IllegalArgumentException("Entry with key '" + request.getKey() + "' already exists");
         }
 
         Entry entry = Entry.builder()
+                .tenantId(tenantId)
                 .key(request.getKey())
                 .value(request.getValue())
                 .build();
 
         Entry saved = entryRepository.save(entry);
-        log.info("Created entry with id: {}", saved.getId());
+        log.info("Created entry with id: {} for tenant: {}", saved.getId(), tenantId);
 
         return toDto(saved);
     }
@@ -43,23 +54,27 @@ public class EntryServiceImpl implements EntryService {
     @Override
     @Transactional(readOnly = true)
     public Page<EntryResponseDto> getEntries(Pageable pageable) {
-        log.debug("Fetching entries, page: {}", pageable.getPageNumber());
-        return entryRepository.findAll(pageable).map(this::toDto);
+        String tenantId = getCurrentTenantId();
+        log.debug("Fetching entries for tenant: {}, page: {}", tenantId, pageable.getPageNumber());
+        return entryRepository.findAll(pageable)
+                .map(this::toDto);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Optional<EntryResponseDto> getEntryById(Long id) {
-        return entryRepository.findById(id).map(this::toDto);
+        String tenantId = getCurrentTenantId();
+        return entryRepository.findByTenantIdAndId(tenantId, id).map(this::toDto);
     }
 
     @Override
     @Transactional
     public Optional<EntryResponseDto> updateEntry(Long id, EntryRequestDto request) {
-        return entryRepository.findById(id)
+        String tenantId = getCurrentTenantId();
+        return entryRepository.findByTenantIdAndId(tenantId, id)
                 .map(entry -> {
                     if (!entry.getKey().equals(request.getKey()) &&
-                        entryRepository.existsByKey(request.getKey())) {
+                        entryRepository.existsByTenantIdAndKey(tenantId, request.getKey())) {
                         throw new IllegalArgumentException("Entry with key '" + request.getKey() + "' already exists");
                     }
 
@@ -67,7 +82,7 @@ public class EntryServiceImpl implements EntryService {
                     entry.setValue(request.getValue());
 
                     Entry updated = entryRepository.save(entry);
-                    log.info("Updated entry id: {}", id);
+                    log.info("Updated entry id: {} for tenant: {}", id, tenantId);
                     return toDto(updated);
                 });
     }
@@ -75,9 +90,10 @@ public class EntryServiceImpl implements EntryService {
     @Override
     @Transactional
     public boolean deleteEntry(Long id) {
-        if (entryRepository.existsById(id)) {
+        String tenantId = getCurrentTenantId();
+        if (entryRepository.findByTenantIdAndId(tenantId, id).isPresent()) {
             entryRepository.deleteById(id);
-            log.info("Deleted entry id: {}", id);
+            log.info("Deleted entry id: {} for tenant: {}", id, tenantId);
             return true;
         }
         return false;

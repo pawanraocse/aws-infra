@@ -35,6 +35,12 @@ x-dummy-datasource-config: &dummy-datasource-config
   SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
   SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
 
+x-personal-datasource-config: &personal-datasource-config
+  SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:${POSTGRES_PORT}/${PERSONAL_POSTGRES_DB}
+  SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+  SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+
 x-redis-config: &redis-config
   REDIS_HOST: redis
   REDIS_PORT: ${REDIS_PORT}
@@ -63,11 +69,12 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PERSONAL_POSTGRES_DB: ${PERSONAL_POSTGRES_DB}
     networks:
       - cloudinfra-net
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init-openfga.sh:/docker-entrypoint-initdb.d/init-openfga.sh
+      - ./docker/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s

@@ -14,22 +14,24 @@ class TenantProvisionerTest {
 
     DataSource ds = Mockito.mock(DataSource.class);
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    
+    private static final String BASE_JDBC_URL = "jdbc:postgresql://localhost:5432/cloudinfra";
+    private static final String PERSONAL_SHARED_JDBC_URL = "jdbc:postgresql://localhost:5432/personal_shared";
 
     @Test
-    @DisplayName("Schema mode constructs JDBC URL with currentSchema param")
-    void schemaMode_urlConstruction() {
-        TenantProvisioner provisioner = new TenantProvisioner(ds, registry, false, false,
-                "jdbc:postgresql://localhost:5432/cloudinfra");
-        String jdbc = provisioner.provisionTenantStorage("Acme_123", TenantStorageEnum.SCHEMA);
-        assertThat(jdbc).startsWith("jdbc:postgresql://localhost:5432/cloudinfra?currentSchema=");
-        assertThat(jdbc).contains("acme_123");
+    @DisplayName("SHARED mode returns personal shared JDBC URL")
+    void sharedMode_returnsPersonalSharedUrl() {
+        TenantProvisioner provisioner = new TenantProvisioner(ds, registry, true, true,
+                BASE_JDBC_URL, PERSONAL_SHARED_JDBC_URL);
+        String jdbc = provisioner.provisionTenantStorage("personal_user_123", TenantStorageEnum.SHARED);
+        assertThat(jdbc).isEqualTo(PERSONAL_SHARED_JDBC_URL);
     }
 
     @Test
-    @DisplayName("Database mode disabled throws flag error before JDBC")
+    @DisplayName("DATABASE mode disabled throws flag error before JDBC")
     void databaseMode_disabled() {
         TenantProvisioner provisioner = new TenantProvisioner(ds, registry, false, false,
-                "jdbc:postgresql://localhost:5432/cloudinfra");
+                BASE_JDBC_URL, PERSONAL_SHARED_JDBC_URL);
         assertThatThrownBy(() -> provisioner.provisionTenantStorage("acme", TenantStorageEnum.DATABASE))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("DATABASE storageMode disabled");
@@ -39,7 +41,7 @@ class TenantProvisionerTest {
     @DisplayName("Database name sanitization applies length and allowed chars")
     void databaseName_sanitization() throws Exception {
         TenantProvisioner provisioner = new TenantProvisioner(ds, registry, true, true,
-                "jdbc:postgresql://localhost:5432/cloudinfra");
+                BASE_JDBC_URL, PERSONAL_SHARED_JDBC_URL);
         var method = TenantProvisioner.class.getDeclaredMethod("buildDatabaseName", String.class);
         method.setAccessible(true);
         String name = (String) method.invoke(provisioner, "ACME-*INVALID__LONG_NAME_WITH_CHARS@#$%^&*()+");

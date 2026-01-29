@@ -4,6 +4,9 @@ import com.learning.backendservice.dto.EntryRequestDto;
 import com.learning.backendservice.dto.EntryResponseDto;
 import com.learning.backendservice.entity.Entry;
 import com.learning.backendservice.repository.EntryRepository;
+import com.learning.common.infra.tenant.TenantContext;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -19,10 +22,13 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class EntryServiceTest {
+
+    private static final String TEST_TENANT = "test-tenant-123";
 
     @Mock
     private EntryRepository entryRepository;
@@ -30,17 +36,28 @@ class EntryServiceTest {
     @InjectMocks
     private EntryServiceImpl entryService;
 
+    @BeforeEach
+    void setUpTenant() {
+        TenantContext.setCurrentTenant(TEST_TENANT);
+    }
+
+    @AfterEach
+    void clearTenant() {
+        TenantContext.clear();
+    }
+
     @Test
     void shouldCreateEntry() {
         // Given
         EntryRequestDto request = new EntryRequestDto("test-key", "test-value");
         Entry savedEntry = Entry.builder()
                 .id(1L)
+                .tenantId(TEST_TENANT)
                 .key("test-key")
                 .value("test-value")
                 .build();
 
-        when(entryRepository.existsByKey("test-key")).thenReturn(false);
+        when(entryRepository.existsByTenantIdAndKey(TEST_TENANT, "test-key")).thenReturn(false);
         when(entryRepository.save(any(Entry.class))).thenReturn(savedEntry);
 
         // When
@@ -56,7 +73,7 @@ class EntryServiceTest {
     void shouldThrowExceptionWhenKeyExists() {
         // Given
         EntryRequestDto request = new EntryRequestDto("existing-key", "value");
-        when(entryRepository.existsByKey("existing-key")).thenReturn(true);
+        when(entryRepository.existsByTenantIdAndKey(TEST_TENANT, "existing-key")).thenReturn(true);
 
         // When/Then
         assertThatThrownBy(() -> entryService.createEntry(request))
@@ -67,7 +84,7 @@ class EntryServiceTest {
     @Test
     void shouldGetAllEntries() {
         // Given
-        Entry entry = Entry.builder().id(1L).key("key").value("value").build();
+        Entry entry = Entry.builder().id(1L).tenantId(TEST_TENANT).key("key").value("value").build();
         Page<Entry> page = new PageImpl<>(List.of(entry));
         when(entryRepository.findAll(any(PageRequest.class))).thenReturn(page);
 
@@ -82,8 +99,8 @@ class EntryServiceTest {
     @Test
     void shouldGetEntryById() {
         // Given
-        Entry entry = Entry.builder().id(1L).key("key").value("value").build();
-        when(entryRepository.findById(1L)).thenReturn(Optional.of(entry));
+        Entry entry = Entry.builder().id(1L).tenantId(TEST_TENANT).key("key").value("value").build();
+        when(entryRepository.findByTenantIdAndId(TEST_TENANT, 1L)).thenReturn(Optional.of(entry));
 
         // When
         Optional<EntryResponseDto> result = entryService.getEntryById(1L);
@@ -96,11 +113,11 @@ class EntryServiceTest {
     @Test
     void shouldUpdateEntry() {
         // Given
-        Entry existing = Entry.builder().id(1L).key("old-key").value("old-value").build();
+        Entry existing = Entry.builder().id(1L).tenantId(TEST_TENANT).key("old-key").value("old-value").build();
         EntryRequestDto request = new EntryRequestDto("new-key", "new-value");
 
-        when(entryRepository.findById(1L)).thenReturn(Optional.of(existing));
-        when(entryRepository.existsByKey("new-key")).thenReturn(false);
+        when(entryRepository.findByTenantIdAndId(TEST_TENANT, 1L)).thenReturn(Optional.of(existing));
+        when(entryRepository.existsByTenantIdAndKey(TEST_TENANT, "new-key")).thenReturn(false);
         when(entryRepository.save(any(Entry.class))).thenReturn(existing);
 
         // When
@@ -114,7 +131,8 @@ class EntryServiceTest {
     @Test
     void shouldDeleteEntry() {
         // Given
-        when(entryRepository.existsById(1L)).thenReturn(true);
+        Entry entry = Entry.builder().id(1L).tenantId(TEST_TENANT).key("key").value("value").build();
+        when(entryRepository.findByTenantIdAndId(TEST_TENANT, 1L)).thenReturn(Optional.of(entry));
 
         // When
         boolean result = entryService.deleteEntry(1L);
@@ -127,7 +145,7 @@ class EntryServiceTest {
     @Test
     void shouldReturnFalseWhenDeletingNonExistentEntry() {
         // Given
-        when(entryRepository.existsById(999L)).thenReturn(false);
+        when(entryRepository.findByTenantIdAndId(TEST_TENANT, 999L)).thenReturn(Optional.empty());
 
         // When
         boolean result = entryService.deleteEntry(999L);
@@ -135,5 +153,17 @@ class EntryServiceTest {
         // Then
         assertThat(result).isFalse();
         verify(entryRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void shouldThrowWhenNoTenantContext() {
+        // Given - clear tenant context
+        TenantContext.clear();
+        EntryRequestDto request = new EntryRequestDto("key", "value");
+
+        // When/Then
+        assertThatThrownBy(() -> entryService.createEntry(request))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("No tenant context");
     }
 }

@@ -10,8 +10,10 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Responsible only for physical storage creation (schema / database) and
- * jdbcUrl assignment.
+ * Responsible for physical storage creation (database) and jdbcUrl assignment.
+ * 
+ * For SHARED mode (personal tenants): Uses pre-configured shared DB URL, no physical storage created.
+ * For DATABASE mode (org tenants): Creates dedicated database and tenant DB user.
  */
 @Component
 @RequiredArgsConstructor
@@ -28,15 +30,23 @@ public class StorageProvisionAction implements TenantProvisionAction {
         TenantStorageEnum mode = TenantStorageEnum.fromString(context.getRequest().storageMode());
 
         try {
+            // Get JDBC URL (for SHARED: returns shared DB URL, for DATABASE: creates new DB)
             String jdbcUrl = tenantProvisioner.provisionTenantStorage(tenantId, mode);
             context.setJdbcUrl(jdbcUrl);
-            context.getTenant().setJdbcUrl(jdbcUrl); // Also set on tenant entity for migrations
+            context.getTenant().setJdbcUrl(jdbcUrl);
+            context.getTenant().setStorageMode(mode.name());
 
+            // For SHARED mode: skip DB user creation (use shared connection pool)
+            if (mode == TenantStorageEnum.SHARED) {
+                log.info("storage_provision_shared tenantId={} jdbcUrl={}", tenantId, jdbcUrl);
+                return;
+            }
+
+            // For DATABASE mode: create dedicated DB user with credentials
             String dbUsername = ("%s_user".formatted(tenantId)).toLowerCase().replace("-", "_");
             String schemaName = tenantProvisioner.buildDatabaseName(tenantId);
 
-            var identifiers = resolveIdentifiers(mode, jdbcUrl, schemaName);
-            String identifierForGrants = identifiers.identifierForGrants();
+            String identifierForGrants = schemaName; // For DATABASE mode, schema name = DB name
 
             String rawPassword = tenantProvisioner.createTenantDbUser(
                     identifierForGrants, dbUsername, mode);
@@ -45,35 +55,12 @@ public class StorageProvisionAction implements TenantProvisionAction {
             context.getTenant().setDbUserPasswordEnc(
                     SimpleCryptoUtil.encrypt(rawPassword));
 
+            log.info("storage_provision_database tenantId={} dbName={}", tenantId, schemaName);
+
         } catch (Exception e) {
             log.error("storage_provision_failed tenantId={} error={}", tenantId, e.getMessage(), e);
             throw new TenantProvisioningException(
                     tenantId, "Storage provision failed: " + e.getMessage(), e);
         }
     }
-
-    private TenantIdentifiers resolveIdentifiers(
-            TenantStorageEnum mode,
-            String jdbcUrl,
-            String schemaName) {
-        return switch (mode) {
-            case DATABASE -> new TenantIdentifiers(schemaName, schemaName);
-
-            case SCHEMA -> {
-                String sharedDb = extractDatabaseName(jdbcUrl);
-                yield new TenantIdentifiers(sharedDb, schemaName);
-            }
-        };
-    }
-
-    private String extractDatabaseName(String jdbcUrl) {
-        // jdbc:postgresql://host:port/dbName?params
-        String withoutProtocol = jdbcUrl.substring(jdbcUrl.indexOf("//") + 2); // host:port/db?params
-        String[] parts = withoutProtocol.split("/", 2); // ["host:port", "db?params"]
-        String dbAndParams = parts[1];
-
-        int idx = dbAndParams.indexOf("?");
-        return (idx == -1) ? dbAndParams : dbAndParams.substring(0, idx);
-    }
-
 }

@@ -13,32 +13,41 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Routes database connections to tenant-specific databases based on
  * TenantContext.
- * Dynamically creates and caches data source connections for each tenant.
  * 
- * This is the core of multi-tenant database routing - all services that need
- * tenant-specific databases should use this router.
+ * Supports two storage modes:
+ * <ul>
+ * <li>DATABASE: Per-tenant dedicated database (organizations)</li>
+ * <li>SHARED: Shared personal database with tenant_id filtering (personal users)</li>
+ * </ul>
  */
 @Slf4j
 public class TenantDataSourceRouter extends AbstractRoutingDataSource {
 
     /**
      * Special tenant ID for super-admin users.
-     * Super-admins do not have a dedicated tenant database - they use the
-     * default/platform datasource.
+     * Super-admins use the default/platform datasource.
      */
     public static final String SYSTEM_TENANT_ID = "system";
 
     private final TenantRegistryService tenantRegistry;
     private final Map<String, DataSource> tenantDataSources = new ConcurrentHashMap<>();
     private final DataSource defaultDataSource;
+    private final DataSource personalSharedDataSource;
 
     public TenantDataSourceRouter(TenantRegistryService tenantRegistry) {
-        this(tenantRegistry, null);
+        this(tenantRegistry, null, null);
     }
 
     public TenantDataSourceRouter(TenantRegistryService tenantRegistry, DataSource defaultDataSource) {
+        this(tenantRegistry, defaultDataSource, null);
+    }
+
+    public TenantDataSourceRouter(TenantRegistryService tenantRegistry, 
+                                   DataSource defaultDataSource,
+                                   DataSource personalSharedDataSource) {
         this.tenantRegistry = tenantRegistry;
         this.defaultDataSource = defaultDataSource;
+        this.personalSharedDataSource = personalSharedDataSource;
         this.setTargetDataSources(java.util.Collections.emptyMap());
         if (defaultDataSource != null) {
             this.setDefaultTargetDataSource(defaultDataSource);
@@ -64,7 +73,7 @@ public class TenantDataSourceRouter extends AbstractRoutingDataSource {
 
         // No tenant context - use default
         if (tenantId == null) {
-            log.info("TenantDataSourceRouter: No tenant context set, using default datasource");
+            log.debug("TenantDataSourceRouter: No tenant context, using default datasource");
             if (defaultDataSource == null) {
                 throw new IllegalStateException("No tenant context and no default datasource configured");
             }
@@ -73,15 +82,26 @@ public class TenantDataSourceRouter extends AbstractRoutingDataSource {
 
         // System tenant (super-admin) - use default/platform datasource
         if (SYSTEM_TENANT_ID.equals(tenantId)) {
-            log.debug("TenantDataSourceRouter: System tenant (super-admin) context, using default datasource");
+            log.debug("TenantDataSourceRouter: System tenant, using default datasource");
             if (defaultDataSource == null) {
                 throw new IllegalStateException("System tenant requires default datasource but none configured");
             }
             return defaultDataSource;
         }
 
-        log.info("TenantDataSourceRouter: Routing to tenant database: {}", tenantId);
-        // Get or create data source for this tenant
+        // Check if tenant uses SHARED storage mode (personal tenants)
+        TenantDbConfig config = tenantRegistry.load(tenantId);
+        if (config != null && "SHARED".equals(config.storageMode())) {
+            if (personalSharedDataSource != null) {
+                log.debug("TenantDataSourceRouter: SHARED tenant {}, using personal shared datasource", tenantId);
+                return personalSharedDataSource;
+            } else {
+                log.warn("TenantDataSourceRouter: SHARED tenant {} but no personalSharedDataSource configured", tenantId);
+            }
+        }
+
+        // DATABASE mode: Get or create per-tenant data source
+        log.debug("TenantDataSourceRouter: DATABASE tenant {}, using dedicated datasource", tenantId);
         return tenantDataSources.computeIfAbsent(tenantId, this::createTenantDataSource);
     }
 

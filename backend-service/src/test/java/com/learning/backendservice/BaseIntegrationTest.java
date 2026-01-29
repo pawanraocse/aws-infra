@@ -34,6 +34,11 @@ public abstract class BaseIntegrationTest {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
+        
+        // Personal shared datasource uses the same test container
+        registry.add("app.datasource.personal-shared.url", postgres::getJdbcUrl);
+        registry.add("app.datasource.personal-shared.username", postgres::getUsername);
+        registry.add("app.datasource.personal-shared.password", postgres::getPassword);
     }
 
     @BeforeAll

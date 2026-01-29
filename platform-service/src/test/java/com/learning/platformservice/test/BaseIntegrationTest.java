@@ -103,6 +103,9 @@ public abstract class BaseIntegrationTest {
                                 () -> "http://localhost:" + wireMockServer.port());
                 registry.add("services.payment.base-url",
                                 () -> "http://localhost:" + wireMockServer.port());
+                
+                // Personal shared database URL for SHARED storage mode
+                registry.add("platform.personal-shared.jdbc-url", POSTGRES::getJdbcUrl);
         }
 
 }

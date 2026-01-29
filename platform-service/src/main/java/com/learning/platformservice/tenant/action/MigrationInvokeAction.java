@@ -8,6 +8,7 @@ import com.learning.platformservice.tenant.action.migration.BackendServiceMigrat
 import com.learning.platformservice.tenant.action.migration.ServiceMigrationStrategy;
 import com.learning.platformservice.tenant.entity.Tenant;
 import com.learning.platformservice.tenant.exception.TenantProvisioningException;
+import com.learning.platformservice.tenant.provision.TenantStorageEnum;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
@@ -19,7 +20,9 @@ import java.util.List;
 /**
  * Invokes downstream service migrations (phase 2 of provisioning) after storage
  * is created.
- * Uses Strategy Pattern to orchestrate migrations across multiple services.
+ * 
+ * For SHARED mode (personal tenants): Skips per-tenant migrations (schema exists in shared DB).
+ * For DATABASE mode (org tenants): Executes migrations on dedicated tenant DB.
  */
 @Component
 @RequiredArgsConstructor
@@ -33,11 +36,17 @@ public class MigrationInvokeAction implements TenantProvisionAction {
     @Override
     public void execute(TenantProvisionContext context) throws TenantProvisioningException {
         String tenantId = context.getTenant().getId();
+        String storageMode = context.getTenant().getStorageMode();
 
-        // Build tenant DB config to share with services
+        // Skip migrations for SHARED mode - schema already exists in personal_shared DB
+        if (TenantStorageEnum.SHARED.name().equals(storageMode)) {
+            log.info("migration_skipped_shared_mode tenantId={}", tenantId);
+            return;
+        }
+
+        // DATABASE mode: execute per-tenant migrations
         TenantDbConfig dbConfig = buildDbConfig(context);
 
-        // Service migration strategies
         List<ServiceMigrationStrategy> strategies = List.of(
                 new BackendServiceMigration(backendWebClient),
                 new AuthServiceMigration(authWebClient));
@@ -72,9 +81,6 @@ public class MigrationInvokeAction implements TenantProvisionAction {
 
     private TenantDbConfig buildDbConfig(TenantProvisionContext context) {
         Tenant tenant = context.getTenant();
-        // Decrypt password before sending to internal services
-        // Note: In a real mesh, we might pass the secret ref, but here we pass
-        // credentials
         String decryptedPassword = SimpleCryptoUtil.decrypt(tenant.getDbUserPasswordEnc());
         return new TenantDbConfig(
                 tenant.getJdbcUrl(),

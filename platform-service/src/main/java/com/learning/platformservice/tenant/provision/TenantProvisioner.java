@@ -27,10 +27,8 @@ public class TenantProvisioner {
     private final Counter dbCreateAttempts;
     private final Counter dbCreateSuccess;
     private final Counter dbCreateFailure;
-    private final Counter schemaCreateAttempts;
-    private final Counter schemaCreateSuccess;
-    private final Counter schemaCreateFailure;
     private final String dataSourceUrl;
+    private final String personalSharedJdbcUrl;
 
     private static final String POSTGRES_DUPLICATE_DB_SQL_STATE = "42P04"; // database already exists
     private static final int DB_CREATE_MAX_ATTEMPTS = 2;
@@ -40,56 +38,48 @@ public class TenantProvisioner {
             MeterRegistry meterRegistry,
             @Value("${platform.tenant.database-mode.enabled:false}") boolean databaseModeFeatureEnabled,
             @Value("${platform.db-per-tenant.enabled:false}") boolean dbPerTenantEnabled,
-            @Value("${spring.datasource.url}") String dataSourceUrl) {
+            @Value("${spring.datasource.url}") String dataSourceUrl,
+            @Value("${platform.personal-shared.jdbc-url:}") String personalSharedJdbcUrl) {
         this.jdbcTemplate = new JdbcTemplate(dataSource);
         this.databaseModeFeatureEnabled = databaseModeFeatureEnabled;
         this.dbPerTenantEnabled = dbPerTenantEnabled;
         this.dataSourceUrl = dataSourceUrl;
+        this.personalSharedJdbcUrl = personalSharedJdbcUrl;
         this.dbCreateAttempts = Counter.builder("platform.tenants.db.create.attempts")
                 .description("Database create attempts").register(meterRegistry);
         this.dbCreateSuccess = Counter.builder("platform.tenants.db.create.success")
                 .description("Successful tenant database creates").register(meterRegistry);
         this.dbCreateFailure = Counter.builder("platform.tenants.db.create.failure")
                 .description("Failed tenant database creates").register(meterRegistry);
-        this.schemaCreateAttempts = Counter.builder("platform.tenants.schema.create.attempts")
-                .description("Schema create attempts").register(meterRegistry);
-        this.schemaCreateSuccess = Counter.builder("platform.tenants.schema.create.success")
-                .description("Successful tenant schema creates").register(meterRegistry);
-        this.schemaCreateFailure = Counter.builder("platform.tenants.schema.create.failure")
-                .description("Failed tenant schema creates").register(meterRegistry);
     }
 
     /**
      * Provision storage for tenant based on requested mode.
-     * Returns JDBC URL pointing to tenant isolated storage (schema or database).
+     * Returns JDBC URL pointing to tenant isolated storage.
+     * 
+     * @param tenantId the tenant identifier
+     * @param storageMode DATABASE for dedicated DB, SHARED for shared personal DB
+     * @return JDBC URL for tenant data access
      */
     public String provisionTenantStorage(String tenantId, TenantStorageEnum storageMode) {
         return switch (storageMode) {
-            case SCHEMA -> createSchemaPath(tenantId);
+            case SHARED -> getSharedPersonalDbUrl(tenantId);
             case DATABASE -> createDatabasePath(tenantId);
         };
     }
 
-    private String createSchemaPath(String tenantId) {
-        schemaCreateAttempts.increment();
-        String schemaName = buildSchemaName(tenantId);
-        try {
-            log.debug("schema_create_start tenantId={} schema={}", tenantId, schemaName);
-            jdbcTemplate.execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
-            schemaCreateSuccess.increment();
-            log.info("schema_create_success tenantId={} schema={}", tenantId, schemaName);
-        } catch (CannotGetJdbcConnectionException ex) {
-            // Test/unit environment fallback: allow URL formation without physical DDL
-            schemaCreateFailure.increment();
-            log.warn("schema_create_connection_unavailable tenantId={} schema={} msg={}", tenantId, schemaName,
-                    ex.getMessage());
-        } catch (Exception e) {
-            schemaCreateFailure.increment();
-            log.error("schema_create_failure tenantId={} schema={} error={}", tenantId, schemaName, e.getMessage(), e);
-            throw e;
-        }
-        return buildMasterBaseUrl() + getMasterDatabaseName() + "?currentSchema=" + schemaName;
+    /**
+     * Returns JDBC URL for shared personal database.
+     * No physical storage is created - shared DB is pre-provisioned.
+     */
+    private String getSharedPersonalDbUrl(String tenantId) {
+        log.info("tenant_using_shared_db tenantId={}", tenantId);
+        // Return the configured shared personal DB URL
+        // The actual DB should be created via init-databases.sh
+        return personalSharedJdbcUrl;
     }
+
+
 
     private String createDatabasePath(String tenantId) {
         if (!databaseModeFeatureEnabled) {
@@ -181,9 +171,7 @@ public class TenantProvisioner {
         }
     }
 
-    private String buildSchemaName(String tenantId) {
-        return buildDatabaseName(tenantId);
-    }
+
 
     public String buildDatabaseName(String tenantId) {
         String sanitized = sanitize(tenantId);
@@ -294,18 +282,14 @@ public class TenantProvisioner {
     }
 
     private String buildGrantSql(TenantStorageEnum mode, String tenantIdentifier, String username) {
-
         return switch (mode) {
             case DATABASE -> "ALTER DATABASE %s OWNER TO %s;"
                     .formatted(quote(tenantIdentifier), quote(username));
-
-            case SCHEMA -> """
-                    GRANT USAGE, CREATE ON SCHEMA %1$s TO %2$s;
-                    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %1$s TO %2$s;
-                    ALTER DEFAULT PRIVILEGES IN SCHEMA %1$s
-                    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %2$s;
-                    """
-                    .formatted(quote(tenantIdentifier), quote(username));
+            case SHARED -> {
+                // For shared DB, no special grants - rely on application-level tenant filtering
+                log.debug("No special grants for SHARED mode tenantId={}", tenantIdentifier);
+                yield "";
+            }
         };
     }
 
@@ -313,9 +297,8 @@ public class TenantProvisioner {
         switch (mode) {
             case DATABASE ->
                 log.info("db_user_granted_database_privileges username={} db={}", username, tenantIdentifier);
-
-            case SCHEMA ->
-                log.info("db_user_granted_schema_privileges username={} schema={}", username, tenantIdentifier);
+            case SHARED ->
+                log.info("tenant_using_shared_database tenantId={}", tenantIdentifier);
         }
     }
 

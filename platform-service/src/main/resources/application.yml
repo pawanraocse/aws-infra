@@ -171,6 +171,8 @@ platform:
   tenant:
     database-mode:
       enabled: true
+  personal-shared:
+    jdbc-url: ${PERSONAL_SHARED_JDBC_URL:jdbc:postgresql://localhost:5432/personal_shared}
   dropOnFailure: false
   tenantDbHost: localhost
   tenantDbPort: 5432

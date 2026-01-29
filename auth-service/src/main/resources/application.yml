@@ -149,6 +149,10 @@ app:
       url: ${PLATFORM_DATASOURCE_URL:jdbc:postgresql://localhost:5432/cloud-infra}
       username: ${PLATFORM_DATASOURCE_USERNAME:postgres}
       password: ${PLATFORM_DATASOURCE_PASSWORD:postgres}
+    personal-shared:
+      url: ${PERSONAL_SHARED_JDBC_URL:jdbc:postgresql://localhost:5432/personal_shared}
+      username: ${PERSONAL_SHARED_USERNAME:postgres}
+      password: ${PERSONAL_SHARED_PASSWORD:postgres}
   flyway:
     platform:
       enabled: ${PLATFORM_FLYWAY_ENABLED:false}  # Disable for now, no platform tables yet

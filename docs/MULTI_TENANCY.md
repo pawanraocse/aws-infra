@@ -1,114 +1,123 @@
-
 # Multi-Tenancy & Data Architecture
 
-**Version:** 7.2 (Extracted from HLD)
-**Last Updated:** 2026-01-17
+**Version:** 9.0 (Hybrid Isolation + Single Source of Truth Migrations)
+**Last Updated:** 2026-01-29
 
-This document explains the rigorous data isolation strategy used in the SaaS Foundation.
+This document explains the data isolation and migration strategy used in the SaaS Foundation.
 
 ---
 
-## 🏢 Isolation Strategy: Database-per-Tenant
+## 🏢 Hybrid Isolation Strategy
 
-### The "Gold Standard"
-We use a **Database-per-Tenant** approach. This means every tenant gets their own dedicated PostgreSQL database (e.g., `tenant_acme`, `tenant_xyz`).
+| Tenant Type | Storage Mode | Database | Isolation |
+|-------------|--------------|----------|-----------|
+| **Organization** | `DATABASE` | Dedicated `t_{tenant_id}` | Physical (separate DB) |
+| **Personal** | `SHARED` | Shared `personal_shared` | Logical (`tenant_id` column) |
 
 **Benefits:**
-- ✅ **Maximum Security:** Impossible to leak data via missing `WHERE tenant_id = ?` clauses.
-- ✅ **Performance:** No index bloat from commingled data.
-- ✅ **Backup/Restore:** Can restore a single tenant's data without affecting others.
-- ✅ **Compliance:** Easier to meet GDPR/Data Residency requirements.
-
-### Architecture Diagram
-```mermaid
-graph TB
-    subgraph "Platform Database"
-        PDB[(cloud-infra)]
-        TTable[tenant table]
-    end
-
-    subgraph "Tenant Databases"
-        T1[(tenant_acme)]
-        T2[(tenant_xyz)]
-    end
-
-    PlatformService --> PDB
-    BackendService --Routing--> T1
-    BackendService --Routing--> T2
-```
+- ✅ **Enterprise Security:** Orgs get dedicated databases
+- ✅ **Cost Efficient:** Personal users share one database
+- ✅ **Consistent Schema:** Same schema everywhere (with `tenant_id`)
+- ✅ **Simple Migrations:** Single source of truth per service
 
 ---
 
-## 🗄️ Data Architecture
+## 🗄️ Database Architecture
 
-### 1. Platform Database (`cloud-infra`)
-**Owner:** Platform Service
-**Purpose:** Global Tenant Registry and System Config.
+### Platform Database (`cloud-infra`)
+**Owner:** Platform Service + Payment Service
+| Table | Purpose |
+|-------|---------|
+| `tenant` | Global tenant registry |
+| `billing_account` | Stripe billing data |
 
-| Table | Purpose | Key Columns |
-|-------|---------|-------------|
-| `tenant` | Registry | `id`, `jdbc_url`, `db_secret_arn`, `status`, `tier` |
-| `stripe_customers` | Billing | `tenant_id`, `stripe_customer_id` |
+### Personal Shared Database (`personal_shared`)
+**Owner:** Auth Service + Backend Service
+| Table | Service |
+|-------|---------|
+| `roles`, `permissions`, `users`, `user_roles` | Auth |
+| `entries` | Backend |
 
-### 2. Tenant Databases (`t_<tenant_id>`)
-**Owner:** Auth Service, Backend Service
-**Purpose:** Application Data (Isolated)
+All tables include `tenant_id` for logical isolation.
 
-| Table | Service | Purpose |
-|-------|---------|---------|
-| `roles`, `permissions` | Auth | RBAC definitions |
-| `users`, `user_roles` | Auth | User membership |
-| `entries` | Backend | **Your Domain Data** |
+### Organization Databases (`t_{tenant_id}`)
+Same schema as `personal_shared`, created on org signup.
 
 ---
 
-## 🔄 Database Routing
+## 🔄 Flyway Migration Strategy
 
-Services (Auth, Backend) strictly follow this flow to connect to the right database.
+### Single Source of Truth
+Each service has ONE migration folder used for ALL databases:
 
-### The Routing Flow
-1. **Request:** Comes with `X-Tenant-Id: t_acme`.
-2. **Filter:** `TenantContextFilter` extracts ID → `ThreadLocal`.
-3. **Router:** `TenantDataSourceRouter` reads `ThreadLocal`.
-4. **Registry:** Checks `TenantLocalCache` for DB credentials.
-   - *Miss:* Calls Platform Service (`/internal/tenants/{id}/db-info`).
-   - *Hit:* Uses cached HikariDataSource.
-5. **Connection:** Configures connection to `jdbc:postgresql://.../tenant_acme`.
+| Service | Migration Path | History Table |
+|---------|---------------|---------------|
+| auth-service | `db/migration/` | `flyway_auth_history` |
+| backend-service | `db/migration/` | `flyway_backend_history` |
+| platform-service | `db/migration/` | `flyway_schema_history` |
 
-### Key Class: TenantDataSourceRouter
+### When Migrations Run
+
+| Trigger | Database | Mechanism |
+|---------|----------|-----------|
+| **Service startup** | `personal_shared` | `FlywayConfig` bean |
+| **Org provisioning** | `t_{tenant_id}` | `TenantInternalController` |
+
+### Why Separate History Tables?
+Multiple services run Flyway on the same `personal_shared` database. Separate history tables (`flyway_auth_history`, `flyway_backend_history`) prevent:
+- Version conflicts between services
+- Concurrency issues during startup
+- Rollback confusion
+
+---
+
+## 🔌 Database Routing
+
+### TenantDataSourceRouter
+Routes requests to the correct database based on tenant's storage mode:
+
 ```java
-public class TenantDataSourceRouter extends AbstractRoutingDataSource {
-    @Override
-    protected Object determineCurrentLookupKey() {
-        return TenantContext.getCurrentTenant();
+protected Object determineCurrentLookupKey() {
+    String tenantId = TenantContext.getCurrentTenant();
+    TenantDbConfig config = tenantRegistry.get(tenantId);
+    
+    if (config.storageMode() == SHARED) {
+        return PERSONAL_SHARED_KEY;  // Route to personal_shared
     }
+    return tenantId;  // Route to dedicated DB
 }
 ```
 
----
-
-## 🚀 Migration Orchestration
-
-Each service owns its own schema, but Platform Service triggers the creation.
-
-### Provisioning Flow
-1. **Signup:** User signs up.
-2. **Platform:** Creates record in `cloud-infra.tenant`.
-3. **Platform:** Creates physical database `tenant_abc` (via RDS/Postgres).
-4. **Platform:** Triggers migrations:
-   - call `auth-service/internal/migrate` → Auth runs Flyway on `tenant_abc`.
-   - call `backend-service/internal/migrate` → Backend runs Flyway on `tenant_abc`.
-
-**Key Principle:** Platform Service orchestrates, but **Service X owns Schema X**.
+### Flow
+1. Request with `X-Tenant-Id: abc123`
+2. `TenantContextFilter` sets tenant in ThreadLocal
+3. `TenantDataSourceRouter` determines target database
+4. Connection established to correct DB
 
 ---
 
-## 📊 Tenant Tiers & Limits
+## 🚀 Provisioning Flow
+
+### Personal Signup (SHARED mode)
+1. Create tenant record in `cloud-infra.tenant` with `storage_mode=SHARED`
+2. Database already exists (`personal_shared` created at deployment)
+3. User starts using the app immediately
+
+### Organization Signup (DATABASE mode)
+1. Create tenant record in `cloud-infra.tenant` with `storage_mode=DATABASE`
+2. Create physical database `t_{tenant_id}`
+3. Create DB user with permissions
+4. Trigger migrations:
+   - `POST auth-service/internal/tenants/{id}/migrate`
+   - `POST backend-service/internal/tenants/{id}/migrate`
+5. Organization ready to use
+
+---
+
+## 📊 Tenant Tiers
 
 | Tier | Max Users | Storage |
 |------|-----------|---------|
 | **STANDARD** | 50 | 10 GB |
 | **PREMIUM** | 200 | 50 GB |
 | **ENTERPRISE** | Unlimited | Unlimited |
-
-Limits are enforced by the Platform Service logic during User Invite or Data Creation events.

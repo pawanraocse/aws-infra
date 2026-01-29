@@ -1,5 +1,6 @@
 package com.learning.authservice.authorization.domain;
 
+import com.learning.common.infra.tenant.TenantAwareEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -8,13 +9,14 @@ import java.time.Instant;
 
 /**
  * User role assignment.
- * Tenant isolation is handled via database routing (TenantDataSourceRouter).
- * Maps users (identified by Cognito user ID) to roles.
+ * Implements TenantAwareEntity for automatic tenant_id population from TenantContext.
+ * Maps users (identified by Cognito user ID) to roles within a tenant.
  */
 @Entity
 @Table(name = "user_roles", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_user_roles", columnNames = { "user_id", "role_id" })
+        @UniqueConstraint(name = "uk_user_roles_tenant", columnNames = { "tenant_id", "user_id", "role_id" })
 }, indexes = {
+        @Index(name = "idx_user_roles_tenant", columnList = "tenant_id"),
         @Index(name = "idx_user_roles_user", columnList = "user_id"),
         @Index(name = "idx_user_roles_role", columnList = "role_id")
 })
@@ -23,11 +25,17 @@ import java.time.Instant;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class UserRole {
+public class UserRole implements TenantAwareEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /**
+     * Tenant ID for multi-tenant isolation
+     */
+    @Column(name = "tenant_id", nullable = false, length = 64)
+    private String tenantId;
 
     /**
      * Cognito user ID (sub claim from JWT)

@@ -63,8 +63,9 @@ public class UserRoleService {
             return;
         }
 
-        // 4. Create assignment
+        // 4. Create assignment with tenant context
         UserRole userRole = UserRole.builder()
+                .tenantId(TenantContext.getCurrentTenant())
                 .userId(userId)
                 .roleId(roleId)
                 .assignedBy(assignedBy)

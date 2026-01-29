@@ -77,8 +77,12 @@ public class SignupPipeline {
                 // Rollback completed actions in reverse order
                 rollbackCompletedActions(ctx);
 
+                // Include actual error message for better UX
+                String userMessage = e.getMessage() != null ? e.getMessage() 
+                        : "Signup failed at step: " + action.getName();
+                
                 return SignupResult.failure(
-                        "Signup failed at step: " + action.getName(),
+                        userMessage,
                         action.getName(),
                         e);
             }

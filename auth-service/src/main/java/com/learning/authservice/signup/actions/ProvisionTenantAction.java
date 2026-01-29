@@ -89,6 +89,22 @@ public class ProvisionTenantAction implements SignupAction {
                         ctx.getEmail(),
                         tier);
             } else {
+                // For personal signup: check if user already has a personal tenant
+                Boolean canCreate = platformWebClient.get()
+                        .uri(uriBuilder -> uriBuilder
+                                .path("/platform/internal/memberships/can-create-personal")
+                                .queryParam("email", ctx.getEmail())
+                                .build())
+                        .retrieve()
+                        .bodyToMono(java.util.Map.class)
+                        .map(map -> (Boolean) map.get("canCreate"))
+                        .block();
+                
+                if (Boolean.FALSE.equals(canCreate)) {
+                    throw new SignupActionException(getName(),
+                            "User already has a personal workspace. Only one personal workspace per email is allowed.");
+                }
+                
                 request = ProvisionTenantRequest.forPersonal(
                         ctx.getTenantId(),
                         ctx.getEmail());
@@ -107,6 +123,9 @@ public class ProvisionTenantAction implements SignupAction {
 
             log.info("Tenant provisioned successfully: {}", ctx.getTenantId());
 
+        } catch (SignupActionException e) {
+            // Already a user-friendly message, re-throw as-is
+            throw e;
         } catch (Exception e) {
             log.error("Failed to provision tenant {}: {}", ctx.getTenantId(), e.getMessage(), e);
             throw new SignupActionException(getName(),

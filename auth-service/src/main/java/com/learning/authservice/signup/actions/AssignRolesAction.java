@@ -6,13 +6,16 @@ import com.learning.authservice.signup.pipeline.SignupAction;
 import com.learning.authservice.signup.pipeline.SignupActionException;
 import com.learning.authservice.signup.pipeline.SignupContext;
 import com.learning.common.infra.tenant.TenantContext;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.annotation.Order;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType;
+
+import javax.sql.DataSource;
 
 /**
  * Action to assign roles to user in tenant database.
@@ -21,16 +24,30 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeTy
  * 
  * This is the critical step that creates user_roles in the tenant DB.
  * Sets TenantContext to route to correct database.
+ * 
+ * For personal tenants (SHARED mode), this action also ensures default roles
+ * exist before assignment, as provisioning may be skipped for existing tenants.
  */
 @Component
 @Order(50)
 @Slf4j
-@RequiredArgsConstructor
 public class AssignRolesAction implements SignupAction {
 
     private final UserRoleService userRoleService;
     private final CognitoIdentityProviderClient cognitoClient;
     private final CognitoProperties cognitoProperties;
+    private final JdbcTemplate jdbcTemplate;
+
+    public AssignRolesAction(
+            UserRoleService userRoleService,
+            CognitoIdentityProviderClient cognitoClient,
+            CognitoProperties cognitoProperties,
+            @Qualifier("tenantDataSource") DataSource tenantDataSource) {
+        this.userRoleService = userRoleService;
+        this.cognitoClient = cognitoClient;
+        this.cognitoProperties = cognitoProperties;
+        this.jdbcTemplate = new JdbcTemplate(tenantDataSource);
+    }
 
     @Override
     public String getName() {
@@ -98,6 +115,9 @@ public class AssignRolesAction implements SignupAction {
             // Set tenant context for tenant DB routing
             TenantContext.setCurrentTenant(ctx.getTenantId());
             try {
+                // Ensure roles exist for this tenant (handles existing tenants that missed seeding)
+                ensureRolesExist(ctx.getTenantId());
+                
                 userRoleService.assignRole(userId, role, "system");
                 log.info("Role assigned successfully");
             } finally {
@@ -109,6 +129,69 @@ public class AssignRolesAction implements SignupAction {
         } catch (Exception e) {
             throw new SignupActionException(getName(),
                     "Failed to assign roles: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Ensures default roles and permissions exist for the tenant.
+     * This is a safety net for tenants that were created before seed-roles was implemented,
+     * or when provisioning was skipped because tenant already existed.
+     */
+    private void ensureRolesExist(String tenantId) {
+        try {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM roles WHERE tenant_id = ?", Integer.class, tenantId);
+            
+            if (count != null && count > 0) {
+                log.debug("Roles already exist for tenant {}", tenantId);
+                return;
+            }
+            
+            log.info("Seeding default roles for tenant {} (first-time setup)", tenantId);
+            
+            // Insert default roles
+            jdbcTemplate.update("""
+                    INSERT INTO roles (id, tenant_id, name, description, scope, access_level, created_at, updated_at)
+                    VALUES 
+                    ('admin', ?, 'admin', 'Full administrative access', 'TENANT', 'ADMIN', NOW(), NOW()),
+                    ('editor', ?, 'editor', 'Can edit content', 'TENANT', 'WRITE', NOW(), NOW()),
+                    ('viewer', ?, 'viewer', 'Read-only access', 'TENANT', 'READ', NOW(), NOW())
+                    ON CONFLICT (tenant_id, name) DO NOTHING
+                    """, tenantId, tenantId, tenantId);
+            
+            // Insert default permissions
+            jdbcTemplate.update("""
+                    INSERT INTO permissions (id, tenant_id, resource, action, description, created_at)
+                    VALUES 
+                    ('entries:read', ?, 'entries', 'read', 'Read entries', NOW()),
+                    ('entries:write', ?, 'entries', 'write', 'Write entries', NOW()),
+                    ('entries:delete', ?, 'entries', 'delete', 'Delete entries', NOW()),
+                    ('users:read', ?, 'users', 'read', 'View users', NOW()),
+                    ('users:manage', ?, 'users', 'manage', 'Manage users', NOW()),
+                    ('roles:manage', ?, 'roles', 'manage', 'Manage roles', NOW())
+                    ON CONFLICT (tenant_id, resource, action) DO NOTHING
+                    """, tenantId, tenantId, tenantId, tenantId, tenantId, tenantId);
+            
+            // Insert role-permission mappings
+            jdbcTemplate.update("""
+                    INSERT INTO role_permissions (tenant_id, role_id, permission_id, created_at)
+                    VALUES 
+                    (?, 'admin', 'entries:read', NOW()),
+                    (?, 'admin', 'entries:write', NOW()),
+                    (?, 'admin', 'entries:delete', NOW()),
+                    (?, 'admin', 'users:read', NOW()),
+                    (?, 'admin', 'users:manage', NOW()),
+                    (?, 'admin', 'roles:manage', NOW()),
+                    (?, 'editor', 'entries:read', NOW()),
+                    (?, 'editor', 'entries:write', NOW()),
+                    (?, 'viewer', 'entries:read', NOW())
+                    ON CONFLICT (tenant_id, role_id, permission_id) DO NOTHING
+                    """, tenantId, tenantId, tenantId, tenantId, tenantId, tenantId, tenantId, tenantId, tenantId);
+            
+            log.info("Default roles seeded for tenant {}", tenantId);
+        } catch (Exception e) {
+            log.error("Failed to seed roles for tenant {}: {}", tenantId, e.getMessage());
+            throw e;
         }
     }
 

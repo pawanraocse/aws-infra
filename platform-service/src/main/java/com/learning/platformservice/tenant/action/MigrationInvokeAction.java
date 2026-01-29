@@ -38,9 +38,25 @@ public class MigrationInvokeAction implements TenantProvisionAction {
         String tenantId = context.getTenant().getId();
         String storageMode = context.getTenant().getStorageMode();
 
-        // Skip migrations for SHARED mode - schema already exists in personal_shared DB
+        // For SHARED mode: seed roles in personal_shared DB (no full migration needed)
         if (TenantStorageEnum.SHARED.name().equals(storageMode)) {
-            log.info("migration_skipped_shared_mode tenantId={}", tenantId);
+            log.info("migration_shared_mode tenantId={} - calling seed-roles", tenantId);
+            try {
+                MigrationResult result = authWebClient.post()
+                        .uri("/internal/tenants/{tenantId}/seed-roles", tenantId)
+                        .retrieve()
+                        .bodyToMono(MigrationResult.class)
+                        .block();
+                
+                if (result != null && result.fgaStoreId() != null) {
+                    log.info("Saving OpenFGA store ID for personal tenant {}: {}", tenantId, result.fgaStoreId());
+                    context.getTenant().setFgaStoreId(result.fgaStoreId());
+                }
+                log.info("seed_roles_success tenantId={}", tenantId);
+            } catch (Exception e) {
+                log.error("seed_roles_failed tenantId={} error={}", tenantId, e.getMessage());
+                throw new TenantProvisioningException(tenantId, "Failed to seed roles: " + e.getMessage(), e);
+            }
             return;
         }
 

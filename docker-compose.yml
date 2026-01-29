@@ -29,12 +29,6 @@ x-datasource-config: &datasource-config
   SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
   SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
 
-x-dummy-datasource-config: &dummy-datasource-config
-  SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
-  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:${POSTGRES_PORT}/${DUMMY_POSTGRES_DB}
-  SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
-  SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
-
 x-personal-datasource-config: &personal-datasource-config
   PERSONAL_SHARED_JDBC_URL: jdbc:postgresql://postgres:${POSTGRES_PORT}/${PERSONAL_POSTGRES_DB}
   PERSONAL_SHARED_USERNAME: ${POSTGRES_USER}
@@ -173,7 +167,7 @@ services:
       file: docker-compose.base.yml
       service: backend-service
     environment:
-      <<: [ *eureka-config, *dummy-datasource-config, *personal-datasource-config, *redis-config, *otel-config, *monitoring-config, *openfga-config ]
+      <<: [ *eureka-config, *personal-datasource-config, *datasource-config, *redis-config, *otel-config, *monitoring-config, *openfga-config ]
       SPRING_APPLICATION_NAME: backend-service
       SERVER_PORT: ${BACKEND_PORT}
       EUREKA_INSTANCE_HOSTNAME: backend-service
@@ -191,7 +185,7 @@ services:
       file: docker-compose.base.yml
       service: auth-service
     environment:
-      <<: [ *aws-config, *eureka-config, *dummy-datasource-config, *personal-datasource-config, *redis-config, *otel-config, *openfga-config ]
+      <<: [ *aws-config, *eureka-config, *personal-datasource-config, *datasource-config, *redis-config, *otel-config, *openfga-config ]
       SPRING_APPLICATION_NAME: auth-service
       SPRING_PROFILES_ACTIVE: ${AUTH_PROFILE}
       SERVER_PORT: ${AUTH_PORT}

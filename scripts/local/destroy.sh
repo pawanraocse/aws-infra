@@ -66,14 +66,25 @@ if [ -n "${GOOGLE_CLIENT_SECRET:-}" ]; then
     export TF_VAR_google_client_secret="$GOOGLE_CLIENT_SECRET"
 fi
 
-# Set AWS profile (hardcoded to 'personal' for safety)
-export AWS_PROFILE=${AWS_PROFILE:-personal}
-log_info "Using AWS Profile: $AWS_PROFILE"
+# Set AWS profile if provided, otherwise rely on default credential chain
+if [ -n "${AWS_PROFILE:-}" ]; then
+    log_info "Using AWS Profile: $AWS_PROFILE"
+else
+    log_info "No AWS_PROFILE set, using default AWS credential chain"
+fi
 
 # Verify AWS credentials
-if ! aws sts get-caller-identity --profile "$AWS_PROFILE" > /dev/null 2>&1; then
-    log_error "AWS credentials not configured or invalid for profile: $AWS_PROFILE"
-    exit 1
+# Verify AWS credentials
+if [ -n "${AWS_PROFILE:-}" ]; then
+    if ! aws sts get-caller-identity --profile "$AWS_PROFILE" > /dev/null 2>&1; then
+        log_error "AWS credentials not configured or invalid for profile: $AWS_PROFILE"
+        exit 1
+    fi
+else
+    if ! aws sts get-caller-identity > /dev/null 2>&1; then
+        log_error "AWS credentials not configured or invalid (default profile)"
+        exit 1
+    fi
 fi
 
 log_info "AWS credentials verified"

@@ -363,6 +363,7 @@ erDiagram
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | VARCHAR(64) | **PK** - Role identifier |
+| `tenant_id` | VARCHAR(64) | **FK** - Tenant identifier |
 | `name` | VARCHAR(100) | Display name (UNIQUE) |
 | `description` | TEXT | Role description |
 | `scope` | VARCHAR(32) | `PLATFORM` (super-admin) or `TENANT` |
@@ -386,6 +387,7 @@ erDiagram
 | Column | Type | Description |
 |--------|------|-------------|
 | `user_id` | VARCHAR(255) | **PK** - Cognito sub claim |
+| `tenant_id` | VARCHAR(64) | **FK** - Tenant identifier |
 | `email` | VARCHAR(255) | User's email |
 | `name` | VARCHAR(255) | Display name |
 | `avatar_url` | TEXT | Profile picture URL |
@@ -405,6 +407,7 @@ erDiagram
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | BIGSERIAL | **PK** |
+| `tenant_id` | VARCHAR(64) | **FK** - Tenant identifier |
 | `user_id` | VARCHAR(255) | Cognito user ID (sub claim) |
 | `role_id` | VARCHAR(64) | **FK → roles.id** |
 | `assigned_by` | VARCHAR(255) | Who assigned the role |
@@ -432,6 +435,7 @@ WHERE ur.user_id = 'cognito-sub-uuid';
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | VARCHAR(64) | **PK** - Format: `resource:action` |
+| `tenant_id` | VARCHAR(64) | **FK** - Tenant identifier |
 | `resource` | VARCHAR(50) | Resource type |
 | `action` | VARCHAR(50) | Action type |
 | `description` | TEXT | Permission description |
@@ -458,6 +462,7 @@ WHERE ur.user_id = 'cognito-sub-uuid';
 
 | Column | Type | Description |
 |--------|------|-------------|
+| `tenant_id` | VARCHAR(64) | **PK/FK** - Tenant identifier |
 | `role_id` | VARCHAR(64) | **PK/FK → roles.id** |
 | `permission_id` | VARCHAR(64) | **PK/FK → permissions.id** |
 
@@ -478,6 +483,7 @@ WHERE ur.user_id = 'cognito-sub-uuid';
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | UUID | **PK** |
+| `tenant_id` | VARCHAR(64) | **FK** - Tenant identifier |
 | `email` | VARCHAR(255) | Invitee's email |
 | `role_id` | VARCHAR(64) | **FK → roles.id** |
 | `token` | VARCHAR(255) | Invitation token (UNIQUE) |
@@ -494,6 +500,7 @@ WHERE ur.user_id = 'cognito-sub-uuid';
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | UUID | **PK** |
+| `tenant_id` | VARCHAR(64) | **FK** - Tenant identifier |
 | `external_group_id` | VARCHAR(512) | Group ID from IdP (UNIQUE) |
 | `group_name` | VARCHAR(255) | Display name |
 | `role_id` | VARCHAR(64) | **FK → roles.id** |
@@ -509,6 +516,7 @@ WHERE ur.user_id = 'cognito-sub-uuid';
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | UUID | **PK** |
+| `tenant_id` | VARCHAR(64) | **FK** - Tenant identifier |
 | `resource_id` | UUID | ID of the shared resource |
 | `resource_type` | VARCHAR(64) | `FOLDER`, `FILE`, `PROJECT` |
 | `principal_type` | VARCHAR(32) | `USER`, `GROUP`, `PUBLIC` |
@@ -555,6 +563,7 @@ WHERE ur.user_id = 'cognito-sub-uuid';
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | BIGSERIAL | **PK** |
+| `tenant_id` | VARCHAR(64) | **FK** - Tenant identifier |
 | `entry_key` | VARCHAR(255) | Unique key within tenant |
 | `entry_value` | TEXT | Associated value |
 | `created_at` | TIMESTAMPTZ | Creation timestamp |
@@ -562,7 +571,7 @@ WHERE ur.user_id = 'cognito-sub-uuid';
 | `updated_at` | TIMESTAMPTZ | Last update |
 | `updated_by` | VARCHAR(255) | Last updater |
 
-**Note:** No `tenant_id` column needed - database isolation provides tenancy.
+**Note:** `tenant_id` column used for data isolation and validation, enabling support for both dedicated and shared database models.
 
 ---
 
@@ -570,11 +579,11 @@ WHERE ur.user_id = 'cognito-sub-uuid';
 
 ## Table Count by Database
 
-| Database | Tables | Purpose |
-|----------|--------|---------|
-| Platform DB | 7 | Tenant registry, memberships, API keys |
-| Tenant DB | 10 | Users, roles, permissions, business data |
-| Payment DB | 1 | Billing accounts (Dedicated Service) |
+| Database                          | Tables | Purpose |
+|-----------------------------------|--------|---------|
+| Platform DB                       | 7 | Tenant registry, memberships, API keys |
+| Tenant DB                         | 10 | Users, roles, permissions, business data |
+| Payment Table(Inside platform db) | 1 | Billing accounts (Dedicated Service) |
 
 ## Key Joins
 

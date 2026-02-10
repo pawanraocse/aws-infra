@@ -1,8 +1,8 @@
 
 # System Architecture
 
-**Version:** 7.2 (Extracted from HLD)
-**Last Updated:** 2026-01-17
+**Version:** 8.0 (Phase 9.1.1 — gRPC Internal Mesh)
+**Last Updated:** 2026-02-10
 
 This document details the microservices architecture, component responsibilities, and request flows of the SaaS Foundation.
 
@@ -57,7 +57,7 @@ graph TB
 - **Rate Limiting:** Redis-based limiting per tenant/IP.
 - **Routing:** Dispatches requests to services via Eureka.
 
-### 🔐 Auth Service (Port 8081)
+### 🔐 Auth Service (Port 8081, gRPC 9091)
 **Role:** Identity, Permissions, and Signup Orchestration.
 
 - **User Management:** Wraps Cognito actions, manages user profiles.
@@ -90,6 +90,42 @@ graph TB
 **Role:** Service Discovery.
 - Services register here on startup (`http://eureka-server:8761/eureka`).
 - Gateway queries Eureka to find service instances.
+
+---
+
+## 🔗 Internal Service Communication (gRPC Mesh)
+
+Internal service-to-service calls use **gRPC (HTTP/2 + Protobuf)** for hot-path operations, with automatic REST fallback for resilience.
+
+### Architecture
+
+| Channel | Transport | Use Case |
+|---------|-----------|----------|
+| **External → Gateway** | REST / HTTP 1.1 | All client-facing APIs |
+| **Gateway → Services** | REST / HTTP 1.1 | Request routing & header enrichment |
+| **Services → Auth** | **gRPC / HTTP 2** | Permission checks, role lookups (hot path) |
+| **Fallback** | REST / HTTP 1.1 | Automatic fallback if gRPC unavailable |
+
+### gRPC Service Ports
+
+| Service | REST Port | gRPC Port |
+|---------|-----------|-----------|
+| Auth Service | 8081 | **9091** |
+
+### Feature Flag
+
+The gRPC transport is feature-flagged for safe rollback:
+```yaml
+app:
+  grpc:
+    enabled: true   # Set to false to revert all calls to REST
+```
+
+### Proto Definition
+- **File:** `common-dto/src/main/proto/auth_permission.proto`
+- **Service:** `PermissionService`
+  - `CheckPermission` — RBAC permission check (replaces `POST /auth/api/v1/permissions/check`)
+  - `GetUserRole` — Role lookup with SSO group mapping (replaces `GET /auth/internal/users/{userId}/role`)
 
 ---
 

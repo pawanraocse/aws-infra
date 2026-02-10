@@ -24,3 +24,10 @@ logging:
     root: INFO
     com.learning.backendservice: DEBUG
     org.hibernate.SQL: DEBUG
+
+# gRPC client targeting localhost auth-service for local dev
+grpc:
+  client:
+    auth-grpc:
+      address: static://localhost:9091
+      negotiation-type: plaintext

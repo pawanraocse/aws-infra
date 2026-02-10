@@ -140,6 +140,13 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
             <optional>true</optional>
         </dependency>
+
+        <!-- gRPC Client for internal service communication (optional—only services that configure channels need it) -->
+        <dependency>
+            <groupId>net.devh</groupId>
+            <artifactId>grpc-client-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
     </dependencies>
 
 </project>

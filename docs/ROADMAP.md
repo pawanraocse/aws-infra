@@ -1,7 +1,7 @@
 # 🗺️ Product Roadmap: The SaaS Factory
 
 **Mission:** Build once, launch multiple. A decoupled foundation for infinite SaaS projects.
-**Last Updated:** 2026-01-06
+**Last Updated:** 2026-02-10
 
 ---
 
@@ -141,11 +141,11 @@
 *(Consolidated Scale, Advanced Features, and Deferred Items)*
 
 #### 9.1 Scale & Performance (Q3-Q4 2026)
-- **gRPC Migration (Internal):** Hybrid architecture (REST Gateway, gRPC Mesh). Pilot: Backend→Auth Permission Check.  (The RemotePermissionEvaluator is a "hot path" (called on almost every request). Optimizing this single interaction with gRPC will yield perceptible performance improvements for the entire platform.)
-- **Async Provisioning:** SQS-based tenant creation
-- **Async Deletion:** SNS/SQS cleanup
-- **Sharding:** Multiple RDS instances
-- **Multi-Region:** Data residency compliance
+- ✅ **9.1.1 gRPC Internal Mesh:** Hybrid architecture (REST Gateway, gRPC Mesh). `RemotePermissionEvaluator` and `RemoteRoleLookupService` now use gRPC (HTTP/2 + Protobuf) with automatic REST fallback. Feature-flagged via `app.grpc.enabled`. Auth-service exposes gRPC on port 9091.
+- 📅 **9.1.2 Async Provisioning:** SQS-based tenant creation (org tenants only)
+- 📅 **9.1.3 Async Deletion:** SNS/SQS fanout for tenant cleanup
+- 📅 **9.1.4 Sharding:** Multiple RDS instances (deferred)
+- 📅 **9.1.5 Multi-Region:** Data residency compliance (deferred)
 
 #### 9.2 Advanced Features (2027+)
 - **GraphQL API**

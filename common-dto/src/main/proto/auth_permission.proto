@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package com.learning.grpc.auth;
+
+option java_multiple_files = true;
+option java_package = "com.learning.common.grpc.auth";
+
+/**
+ * Internal gRPC service for permission checks and role lookups.
+ * Replaces REST endpoints:
+ *   - POST /auth/api/v1/permissions/check
+ *   - GET  /auth/internal/users/{userId}/role
+ *
+ * Used by: backend-service, platform-service (via common-infra RemotePermissionEvaluator / RemoteRoleLookupService)
+ * Served by: auth-service (PermissionGrpcService)
+ */
+service PermissionService {
+  // Check if a user has permission to perform an action on a resource.
+  rpc CheckPermission(PermissionCheckRequest) returns (PermissionCheckResponse);
+
+  // Look up the primary role for a user (with optional SSO group mapping).
+  rpc GetUserRole(RoleLookupRequest) returns (RoleLookupResponse);
+}
+
+message PermissionCheckRequest {
+  string user_id = 1;
+  string resource = 2;
+  string action = 3;
+  string tenant_id = 4;
+}
+
+message PermissionCheckResponse {
+  bool allowed = 1;
+  string decision_reason = 2;  // SUPER_ADMIN_BYPASS, RBAC_ALLOWED, RBAC_DENIED
+}
+
+message RoleLookupRequest {
+  string user_id = 1;
+  string tenant_id = 2;
+  string groups = 3;  // Comma-separated SSO/IdP groups (optional)
+}
+
+message RoleLookupResponse {
+  bool found = 1;
+  string role_id = 2;  // e.g. "admin", "editor", "viewer", "super-admin"
+}

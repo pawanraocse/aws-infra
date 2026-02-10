@@ -93,6 +93,13 @@ server:
   servlet:
     context-path: /auth
 
+# gRPC Server Configuration
+grpc:
+  server:
+    port: ${GRPC_SERVER_PORT:9091}
+    security:
+      enabled: false  # TLS configured at load-balancer level in production
+
 # Eureka Client
 eureka:
   client:

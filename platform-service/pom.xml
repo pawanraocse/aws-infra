@@ -22,6 +22,13 @@
             <groupId>com.learning</groupId>
             <artifactId>common-infra</artifactId>
         </dependency>
+
+        <!-- gRPC Client (for auth-service permission/role lookups) -->
+        <dependency>
+            <groupId>net.devh</groupId>
+            <artifactId>grpc-client-spring-boot-starter</artifactId>
+        </dependency>
+
         <!-- Core Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

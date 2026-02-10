@@ -92,6 +92,21 @@ server:
     max-connections: 10000
     accept-count: 100
 
+# gRPC Client Configuration (for auth-service permission/role lookups)
+grpc:
+  client:
+    auth-grpc:
+      address: ${GRPC_AUTH_ADDRESS:dns:///auth-service:9091}
+      negotiation-type: plaintext
+      enable-keep-alive: true
+      keep-alive-time: 30s
+      keep-alive-timeout: 5s
+
+# Feature flag to disable gRPC and fall back to REST
+app:
+  grpc:
+    enabled: ${GRPC_CLIENT_ENABLED:true}
+
 reactor:
   netty:
     ioWorkerCount: 4

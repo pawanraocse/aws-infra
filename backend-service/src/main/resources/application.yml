@@ -54,6 +54,17 @@ server:
     max-connections: 10000
     accept-count: 100
 
+# gRPC Client Configuration (for auth-service permission/role lookups)
+grpc:
+  client:
+    auth-grpc:
+      address: ${GRPC_AUTH_ADDRESS:dns:///auth-service:9091}
+      negotiation-type: plaintext
+      enable-keep-alive: true
+      keep-alive-time: 30s
+      keep-alive-timeout: 5s
+
+
 services:
   platform:
     base-url: http://platform-service/platform  # Eureka + context-path
@@ -64,8 +75,10 @@ services:
   file:
     base-url: http://file-service
 
-# Personal shared database configuration
+# Application-specific configuration
 app:
+  grpc:
+    enabled: ${GRPC_CLIENT_ENABLED:true}
   datasource:
     personal-shared:
       url: ${PERSONAL_SHARED_JDBC_URL:jdbc:postgresql://localhost:5432/personal_shared}

@@ -1,12 +1,18 @@
 # Multi-Tenant SaaS Template - Project Status
 
-**Last Updated:** 2026-01-21  
-**Current Phase:** Phase 8 Complete ✅  
+**Last Updated:** 2026-02-10  
+**Current Phase:** Phase 9.1 In Progress 🚧  
 **Template Completion:** 98%  
 **Status:** Production Ready
 
 > [!NOTE]
-> **Latest Updates (Jan 2026):**
+> **Latest Updates (Feb 2026):**
+> - **Phase 9.1.1: gRPC Internal Mesh** — Complete ✅
+>   - Internal permission checks and role lookups migrated from REST to gRPC (HTTP/2 + Protobuf)
+>   - `RemotePermissionEvaluator` and `RemoteRoleLookupService` use gRPC with automatic REST fallback
+>   - Feature-flagged via `app.grpc.enabled` for safe rollback
+>   - Auth-service exposes gRPC on port 9091
+>   - Proto definitions in `common-dto/src/main/proto/auth_permission.proto`
 > - Configuration centralized (`project.config`, CONFIGURATION.md, DEBUGGING.md)
 > - Self-healing tenant provisioning implemented
 > - Spring Boot upgraded to 3.5.9

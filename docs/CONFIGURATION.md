@@ -142,6 +142,8 @@ graph TD
     B --> C[Auth :8081]
     B --> D[Backend :8082]
     B --> E[Platform :8083]
+    D -. gRPC :9091 .-> C
+    E -. gRPC :9091 .-> C
     C --> F[Cognito]
     C --> G[PostgreSQL]
     D --> G
@@ -164,6 +166,9 @@ graph TD
 | `COGNITO_CLIENT_ID` | SSM or .env | auth-service |
 | `COGNITO_ISSUER_URI` | SSM or .env | gateway, auth-service |
 | `DATABASE_URL` | docker-compose | all services |
+| `GRPC_SERVER_PORT` | docker-compose / env | auth-service (default: `9091`) |
+| `GRPC_AUTH_ADDRESS` | docker-compose / env | backend-service, platform-service (default: `dns:///auth-service:9091`) |
+| `GRPC_CLIENT_ENABLED` | env | backend-service, platform-service (default: `true`, set `false` to revert to REST via `app.grpc.enabled`) |
 
 ### Required for AWS Deployment
 

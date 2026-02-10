@@ -6,6 +6,13 @@ spring:
   autoconfigure:
     exclude:
       - org.redisson.spring.starter.RedissonAutoConfigurationV2
+      - net.devh.boot.grpc.client.autoconfigure.GrpcClientAutoConfiguration
+      - net.devh.boot.grpc.client.autoconfigure.GrpcClientHealthAutoConfiguration
+
+# Disable gRPC in tests — REST fallback will be used
+app:
+  grpc:
+    enabled: false
 
   cloud:
     discovery:

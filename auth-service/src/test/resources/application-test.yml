@@ -4,6 +4,8 @@ spring:
   autoconfigure:
     exclude:
       - org.redisson.spring.starter.RedissonAutoConfigurationV2
+      - net.devh.boot.grpc.server.autoconfigure.GrpcServerAutoConfiguration
+      - net.devh.boot.grpc.server.autoconfigure.GrpcServerFactoryAutoConfiguration
   flyway:
     enabled: false
   jpa:

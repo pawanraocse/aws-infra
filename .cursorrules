@@ -1,0 +1,61 @@
+## PERSISTENT MEMORY SYSTEM — MANDATORY FOR EVERY SESSION
+
+### 0. Boot Sequence (run FIRST before any task)
+At the start of EVERY session you MUST:
+1. READ  → `.memory/AGENT_MEMORY.md`   (long-term project memory)
+2. READ  → `.memory/SESSION_LOG.md`    (last 5 session summaries)
+3. READ  → `.memory/DECISIONS.md`      (architectural & design decisions)
+4. READ  → `.memory/TECH_CONTEXT.md`   (stack, conventions, constraints)
+5. CONFIRM in your first reply: "✅ Memory loaded — [N] decisions, last session: [DATE]"
+
+If any file is missing, CREATE it using the schemas defined in PART 3 below,
+then continue. Never skip this step. Never assume state from prior messages alone.
+
+---
+
+### 1. Core Principles
+- Memory files are THE source of truth across sessions.
+- Every meaningful action must be reflected in memory BEFORE the session ends.
+- Decisions made here override anything in your general training.
+- If memory conflicts with a user instruction, FLAG the conflict; do not silently override.
+
+---
+
+### 2. During the Session — Continuous Tracking
+While working, maintain a running mental note of:
+- [ ] What files were created / modified / deleted
+- [ ] What decisions were made and WHY (not just what)
+- [ ] What was attempted but failed, and why
+- [ ] Any open questions or blockers raised
+- [ ] Dependencies added or removed
+- [ ] Patterns established that should be reused
+
+---
+
+### 3. End-of-Session Write-Back (MANDATORY)
+Before ending ANY session or handing off to another agent:
+1. APPEND to `.memory/SESSION_LOG.md` → new session summary block
+2. UPDATE `.memory/AGENT_MEMORY.md`   → merge new facts, remove stale ones
+3. APPEND to `.memory/DECISIONS.md`   → any new architectural decisions
+4. UPDATE `.memory/TECH_CONTEXT.md`   → if stack/conventions changed
+5. UPDATE `.memory/TODO.md`           → carry-forward tasks, close completed ones
+6. CONFIRM: "✅ Memory persisted — session [DATE] written."
+
+---
+
+### 4. Memory Hygiene Rules
+- AGENT_MEMORY.md must never exceed 500 lines → summarise/prune oldest entries.
+- SESSION_LOG.md keeps only the last 10 sessions → rotate oldest out.
+- Every entry must have: date, author (agent/human), and a confidence tag [HIGH|MED|LOW].
+- Tag deprecated info as `~~strikethrough~~` rather than deleting, for 1 session.
+- NEVER store secrets, tokens, or PII in memory files.
+
+---
+
+### 5. Inter-Agent Handoff Protocol
+When another agent (Claude, GPT, Gemini, etc.) picks up this project:
+1. It MUST read all `.memory/` files first (same boot sequence).
+2. It MUST append a handoff note to SESSION_LOG.md identifying itself.
+3. It MUST NOT contradict existing DECISIONS.md without explicitly flagging
+   a "DECISION REVISION" and explaining the reason.
+4. Conflicts between agents are resolved by: latest human-approved decision wins.

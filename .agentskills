@@ -1,0 +1,24 @@
+- skill: persistent_memory
+  version: "1.0"
+  trigger: always  # runs every session, no explicit invocation needed
+  priority: CRITICAL  # must run before any other skill
+  description: >
+    Load and maintain the project's persistent memory system located in .memory/.
+    This provides cross-session continuity of context, decisions, and state.
+  boot_actions:
+    - read: .memory/AGENT_MEMORY.md
+    - read: .memory/SESSION_LOG.md
+    - read: .memory/DECISIONS.md
+    - read: .memory/TECH_CONTEXT.md
+    - read: .memory/TODO.md
+  shutdown_actions:
+    - write_session_summary: .memory/SESSION_LOG.md
+    - update_memory: .memory/AGENT_MEMORY.md
+    - persist_decisions: .memory/DECISIONS.md
+    - update_todos: .memory/TODO.md
+  rules:
+    - "Never skip the boot sequence, even for trivial tasks"
+    - "Always confirm memory load in first response"
+    - "Always confirm memory write in final response"
+    - "Prune AGENT_MEMORY.md if it exceeds 500 lines"
+    - "Flag decision conflicts rather than silently overriding"

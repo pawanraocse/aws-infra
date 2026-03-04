@@ -183,10 +183,126 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         log.info("tenant_provisioned tenantId={} type={} owner={} maxUsers={} storageMode={} durationMs={}",
                 tenantId, request.tenantType(), request.ownerEmail(), request.maxUsers(),
                 request.storageMode(), System.currentTimeMillis() - start);
-        return new TenantDto(tenant.getId(), tenant.getName(),
-                tenant.getTenantType() != null ? tenant.getTenantType().name() : "PERSONAL",
-                tenant.getStatus(), tenant.getStorageMode(),
-                tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
+        return toDto(tenant);
+    }
+
+    @Override
+    public TenantDto initTenant(ProvisionTenantRequest request) {
+        attemptsCounter.increment();
+        String tenantId = request.id();
+
+        Tenant tenant;
+        java.util.Optional<Tenant> existingOpt = tenantRepository.findById(tenantId);
+
+        if (existingOpt.isPresent()) {
+            Tenant existing = existingOpt.get();
+            String status = existing.getStatus();
+
+            boolean isRestartable = TenantStatus.DELETED.name().equals(status) ||
+                    TenantStatus.PROVISION_ERROR.name().equals(status);
+
+            if (!isRestartable) {
+                throw new TenantAlreadyExistsException(tenantId);
+            }
+
+            log.info("Reactivating tenant for async provisioning: {} (previous status: {})", tenantId, status);
+            tenant = existing;
+        } else {
+            tenant = new Tenant();
+            tenant.setId(tenantId);
+            tenant.setCreatedAt(OffsetDateTime.now());
+        }
+
+        tenant.setName(request.name());
+        tenant.setStatus(TenantStatus.PROVISIONING.name());
+        tenant.setStorageMode(request.storageMode());
+        tenant.setSlaTier(request.slaTier());
+        tenant.setTenantType(request.tenantType());
+        tenant.setOwnerEmail(request.ownerEmail());
+        tenant.setMaxUsers(request.maxUsers());
+        tenant.setUpdatedAt(OffsetDateTime.now());
+        tenantRepository.save(tenant);
+
+        log.info("tenant_init_created tenantId={} type={} status=PROVISIONING", tenantId, request.tenantType());
+        return toDto(tenant);
+    }
+
+    @Override
+    public TenantDto executeProvisioningActions(String tenantId) {
+        log.info("tenant_async_provision_start tenantId={}", tenantId);
+
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new TenantNotFoundException(tenantId));
+
+        if (!TenantStatus.PROVISIONING.name().equals(tenant.getStatus())) {
+            log.info("tenant_async_provision_skip tenantId={} status={}", tenantId, tenant.getStatus());
+            return toDto(tenant);
+        }
+
+        ProvisionTenantRequest request = new ProvisionTenantRequest(
+                tenant.getId(),
+                tenant.getName(),
+                tenant.getStorageMode(),
+                tenant.getSlaTier(),
+                tenant.getTenantType(),
+                tenant.getOwnerEmail(),
+                tenant.getMaxUsers());
+
+        long start = System.currentTimeMillis();
+        TenantProvisionContext ctx = new TenantProvisionContext(request, tenant);
+        try {
+            for (TenantProvisionAction action : actions) {
+                action.execute(ctx);
+                if (tenant.getStatus().equals(TenantStatus.PROVISIONING.name()) && ctx.getJdbcUrl() != null) {
+                    tenant.setStatus(TenantStatus.MIGRATING.name());
+                    tenant.setUpdatedAt(OffsetDateTime.now());
+                    tenantRepository.save(tenant);
+                }
+            }
+        } catch (Exception e) {
+            failureCounter.increment();
+            if (tenant.getStatus().equals(TenantStatus.MIGRATING.name())) {
+                tenant.setStatus(TenantStatus.MIGRATION_ERROR.name());
+            } else {
+                tenant.setStatus(TenantStatus.PROVISION_ERROR.name());
+            }
+            tenant.setUpdatedAt(OffsetDateTime.now());
+            tenantRepository.save(tenant);
+            if ("DATABASE".equalsIgnoreCase(request.storageMode()) && tenantProperties.isDropOnFailure()) {
+                try {
+                    tenantProvisioner.dropTenantDatabase(tenantId);
+                } catch (Exception dropEx) {
+                    log.warn("tenant_db_drop_failed tenantId={} error={}", tenantId, dropEx.getMessage(), dropEx);
+                }
+            }
+            log.error("tenant_async_provision_failed tenantId={} phase={} error={}", tenantId, tenant.getStatus(),
+                    e.getMessage(), e);
+            throw new TenantProvisioningException(tenantId, "Failed async provisioning: " + e.getMessage(), e);
+        }
+
+        tenant.setJdbcUrl(ctx.getJdbcUrl());
+        tenant.setLastMigrationVersion(ctx.getLastMigrationVersion());
+        tenant.setStatus(TenantStatus.ACTIVE.name());
+        tenant.setUpdatedAt(OffsetDateTime.now());
+        tenantRepository.save(tenant);
+
+        // Create owner membership
+        if (request.ownerEmail() != null && !request.ownerEmail().isBlank()) {
+            try {
+                AddMembershipRequest membershipRequest = new AddMembershipRequest(
+                        request.ownerEmail(), null, tenantId,
+                        MembershipRoleHint.OWNER.getValue(), true, true, null);
+                membershipService.addMembership(membershipRequest);
+                log.info("tenant_owner_membership_created tenantId={} owner={}", tenantId, request.ownerEmail());
+            } catch (Exception e) {
+                log.warn("tenant_owner_membership_failed tenantId={} owner={} error={}",
+                        tenantId, request.ownerEmail(), e.getMessage());
+            }
+        }
+
+        successCounter.increment();
+        log.info("tenant_async_provisioned tenantId={} durationMs={}", tenantId, System.currentTimeMillis() - start);
+        return toDto(tenant);
     }
 
     @Override
@@ -194,10 +310,7 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new TenantNotFoundException(tenantId));
         if (!TenantStatus.MIGRATION_ERROR.name().equals(tenant.getStatus())) {
             log.info("tenant_retry_migration_noop tenantId={} status={}", tenantId, tenant.getStatus());
-            return new TenantDto(tenant.getId(), tenant.getName(),
-                    tenant.getTenantType() != null ? tenant.getTenantType().name() : "PERSONAL",
-                    tenant.getStatus(), tenant.getStorageMode(),
-                    tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
+            return toDto(tenant);
         }
         TenantProvisionContext ctx = new TenantProvisionContext(
                 new com.learning.common.dto.ProvisionTenantRequest(
@@ -234,10 +347,7 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         tenant.setUpdatedAt(OffsetDateTime.now());
         tenantRepository.save(tenant);
         log.info("tenant_retry_migration_success tenantId={} version={}", tenantId, tenant.getLastMigrationVersion());
-        return new TenantDto(tenant.getId(), tenant.getName(),
-                tenant.getTenantType() != null ? tenant.getTenantType().name() : "PERSONAL",
-                tenant.getStatus(), tenant.getStorageMode(),
-                tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
+        return toDto(tenant);
     }
 
     @Override
@@ -258,5 +368,12 @@ public class TenantProvisioningServiceImpl implements TenantProvisioningService 
         membershipService.removeAllByTenant(tenantId);
 
         log.info("tenant_deprovision_success tenantId={} status=DELETED", tenantId);
+    }
+
+    private TenantDto toDto(Tenant tenant) {
+        return new TenantDto(tenant.getId(), tenant.getName(),
+                tenant.getTenantType() != null ? tenant.getTenantType().name() : "PERSONAL",
+                tenant.getStatus(), tenant.getStorageMode(),
+                tenant.getSlaTier(), tenant.getJdbcUrl(), tenant.getLastMigrationVersion());
     }
 }

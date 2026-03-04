@@ -1,24 +1,192 @@
+# Project Skills & Conventions
+
+## Persistent Memory Trigger
 - skill: persistent_memory
   version: "1.0"
-  trigger: always  # runs every session, no explicit invocation needed
-  priority: CRITICAL  # must run before any other skill
-  description: >
-    Load and maintain the project's persistent memory system located in .memory/.
-    This provides cross-session continuity of context, decisions, and state.
-  boot_actions:
-    - read: .memory/AGENT_MEMORY.md
-    - read: .memory/SESSION_LOG.md
-    - read: .memory/DECISIONS.md
-    - read: .memory/TECH_CONTEXT.md
-    - read: .memory/TODO.md
-  shutdown_actions:
-    - write_session_summary: .memory/SESSION_LOG.md
-    - update_memory: .memory/AGENT_MEMORY.md
-    - persist_decisions: .memory/DECISIONS.md
-    - update_todos: .memory/TODO.md
-  rules:
-    - "Never skip the boot sequence, even for trivial tasks"
-    - "Always confirm memory load in first response"
-    - "Always confirm memory write in final response"
-    - "Prune AGENT_MEMORY.md if it exceeds 500 lines"
-    - "Flag decision conflicts rather than silently overriding"
+  trigger: always
+  priority: CRITICAL
+  boot_actions: read all `.memory/` files
+  shutdown_actions: write session summary, update memory, persist decisions, update todos
+  rules: never skip boot, always confirm load + write, prune if >500 lines, flag conflicts
+
+---
+
+## INDEX MAINTENANCE (CRITICAL)
+**This file is the agent's primary reference for project conventions.**
+- **You MUST keep this file updated.** If you introduce a new convention, dependency, pattern, or reusable utility — update this file BEFORE confirming task completion.
+- **If this file is stale, you are flying blind.** Treat outdated `.agent-skills` as a bug.
+- Cross-reference with `.memory/PATTERNS.md` for architectural patterns.
+
+---
+
+## Language & Toolchain
+
+### Java 21 (Backend)
+- Build all: `./mvnw clean install`
+- Build single module: `./mvnw clean package -pl auth-service -am -DskipTests`
+- Run tests: `./mvnw test`
+- Run with system tests: `./mvnw install -Psystem-tests`
+- Lint: `./mvnw checkstyle:check`
+- Checkstyle config: `checkstyle.xml` at project root
+- SpotBugs: `./mvnw spotbugs:check`
+- Coverage: JaCoCo (`./mvnw jacoco:report`)
+
+### Angular (Frontend)
+- Package manager: npm (see `frontend/package.json`)
+- Build: `cd frontend && ng build`
+- Serve: `cd frontend && ng serve` (port 4200)
+- Test: `cd frontend && ng test`
+- Lint: `cd frontend && ng lint`
+
+### Terraform 1.9+ (Infrastructure)
+- Init: `cd terraform && terraform init`
+- Plan: `terraform plan`
+- Apply: `terraform apply`
+- Budget env: `cd terraform/envs/budget && terraform apply`
+- Production env: `cd terraform/envs/production && terraform apply`
+
+### Docker
+- Local dev: `docker-compose up -d`
+- Budget AWS: `docker-compose -f docker-compose.budget.yml up -d`
+- Rebuild single service: `docker-compose up -d --build auth-service`
+- Logs: `docker-compose logs -f <service-name>`
+
+---
+
+## Frameworks & Key Dependencies
+
+| Dependency | Version | Purpose |
+|-----------|---------|---------|
+| Spring Boot | 3.5.9 | Application framework |
+| Spring Cloud | 2025.0.0 | Gateway, Eureka, circuit breakers |
+| Spring Security | (managed) | OAuth2 Resource Server + Client |
+| AWS SDK v2 | 2.36.3 | Cognito, SES, SSM |
+| gRPC | 1.68.1 | Inter-service communication |
+| OpenTelemetry | 1.43.0 | Distributed tracing |
+| Flyway | (managed) | Database migrations |
+| Caffeine | 3.2.3 | Local in-memory cache |
+| SpringDoc OpenAPI | 2.8.13 | API documentation |
+| Testcontainers | 1.21.3 | Integration testing |
+| PrimeNG | 21.0.0-rc.1 | Angular UI components |
+| PrimeFlex | 4.0.0 | CSS utility framework |
+
+---
+
+## Module Map (9 modules)
+
+| Module | Path | Responsibility |
+|--------|------|----------------|
+| common-dto | `common-dto/` | Shared DTOs: `TenantContext`, `HeaderNames`, `ErrorCodes` |
+| common-infra | `common-infra/` | Cross-cutting: `TenantFilter`, `CacheService`, `DistributedLockService`, `ApiRateLimiter` |
+| gateway-service | `gateway-service/` | API Gateway, JWT validation, routing |
+| eureka-server | `eureka-server/` | Service discovery |
+| auth-service | `auth-service/` | Authentication, Cognito, credits, referrals, admin |
+| backend-service | `backend-service/` | Domain logic, ledger parsing, exports |
+| platform-service | `platform-service/` | Tenant & Organization management |
+| payment-service | `payment-service/` | Stripe subscriptions |
+| system-tests | `system-tests/` | E2E tests (REST Assured + Testcontainers) |
+
+---
+
+## Naming Conventions
+
+### Java
+- **Classes:** PascalCase (`UserService`, `CreditServiceImpl`)
+- **Interfaces:** PascalCase, no `I` prefix (`CreditService`, `PaymentService`)
+- **Methods/Variables:** camelCase, verb-noun (`fetchUser`, `validateInput`)
+- **Constants:** UPPER_SNAKE_CASE (`HEADER_TENANT_ID`)
+- **Packages:** lowercase, domain-grouped (`credit.service`, `signup.pipeline`)
+- **DTOs:** Suffix with `Dto` | **Entities:** No suffix | **Repos:** Suffix `Repository` | **Controllers:** Suffix `Controller`
+- **Test files:** `<Class>Test.java`
+
+### Angular / TypeScript
+- **Components:** kebab-case selectors, PascalCase classes
+- **Services:** `.service.ts` suffix | **Interceptors:** `.interceptor.ts` | **Guards:** `.guard.ts`
+- **Feature folders:** `src/app/features/<domain>/` | **Core:** `src/app/core/services/`
+
+### Terraform
+- **Modules:** kebab-case folders | **Resources:** snake_case | **Variables:** snake_case
+
+### Database
+- **Tables:** snake_case, plural | **Columns:** snake_case | **Migrations:** `V<N>__<Description>.sql`
+
+---
+
+## Component / Utility Reuse Catalogue
+
+### Shared Modules (reach for these FIRST)
+- `common-dto` → `TenantContext`, `HeaderNames`, `ErrorCodes`, `TenantConstants`
+- `common-infra` → `TenantFilter`, `TenantAuditingListener`, `CacheService`, `DistributedLockService`, `ApiRateLimiter`, `HttpClientFactory`, `JsonResponseWriter`
+
+### Auth Service
+- Signup pipeline: `SignupAction` → `SignupPipeline`
+- Credit system: `CreditService` (grant, consume, validate)
+- Referral system: `ReferralService`
+- Email: `EmailService` → `SesEmailService` (prod) / `DevEmailService` (local)
+- Admin: `AuthorizationService`, `AuthorizationAspect`, `AdminUserService`, `AdminCreditService`
+
+### Backend Service
+- Ledger: `LedgerParser` → `LedgerExcelParser`
+- Export: `ExportStrategy` → `Rule37ExcelExportStrategy`
+- Credit consumption: `CreditClient` (WebClient)
+
+### Frontend
+- `auth.service.ts`, `http-client.service.ts`, `base-api.service.ts`, `admin-api.service.ts`
+- Guards: `authGuard`, `guestGuard`, `adminGuard`
+
+---
+
+## Testing
+
+### Backend
+- **Framework:** JUnit 5 + Mockito 5.20 + AssertJ 3.26
+- **Integration:** Testcontainers 1.21.3 (PostgreSQL)
+- **Convention:** `@Nested` classes, `src/test/java/` mirroring main
+- **System tests:** REST Assured 5.5.0 — skipped by default, `-Psystem-tests` to enable
+
+### Frontend
+- **Framework:** Jasmine + Karma (ChromeHeadless for CI)
+- **Run:** `ng test` (interactive), `ng test --no-watch --browsers=ChromeHeadless` (CI)
+
+---
+
+## CI/CD Pipeline
+
+### Production GitHub Actions (`deploy-production.yml`)
+1. Trigger: push to `prod` or manual dispatch
+2. Detect changed services → Build → Docker → ECR → ECS deploy
+
+### Required Passing Gates
+- `./mvnw clean install` passes
+- All unit tests pass
+- Docker image builds successfully
+
+---
+
+## Coding Standards (NON-NEGOTIABLE)
+
+### SOLID — enforced everywhere
+- **S** — Single Responsibility | **O** — Open/Closed | **L** — Liskov | **I** — Interface Segregation | **D** — Dependency Inversion
+
+### Style & Safety
+- Strict typing everywhere, no `any`
+- No hardcoded secrets, URLs, ports
+- Error handling on every async path and external call
+- Pure functions by default; mutation must be documented
+
+### Reuse Before Create
+1. Search codebase for existing equivalent
+2. Extend existing abstraction
+3. Only create new if no overlap — document the decision
+
+---
+
+## Project-Specific Gotchas
+
+1. Gateway is the sole JWT validator — internal services trust `X-Tenant-Id`/`X-User-Id` headers
+2. Database-per-tenant isolation — `TenantFilter` in common-infra
+3. Credit consumption is idempotent via `reference_id` + `reference_type`
+4. Flyway uses per-service history tables
+5. OpenFGA for fine-grained authorization (unique to aws-infra)
+6. gRPC for inter-service communication (unique to aws-infra)
+7. System tests skipped by default — use `-Psystem-tests`

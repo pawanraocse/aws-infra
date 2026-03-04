@@ -13,6 +13,15 @@
 >   - Feature-flagged via `app.grpc.enabled` for safe rollback
 >   - Auth-service exposes gRPC on port 9091
 >   - Proto definitions in `common-dto/src/main/proto/auth_permission.proto`
+> - **Phase 9.1.2: Async Tenant Provisioning** — Complete ✅
+>   - Organization tenants provisioned asynchronously via SQS (personal tenants remain synchronous)
+>   - Auth-service produces `ProvisionTenantEvent`; platform-service consumes and runs action chain
+>   - Feature-flagged via `app.async-provision.enabled` (default: false)
+>   - LocalStack for local dev, Terraform `modules/sqs` for production
+>   - DLQ with 3-retry policy for error handling
+> - **Phase 9.1.3: Async Tenant Deletion** — Complete ✅
+>   - SNS/SQS fanout: `TenantDeletionService` → SNS → `TenantCleanupConsumer` (DB drop for ORG tenants)
+>   - Feature-flagged via `app.async-deletion.enabled`, Terraform provisions SNS topic + cleanup queue
 > - Configuration centralized (`project.config`, CONFIGURATION.md, DEBUGGING.md)
 > - Self-healing tenant provisioning implemented
 > - Spring Boot upgraded to 3.5.9

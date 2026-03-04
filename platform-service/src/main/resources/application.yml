@@ -106,6 +106,11 @@ grpc:
 app:
   grpc:
     enabled: ${GRPC_CLIENT_ENABLED:true}
+  async-provision:
+    enabled: ${ASYNC_PROVISION_ENABLED:false}
+  async-deletion:
+    enabled: ${ASYNC_DELETION_ENABLED:false}
+    topic-arn: ${SNS_TENANT_DELETED_TOPIC_ARN:arn:aws:sns:us-east-1:000000000000:tenant-deleted}
 
 reactor:
   netty:
@@ -251,3 +256,16 @@ billing:
       price-id: ${STRIPE_PRICE_ENTERPRISE:price_enterprise}
       name: Enterprise
       max-users: -1  # Unlimited
+
+
+spring.cloud.aws:
+  sqs:
+    endpoint: ${SQS_ENDPOINT:http://localhost:4566}
+    region:
+      static: ${SQS_REGION:us-east-1}
+  sns:
+    endpoint: ${SNS_ENDPOINT:http://localhost:4566}
+    region:
+      static: ${SQS_REGION:us-east-1}
+  region:
+    static: ${SQS_REGION:us-east-1}

@@ -52,6 +52,19 @@ public class TenantInternalController {
                 return ResponseEntity.ok(tenantProvisioningService.provision(request));
         }
 
+        @Operation(summary = "Initialize tenant (internal, async)", description = "Creates tenant row with PROVISIONING status without executing heavy actions. Used by async provisioning flow where actions are triggered via SQS.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Tenant row initialized"),
+                        @ApiResponse(responseCode = "409", description = "Tenant already exists"),
+                        @ApiResponse(responseCode = "400", description = "Validation error")
+        })
+        @PostMapping("/init")
+        public ResponseEntity<TenantDto> initTenantInternal(@Valid @RequestBody ProvisionTenantRequest request) {
+                log.info("Internal tenant init request (async): tenantId={} type={}",
+                                request.id(), request.tenantType());
+                return ResponseEntity.ok(tenantProvisioningService.initTenant(request));
+        }
+
         @Operation(summary = "Delete tenant (internal)", description = "Internal endpoint for account deletion. Drops tenant DB, marks as deleted.")
         @ApiResponses({
                         @ApiResponse(responseCode = "200", description = "Tenant deleted"),

@@ -6,7 +6,8 @@ At the start of EVERY session you MUST:
 2. READ  → `.memory/SESSION_LOG.md`    (last 5 session summaries)
 3. READ  → `.memory/DECISIONS.md`      (architectural & design decisions)
 4. READ  → `.memory/TECH_CONTEXT.md`   (stack, conventions, constraints)
-5. CONFIRM in your first reply: "✅ Memory loaded — [N] decisions, last session: [DATE]"
+5. READ  → `.memory/PATTERNS.md`       (established code patterns)
+6. CONFIRM in your first reply: "✅ Memory loaded — [N] decisions, last session: [DATE]"
 
 If any file is missing, CREATE it using the schemas defined in PART 3 below,
 then continue. Never skip this step. Never assume state from prior messages alone.
@@ -39,7 +40,8 @@ Before ending ANY session or handing off to another agent:
 3. APPEND to `.memory/DECISIONS.md`   → any new architectural decisions
 4. UPDATE `.memory/TECH_CONTEXT.md`   → if stack/conventions changed
 5. UPDATE `.memory/TODO.md`           → carry-forward tasks, close completed ones
-6. CONFIRM: "✅ Memory persisted — session [DATE] written."
+6. UPDATE `.memory/PATTERNS.md`       → if new code patterns were established
+7. CONFIRM: "✅ Memory persisted — session [DATE] written."
 
 ---
 
@@ -59,3 +61,43 @@ When another agent (Claude, GPT, Gemini, etc.) picks up this project:
 3. It MUST NOT contradict existing DECISIONS.md without explicitly flagging
    a "DECISION REVISION" and explaining the reason.
 4. Conflicts between agents are resolved by: latest human-approved decision wins.
+
+---
+
+## ── TOKEN OPTIMIZATION & AGENT BEHAVIOR (CRITICAL) ────────────
+
+### 1. Token-Efficient Code Generation
+- **Never rewrite an entire file** if the changes are localized to a few lines.
+- **Output format:** Use precise Search/Replace blocks or Unified Diffs. Only output the exact lines of code that need changing, with just enough context (2-3 lines before/after) to locate the swap.
+- Do not repeat unchanged boilerplate code.
+
+### 2. Context Curation & Discovery
+- **Never read massive raw files** (>300 lines) or raw logs directly into your context window.
+- **Use the AST/Skeleton pattern:** Before diving into large files, use your `ai-toolkit` (like `grep`, or custom skeleton scripts) to extract class names, function signatures, and types first to understand the landscape.
+- **Prioritize reuse:** Check `common-infra` or `common-dto` (or equivalent shared modules) using CLI searches before implementing new utilities.
+
+### 3. Mandatory Autonomous Verification
+- **You are not done after writing code.** You must autonomously run the local linter (e.g., `./mvnw checkstyle:check`, `npm run lint`) and the relevant unit tests.
+- If builds or tests fail, **read the error logs and fix the code autonomously**.
+- Only confirm completion with the user when the build is 100% green.
+
+### 4. Mandatory Pre-Flight Plans (For New Features)
+- For any significant feature request, you must first output a `[PLAN]`.
+- The plan must list: files to touch, functions to modify, and existing components to reuse.
+- You must actively await the user's approval of the `[PLAN]` before writing the code.
+
+---
+
+## ── DETAILED RULES & INDEX MAINTENANCE ──────────────────────
+All coding standards, naming conventions, SOLID principles, module maps,
+dependency tables, testing conventions, and reuse catalogues are defined in:
+  → `.agentskills`           (READ this file for all project-specific conventions)
+  → `.memory/PATTERNS.md`    (READ this for established code patterns)
+
+**STRICT MAINTENANCE RULES:**
+- If you introduce a NEW convention, dependency, reusable utility, or naming pattern,
+  you MUST update `.agentskills` BEFORE confirming task completion.
+- If you establish a NEW code pattern (e.g., a new Strategy, Pipeline, or module structure),
+  you MUST update `.memory/PATTERNS.md` BEFORE confirming task completion.
+- Treat stale indexes as a BUG. An outdated `.agentskills` leads to hallucinated patterns.
+- Use `scripts/ai-toolkit/get-skeleton.sh <path>` to explore large files without reading them fully.

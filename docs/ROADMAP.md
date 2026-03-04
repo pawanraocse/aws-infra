@@ -142,8 +142,8 @@
 
 #### 9.1 Scale & Performance (Q3-Q4 2026)
 - ✅ **9.1.1 gRPC Internal Mesh:** Hybrid architecture (REST Gateway, gRPC Mesh). `RemotePermissionEvaluator` and `RemoteRoleLookupService` now use gRPC (HTTP/2 + Protobuf) with automatic REST fallback. Feature-flagged via `app.grpc.enabled`. Auth-service exposes gRPC on port 9091.
-- 📅 **9.1.2 Async Provisioning:** SQS-based tenant creation (org tenants only)
-- 📅 **9.1.3 Async Deletion:** SNS/SQS fanout for tenant cleanup
+- ✅ **9.1.2 Async Provisioning:** SQS-based tenant creation for org tenants. Auth-service sends `ProvisionTenantEvent` to SQS; platform-service consumes and runs action chain (DB + Flyway + audit). Feature-flagged via `app.async-provision.enabled`. LocalStack for local dev, Terraform module for production. DLQ with 3-retry policy.
+- ✅ **9.1.3 Async Deletion:** SNS/SQS fanout for tenant cleanup. `TenantDeletionService` publishes `TenantDeletedEvent` to SNS after soft-delete; `TenantCleanupConsumer` subscribes via SQS and drops dedicated ORG tenant DBs. Feature-flagged via `app.async-deletion.enabled`. Terraform provisions SNS topic, cleanup queue + DLQ, IAM policy, and subscription.
 - 📅 **9.1.4 Sharding:** Multiple RDS instances (deferred)
 - 📅 **9.1.5 Multi-Region:** Data residency compliance (deferred)
 

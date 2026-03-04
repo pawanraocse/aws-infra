@@ -124,6 +124,19 @@ module "elasticache" {
 }
 
 # =============================================================================
+# SQS (Async Tenant Provisioning)
+# =============================================================================
+
+module "sqs" {
+  source = "../../modules/sqs"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  # Budget: use defaults (120s visibility, 3 retries, 14d DLQ retention)
+}
+
+# =============================================================================
 # Bastion/EC2 Host (runs services via Docker Compose)
 # =============================================================================
 

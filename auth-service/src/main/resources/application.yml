@@ -151,6 +151,8 @@ auth:
 
 # Datasource configuration
 app:
+  async-provision:
+    enabled: ${ASYNC_PROVISION_ENABLED:false}
   datasource:
     platform:
       url: ${PLATFORM_DATASOURCE_URL:jdbc:postgresql://localhost:5432/cloud-infra}
@@ -201,3 +203,11 @@ resilience4j:
       platformService:
         timeoutDuration: 5s
 
+
+spring.cloud.aws:
+  sqs:
+    endpoint: ${SQS_ENDPOINT:http://localhost:4566}
+    region:
+      static: ${SQS_REGION:us-east-1}
+  region:
+    static: ${SQS_REGION:us-east-1}

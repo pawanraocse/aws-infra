@@ -8,6 +8,8 @@ spring:
       - org.redisson.spring.starter.RedissonAutoConfigurationV2
       - net.devh.boot.grpc.client.autoconfigure.GrpcClientAutoConfiguration
       - net.devh.boot.grpc.client.autoconfigure.GrpcClientHealthAutoConfiguration
+      - io.awspring.cloud.autoconfigure.sqs.SqsAutoConfiguration
+      - io.awspring.cloud.autoconfigure.sns.SnsAutoConfiguration
 
 # Disable gRPC in tests — REST fallback will be used
 app:

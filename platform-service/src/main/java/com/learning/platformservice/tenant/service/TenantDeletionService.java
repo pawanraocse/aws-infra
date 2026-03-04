@@ -1,14 +1,16 @@
 package com.learning.platformservice.tenant.service;
 
+import com.learning.common.dto.TenantDeletedEvent;
 import com.learning.platformservice.membership.repository.UserTenantMembershipRepository;
+import com.learning.platformservice.sqs.SnsPublisher;
 import com.learning.platformservice.tenant.entity.DeletedAccount;
 import com.learning.platformservice.tenant.entity.Tenant;
 import com.learning.platformservice.tenant.entity.TenantStatus;
 import com.learning.platformservice.tenant.exception.TenantNotFoundException;
 import com.learning.platformservice.tenant.repo.DeletedAccountRepository;
 import com.learning.platformservice.tenant.repo.TenantRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,19 +24,27 @@ import java.time.OffsetDateTime;
  * 2. Record in deleted_accounts for audit
  * 3. Mark all memberships as REMOVED
  * 4. Set status = DELETED, archivedAt = now
- * 
- * NOTE: Actual tenant DB is NOT dropped here. That will be handled by
- * an async cleanup job via SNS/SQS in Phase 6 (supports multi-DB: PostgreSQL,
- * MongoDB, etc.)
+ * 5. Publish TenantDeletedEvent to SNS for async DB cleanup (if enabled)
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class TenantDeletionService {
 
     private final TenantRepository tenantRepository;
     private final DeletedAccountRepository deletedAccountRepository;
     private final UserTenantMembershipRepository membershipRepository;
+    private final SnsPublisher snsPublisher; // null when async-deletion is disabled
+
+    public TenantDeletionService(
+            TenantRepository tenantRepository,
+            DeletedAccountRepository deletedAccountRepository,
+            UserTenantMembershipRepository membershipRepository,
+            ObjectProvider<SnsPublisher> snsPublisherProvider) {
+        this.tenantRepository = tenantRepository;
+        this.deletedAccountRepository = deletedAccountRepository;
+        this.membershipRepository = membershipRepository;
+        this.snsPublisher = snsPublisherProvider.getIfAvailable();
+    }
 
     /**
      * Soft-delete a tenant and mark all associated memberships as removed.
@@ -73,11 +83,8 @@ public class TenantDeletionService {
             tenant.setUpdatedAt(OffsetDateTime.now());
             tenantRepository.save(tenant);
 
-            // TODO: Publish to SNS for async cleanup (Phase 6)
-            // - Drop tenant database (PostgreSQL)
-            // - Drop tenant collections (MongoDB, future)
-            // - Delete tenant S3 bucket/data
-            // publishToSns("tenant.deleted", tenantId);
+            // 5. Publish to SNS for async cleanup (DB drop, S3, etc.)
+            publishDeletionEvent(tenant, deletedBy);
 
             log.info("Tenant deletion completed (soft-delete): tenantId={}", tenantId);
 
@@ -124,5 +131,26 @@ public class TenantDeletionService {
                 .map(t -> !TenantStatus.DELETED.name().equals(t.getStatus())
                         && !TenantStatus.DELETING.name().equals(t.getStatus()))
                 .orElse(false);
+    }
+
+    /**
+     * Publish tenant deletion event to SNS for async cleanup (DB drop, S3, etc.).
+     * No-op when async-deletion feature flag is disabled.
+     */
+    private void publishDeletionEvent(Tenant tenant, String deletedBy) {
+        if (snsPublisher == null) {
+            log.debug("SNS publisher not available (async-deletion disabled), skipping event publish");
+            return;
+        }
+
+        TenantDeletedEvent event = new TenantDeletedEvent(
+                tenant.getId(),
+                tenant.getTenantType().name(),
+                tenant.getJdbcUrl(),
+                tenant.getOwnerEmail(),
+                deletedBy,
+                OffsetDateTime.now().toString());
+
+        snsPublisher.publishTenantDeleted(event);
     }
 }

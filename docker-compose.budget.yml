@@ -62,7 +62,7 @@ services:
       file: docker-compose.base.yml
       service: eureka-server
     # Optimized JVM for faster startup on t3.small
-    entrypoint: ["java", "-Xmx128m", "-Xms64m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-jar", "/app/app.jar"]
+    entrypoint: [ "java", "-Xmx128m", "-Xms64m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-jar", "/app/app.jar" ]
 
   # ============================================================================
   # Gateway - Connect to ElastiCache
@@ -73,7 +73,7 @@ services:
       service: gateway-service
     restart: unless-stopped
     # Bypass entrypoint that fetches from wrong SSM path
-    entrypoint: ["java", "-Xmx160m", "-Xms96m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar"]
+    entrypoint: [ "java", "-Xmx160m", "-Xms96m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar" ]
     environment:
       SPRING_APPLICATION_NAME: gateway-service
       SERVER_PORT: 8080
@@ -108,7 +108,7 @@ services:
       service: backend-service
     restart: unless-stopped
     # Optimized JVM for t3.small
-    entrypoint: ["java", "-Xmx192m", "-Xms128m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar"]
+    entrypoint: [ "java", "-Xmx192m", "-Xms128m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar" ]
     environment:
       SPRING_APPLICATION_NAME: backend-service
       SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
@@ -144,7 +144,7 @@ services:
       service: auth-service
     restart: unless-stopped
     # Optimized JVM for t3.small
-    entrypoint: ["java", "-Xmx192m", "-Xms128m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar"]
+    entrypoint: [ "java", "-Xmx192m", "-Xms128m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar" ]
     environment:
       SPRING_APPLICATION_NAME: auth-service
       SPRING_PROFILES_ACTIVE: ${AUTH_PROFILE:-}
@@ -173,6 +173,9 @@ services:
       # OpenFGA
       OPENFGA_ENABLED: "true"
       OPENFGA_API_URL: http://openfga:8080
+      # SQS (Async Provisioning)
+      ASYNC_PROVISION_ENABLED: ${ASYNC_PROVISION_ENABLED:-false}
+      SQS_REGION: ${AWS_REGION:-us-east-1}
     depends_on:
       eureka-server:
         condition: service_healthy
@@ -186,7 +189,7 @@ services:
       service: platform-service
     restart: unless-stopped
     # Optimized JVM for t3.small
-    entrypoint: ["java", "-Xmx160m", "-Xms96m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar"]
+    entrypoint: [ "java", "-Xmx160m", "-Xms96m", "-XX:+UseSerialGC", "-XX:+TieredCompilation", "-XX:TieredStopAtLevel=1", "-XX:+UseContainerSupport", "-jar", "/app/app.jar" ]
     environment:
       SPRING_APPLICATION_NAME: platform-service
       SERVER_PORT: 8083
@@ -217,6 +220,11 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       # Production logging (change to DEBUG for troubleshooting)
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: INFO
+      # SQS (Async Provisioning) + SNS (Async Deletion)
+      ASYNC_PROVISION_ENABLED: ${ASYNC_PROVISION_ENABLED:-false}
+      ASYNC_DELETION_ENABLED: ${ASYNC_DELETION_ENABLED:-false}
+      SQS_REGION: ${AWS_REGION:-us-east-1}
+      SNS_TENANT_DELETED_TOPIC_ARN: ${SNS_TENANT_DELETED_TOPIC_ARN:-}
     depends_on:
       eureka-server:
         condition: service_healthy

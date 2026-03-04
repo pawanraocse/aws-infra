@@ -169,6 +169,11 @@ graph TD
 | `GRPC_SERVER_PORT` | docker-compose / env | auth-service (default: `9091`) |
 | `GRPC_AUTH_ADDRESS` | docker-compose / env | backend-service, platform-service (default: `dns:///auth-service:9091`) |
 | `GRPC_CLIENT_ENABLED` | env | backend-service, platform-service (default: `true`, set `false` to revert to REST via `app.grpc.enabled`) |
+| `ASYNC_PROVISION_ENABLED` | docker-compose / env | auth-service, platform-service (default: `false`, set `true` to enable SQS async provisioning for ORG tenants) |
+| `SQS_ENDPOINT` | docker-compose / env | auth-service, platform-service (default: `http://localhost:4566` for LocalStack) |
+| `SQS_REGION` | docker-compose / env | auth-service, platform-service (default: `us-east-1`) |
+| `ASYNC_DELETION_ENABLED` | docker-compose / env | platform-service (default: `false`, set `true` to enable SNS/SQS deletion fanout) |
+| `SNS_TENANT_DELETED_TOPIC_ARN` | docker-compose / env | platform-service (required when async deletion enabled) |
 
 ### Required for AWS Deployment
 

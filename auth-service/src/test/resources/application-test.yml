@@ -6,6 +6,7 @@ spring:
       - org.redisson.spring.starter.RedissonAutoConfigurationV2
       - net.devh.boot.grpc.server.autoconfigure.GrpcServerAutoConfiguration
       - net.devh.boot.grpc.server.autoconfigure.GrpcServerFactoryAutoConfiguration
+      - io.awspring.cloud.autoconfigure.sqs.SqsAutoConfiguration
   flyway:
     enabled: false
   jpa:

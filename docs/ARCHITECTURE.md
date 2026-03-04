@@ -1,8 +1,8 @@
 
 # System Architecture
 
-**Version:** 8.0 (Phase 9.1.1 — gRPC Internal Mesh)
-**Last Updated:** 2026-02-10
+**Version:** 9.0 (Phase 9.1.2 — Async Provisioning)
+**Last Updated:** 2026-02-11
 
 This document details the microservices architecture, component responsibilities, and request flows of the SaaS Foundation.
 
@@ -126,6 +126,57 @@ app:
 - **Service:** `PermissionService`
   - `CheckPermission` — RBAC permission check (replaces `POST /auth/api/v1/permissions/check`)
   - `GetUserRole` — Role lookup with SSO group mapping (replaces `GET /auth/internal/users/{userId}/role`)
+
+---
+
+## ⚡ Async Tenant Provisioning (SQS)
+
+Organization tenant provisioning runs **asynchronously** via AWS SQS. Personal tenants remain synchronous (fast, shared schema).
+
+### Flow
+1. **Auth-service** creates tenant row with `PROVISIONING` status (`POST /internal/tenants/init`)
+2. **Auth-service** sends `ProvisionTenantEvent` to SQS queue
+3. **Auth-service** returns success to user immediately (non-blocking)
+4. **Platform-service** consumes event and runs the full action chain (DB creation → Flyway migrations → audit)
+5. Tenant status transitions: `PROVISIONING` → `MIGRATING` → `ACTIVE`
+
+### Configuration
+```yaml
+app:
+  async-provision:
+    enabled: true  # Feature-flagged, default: false
+```
+
+### Error Handling
+- Failed messages retry via SQS visibility timeout (120s)
+- After 3 failures, messages move to Dead Letter Queue (`tenant-provisioning-dlq`)
+- Tenant status set to `PROVISION_ERROR` or `MIGRATION_ERROR`
+
+---
+
+## 🗑️ Async Tenant Deletion (SNS/SQS Fanout)
+
+Tenant deletion uses a **two-phase** approach: synchronous soft-delete + asynchronous resource cleanup via SNS → SQS fanout.
+
+### Flow
+1. **Auth-service** calls `DELETE /internal/tenants/{id}` on platform-service
+2. **Platform-service** performs soft-delete (DELETING → DELETED, memberships REMOVED, audit record)
+3. **Platform-service** publishes `TenantDeletedEvent` to SNS topic (`tenant-deleted`)
+4. **SNS fans out** to subscribed SQS queues (currently: `tenant-cleanup` for DB drop)
+5. **TenantCleanupConsumer** drops the tenant's dedicated database (ORG tenants only)
+
+### Configuration
+```yaml
+app:
+  async-deletion:
+    enabled: true          # Feature-flagged, default: false
+    topic-arn: arn:aws:sns:...  # SNS topic ARN
+```
+
+### Error Handling
+- Cleanup queue DLQ (`tenant-cleanup-dlq`) catches failures after 3 retries
+- DB connections are terminated before drop to prevent locks
+- Personal tenants (shared schema) are skipped
 
 ---
 

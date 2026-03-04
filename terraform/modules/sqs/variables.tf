@@ -37,3 +37,9 @@ variable "receive_wait_time_seconds" {
   type        = number
   default     = 10
 }
+
+variable "cleanup_visibility_timeout_seconds" {
+  description = "Visibility timeout for the cleanup queue (seconds). Should exceed max DB drop time."
+  type        = number
+  default     = 300 # 5 minutes — DB drop can be slow
+}
